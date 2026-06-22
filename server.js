@@ -31,5 +31,5 @@ app.get('/', (req, res) => {
 });
 
 // Une seule fois, à la fin, avec 0.0.0.0 pour Railway
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`Serveur sur port ${PORT}`));
