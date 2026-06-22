@@ -1,4 +1,3 @@
-app.get('/health', (req, res) => res.status(200).send('OK'));
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -8,7 +7,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ne bloque pas le serveur si MongoDB fail
+// Healthcheck pour Railway - Mets ça juste après app.use()
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// MongoDB
 const mongoURL = process.env.MONGO_URL;
 mongoose.connect(mongoURL).catch(err => console.error('Erreur MongoDB:', err));
 
@@ -19,15 +23,13 @@ app.use('/api/transfer', require('./routes/transfer'));
 app.use('/api/cards', require('./routes/cards'));
 
 app.get('/', (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected';
   res.json({ 
     message: 'UniPay API v1.0',
-    db: dbStatus,
+    db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
     status: 'OK'
   });
 });
 
-// OBLIGATOIRE pour Railway
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur sur port ${PORT}`);
