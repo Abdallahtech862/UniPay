@@ -1,3 +1,4 @@
+app.get('/health', (req, res) => res.status(200).send('OK'));
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
