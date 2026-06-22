@@ -1,3 +1,24 @@
+process.on('uncaughtException', (err) => {
+  console.error('FATAL:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('PROMISE CRASH:', err);
+});
+
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => res.json({ status: 'OK' }));
+
+const PORT = process.env.PORT;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Serveur sur port ${PORT}`);
+});
+
+// Garde le process en vie
+setInterval(() => {}, 1000);
+
 const express = require('express');
 const app = express();
 
