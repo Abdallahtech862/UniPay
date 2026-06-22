@@ -1,6 +1,3 @@
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Serveur sur port ${PORT}`));
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -11,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Railway injecte MONGO_URL automatiquement
-const mongoURL = process.env.MONGO_URL || 'mongodb://localhost:27017/unipay';
+const mongoURL = process.env.MONGO_URL;
 
 mongoose.connect(mongoURL, {
   useNewUrlParser: true,
@@ -20,7 +17,7 @@ mongoose.connect(mongoURL, {
 .then(() => console.log('MongoDB Railway connecté'))
 .catch(err => console.error('Erreur MongoDB:', err));
 
-// Routes
+// Routes - assure-toi que ces fichiers existent
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/transfer', require('./routes/transfer'));
@@ -33,5 +30,6 @@ app.get('/', (req, res) => {
   });
 });
 
+// Une seule fois, à la fin, avec 0.0.0.0 pour Railway
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Serveur sur port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Serveur sur port ${PORT}`));
