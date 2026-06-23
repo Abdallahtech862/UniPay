@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-module.exports = mongoose.model('Transaction', transactionSchema);
+
 const transactionSchema = new mongoose.Schema({
   expediteur: {
     type: mongoose.Schema.Types.ObjectId,
@@ -23,4 +23,4 @@ const transactionSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Transaction', transactionSchema);
+module.exports = mongoose.model('Transaction', transactionSchema); 
