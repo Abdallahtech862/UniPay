@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
@@ -20,7 +21,13 @@ const transactionSchema = new mongoose.Schema({
   date: {
     type: Date,
     default: Date.now
-  }
+  },
+  statut: {
+    type: String,
+    enum: ['reussi', 'annule'],
+    default: 'reussi'
+  },
+  dateAnnulation: Date
 });
 
-module.exports = mongoose.model('Transaction', transactionSchema); 
+module.exports = mongoose.model('Transaction', transactionSchema);
