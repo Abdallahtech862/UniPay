@@ -6,6 +6,7 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Pour les formulaires HTML
 
 process.on('uncaughtException', (err) => {
   console.error('FATAL:', err.message);
@@ -23,19 +24,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/transfer', require('./routes/transfer'));
 app.use('/api/cards', require('./routes/cards'));
-
-// ... après les autres routes
-//app.use('/api/clients', require('./routes/clients'));
-//app.use('/api/clients', require('./routes/clients'));
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // ← Obligatoire pour les formulaires HTML
-
-// ... tes autres routes
-app.use('/api/clients', require('./routes/clients')); // ← Ajoute ça
-
+app.use('/api/clients', require('./routes/clients'));
 
 const PORT = process.env.PORT;
 app.listen(PORT, '0.0.0.0', () => {
