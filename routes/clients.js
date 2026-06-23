@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 
+// PUT /api/clients/:id - Modifier
+router.put('/:id', async (req, res) => {
+  const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  res.json(client);
+});
+
+// DELETE /api/clients/:id - Supprimer  
+router.delete('/:id', async (req, res) => {
+  await Client.findByIdAndDelete(req.params.id);
+  res.json({ message: 'Client supprimé' });
+});
 // GET formulaire
 router.get('/add', (req, res) => {
   res.send(`
