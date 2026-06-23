@@ -21,8 +21,115 @@ router.get('/add', verifyAdmin, (req, res) => {
 
 // Panel admin - PROTÉGÉ
 router.get('/admin', verifyAdmin, async (req, res) => {
-  const clients = await Client.find();
-  res.send(`<h2>Panel Admin</h2><pre>${JSON.stringify(clients, null, 2)}</pre>`);
+  try {
+    const clients = await Client.find();
+    
+    let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>UniPay Admin</title>
+      <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #f2f2f2; }
+        button { padding: 5px 10px; margin: 2px; cursor: pointer; }
+        .delete { background: #ff4444; color: white; border: none; }
+        .edit { background: #44bb44; color: white; border: none; }
+        #logout { float: right; }
+      </style>
+    </head>
+    <body>
+      <h2>Gestion Clients UniPay</h2>
+      <button id="logout" onclick="logout()">Déconnexion</button>
+      <a href="/api/clients/add"><button>+ Ajouter un client</button></a>
+      
+      <table>
+        <tr>
+          <th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Solde</th><th>Actions</th>
+        </tr>
+    `;
+    
+    clients.forEach(c => {
+      html += `
+        <tr id="row-${c._id}">
+          <td>${c.nom}</td>
+          <td>${c.prenom}</td>
+          <td>${c.email}</td>
+          <td>${c.telephone}</td>
+          <td>${c.solde} FCFA</td>
+          <td>
+            <button class="edit" onclick="modifierClient('${c._id}', '${c.nom}', ${c.solde})">Modifier</button>
+            <button class="delete" onclick="supprimerClient('${c._id}')">Supprimer</button>
+          </td>
+        </tr>
+      `;
+    });
+    
+    html += `
+      </table>
+
+      <script>
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          alert('Non connecté');
+          window.location.href = '/api/auth/login';
+        }
+
+        async function supprimerClient(id) {
+          if (!confirm('Supprimer ce client définitivement ?')) return;
+          
+          const res = await fetch('/api/clients/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          
+          const data = await res.json();
+          if (res.ok) {
+            document.getElementById('row-' + id).remove();
+            alert(data.message);
+          } else {
+            alert('Erreur: ' + data.message);
+          }
+        }
+        
+        async function modifierClient(id, nom, soldeActuel) {
+          const nouveauSolde = prompt('Nouveau solde pour ' + nom + ':', soldeActuel);
+          if (nouveauSolde === null) return;
+          
+          const res = await fetch('/api/clients/' + id, {
+            method: 'PUT',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token 
+            },
+            body: JSON.stringify({ solde: Number(nouveauSolde) })
+          });
+          
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            location.reload();
+          } else {
+            alert('Erreur: ' + data.message);
+          }
+        }
+
+        function logout() {
+          localStorage.removeItem('token');
+          window.location.href = '/api/auth/login';
+        }
+      </script>
+    </body>
+    </html>
+    `;
+    
+    res.send(html);
+  } catch (error) {
+    res.status(500).send('Erreur: ' + error.message);
+  }
 });
 
 // 2. ROUTES CRUD
