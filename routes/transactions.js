@@ -4,123 +4,6 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin } = require('../middleware/auth');
 
-// Annuler une transaction - PROTÉGÉ
-router.delete('/:id', verifyAdmin, async (req, res) => {
-  try {
-    const transaction = await Transaction.findById(req.params.id)
-     .populate('expediteur')
-     .populate('destinataire');
-
-    if (!transaction) {
-      return res.status(404).json({ error: 'Transaction introuvable' });
-    }
-
-    // Check 24h max
-    const diffHeures = (Date.now() - transaction.date) / (1000 * 60 * 60);
-    if (diffHeures > 24) {
-      return res.status(400).json({ error: 'Annulation possible que pendant 24h' });
-    }
-
-    // Check si déjà annulée
-    if (transaction.annulee) {
-      return res.status(400).json({ error: 'Transaction déjà annulée' });
-    }
-
-    const clientExp = await Client.findById(transaction.expediteur._id);
-    const clientDest = await Client.findById(transaction.destinataire._id);
-
-    if (!clientExp || !clientDest) {
-      return res.status(404).json({ error: 'Client introuvable' });
-    }
-
-    // Vérifier que le destinataire a encore le montant
-    if (clientDest.solde < transaction.montant) {
-      return res.status(400).json({ 
-        error: 'Impossible d\'annuler : solde destinataire insuffisant (' + clientDest.solde + ' FCFA)' 
-      });
-    }
-
-    // Remboursement inverse
-    clientExp.solde += Number(transaction.montant);
-    clientDest.solde -= Number(transaction.montant);
-    
-    await clientExp.save();
-    await clientDest.save();
-
-    // Marquer comme annulée au lieu de supprimer
-    transaction.annulee = true;
-    transaction.dateAnnulation = new Date();
-    await transaction.save();
-
-    res.json({ 
-      message: 'Transaction annulée. ' + transaction.montant + ' FCFA remboursé à ' + clientExp.prenom + ' ' + clientExp.nom
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-// Page formulaire transfert
-router.get('/add', async (req, res) => {
-  const clients = await Client.find().select('nom prenom telephone solde');
-  let options = '';
-  clients.forEach(c => {
-    options += `<option value="${c._id}">${c.prenom} ${c.nom} - ${c.telephone} - ${c.solde} FCFA</option>`;
-  });
-
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Transfert UniPay</title>
-      <style>
-        body { font-family: Arial; padding: 20px; max-width: 500px; margin: auto; }
-        input, select { width: 100%; padding: 8px; margin: 8px 0; }
-        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
-        #msg { margin-top: 15px; padding: 10px; }
-       .success { background: #d4edda; color: #155724; }
-       .error { background: #f8d7da; color: #721c24; }
-      </style>
-    </head>
-    <body>
-      <h2>Effectuer un transfert</h2>
-      <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a> | <a href="/api/transactions/dashboard">Dashboard</a><br><br>
-      <form id="transferForm">
-        <label>Expéditeur:</label><select name="expediteur" required><option value="">Choisir...</option>${options}</select>
-        <label>Destinataire:</label><select name="destinataire" required><option value="">Choisir...</option>${options}</select>
-        <label>Montant (FCFA):</label><input name="montant" type="number" min="1" required>
-        <label>Motif:</label><input name="motif" placeholder="Ex: Remboursement">
-        <button type="submit">Envoyer</button>
-      </form>
-      <div id="msg"></div>
-      <script>
-        const token = localStorage.getItem('token');
-        if (!token) window.location.href = '/api/auth/login';
-        transferForm.onsubmit = async e => {
-          e.preventDefault();
-          const body = Object.fromEntries(new FormData(e.target));
-          if (body.expediteur === body.destinataire) {
-            msg.className = 'error'; msg.innerText = 'Même compte'; return;
-          }
-          const res = await fetch('/api/transactions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify(body)
-          });
-          const data = await res.json();
-          if (res.ok) {
-            msg.className = 'success';
-            msg.innerHTML = data.message + '<br><a href="/api/transactions">Voir historique</a>';
-            e.target.reset();
-          } else {
-            msg.className = 'error'; msg.innerText = 'Erreur: ' + data.error;
-          }
-        };
-      </script>
-    </body>
-    </html>
-  `);
-});
 
 // Page HTML Historique
 // Page HTML Historique
@@ -301,6 +184,124 @@ router.get('/', async (req, res) => {
         }
         
         loadTransactions();
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Annuler une transaction - PROTÉGÉ
+router.delete('/:id', verifyAdmin, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id)
+     .populate('expediteur')
+     .populate('destinataire');
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction introuvable' });
+    }
+
+    // Check 24h max
+    const diffHeures = (Date.now() - transaction.date) / (1000 * 60 * 60);
+    if (diffHeures > 24) {
+      return res.status(400).json({ error: 'Annulation possible que pendant 24h' });
+    }
+
+    // Check si déjà annulée
+    if (transaction.annulee) {
+      return res.status(400).json({ error: 'Transaction déjà annulée' });
+    }
+
+    const clientExp = await Client.findById(transaction.expediteur._id);
+    const clientDest = await Client.findById(transaction.destinataire._id);
+
+    if (!clientExp || !clientDest) {
+      return res.status(404).json({ error: 'Client introuvable' });
+    }
+
+    // Vérifier que le destinataire a encore le montant
+    if (clientDest.solde < transaction.montant) {
+      return res.status(400).json({ 
+        error: 'Impossible d\'annuler : solde destinataire insuffisant (' + clientDest.solde + ' FCFA)' 
+      });
+    }
+
+    // Remboursement inverse
+    clientExp.solde += Number(transaction.montant);
+    clientDest.solde -= Number(transaction.montant);
+    
+    await clientExp.save();
+    await clientDest.save();
+
+    // Marquer comme annulée au lieu de supprimer
+    transaction.annulee = true;
+    transaction.dateAnnulation = new Date();
+    await transaction.save();
+
+    res.json({ 
+      message: 'Transaction annulée. ' + transaction.montant + ' FCFA remboursé à ' + clientExp.prenom + ' ' + clientExp.nom
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Page formulaire transfert
+router.get('/add', async (req, res) => {
+  const clients = await Client.find().select('nom prenom telephone solde');
+  let options = '';
+  clients.forEach(c => {
+    options += `<option value="${c._id}">${c.prenom} ${c.nom} - ${c.telephone} - ${c.solde} FCFA</option>`;
+  });
+
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Transfert UniPay</title>
+      <style>
+        body { font-family: Arial; padding: 20px; max-width: 500px; margin: auto; }
+        input, select { width: 100%; padding: 8px; margin: 8px 0; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        #msg { margin-top: 15px; padding: 10px; }
+       .success { background: #d4edda; color: #155724; }
+       .error { background: #f8d7da; color: #721c24; }
+      </style>
+    </head>
+    <body>
+      <h2>Effectuer un transfert</h2>
+      <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a> | <a href="/api/transactions/dashboard">Dashboard</a><br><br>
+      <form id="transferForm">
+        <label>Expéditeur:</label><select name="expediteur" required><option value="">Choisir...</option>${options}</select>
+        <label>Destinataire:</label><select name="destinataire" required><option value="">Choisir...</option>${options}</select>
+        <label>Montant (FCFA):</label><input name="montant" type="number" min="1" required>
+        <label>Motif:</label><input name="motif" placeholder="Ex: Remboursement">
+        <button type="submit">Envoyer</button>
+      </form>
+      <div id="msg"></div>
+      <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/api/auth/login';
+        transferForm.onsubmit = async e => {
+          e.preventDefault();
+          const body = Object.fromEntries(new FormData(e.target));
+          if (body.expediteur === body.destinataire) {
+            msg.className = 'error'; msg.innerText = 'Même compte'; return;
+          }
+          const res = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          if (res.ok) {
+            msg.className = 'success';
+            msg.innerHTML = data.message + '<br><a href="/api/transactions">Voir historique</a>';
+            e.target.reset();
+          } else {
+            msg.className = 'error'; msg.innerText = 'Erreur: ' + data.error;
+          }
+        };
       </script>
     </body>
     </html>
