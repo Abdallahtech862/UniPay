@@ -4,6 +4,37 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin } = require('../middleware/auth');
 
+// API data historique - OBLIGATOIRE pour que le tableau charge
+router.get('/data', verifyAdmin, async (req, res) => {
+  try {
+    const { client, debut, fin } = req.query;
+    let query = {};
+    
+    if (client) {
+      query = { $or: [{ expediteur: client }, { destinataire: client }] };
+    }
+    
+    if (debut || fin) {
+      query.date = {};
+      if (debut) query.date.$gte = new Date(debut);
+      if (fin) query.date.$lte = new Date(fin + 'T23:59:59');
+    }
+    
+    const transactions = await Transaction.find(query)
+     .populate('expediteur', 'nom prenom')
+     .populate('destinataire', 'nom prenom')
+     .sort({ date: -1 });
+     
+    const volumeTotal = transactions.reduce((sum, t) => sum + t.montant, 0);
+    
+    res.json({ 
+      transactions, 
+      stats: { total: transactions.length, volumeTotal } 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // Page formulaire transfert
 router.get('/add', async (req, res) => {
   const clients = await Client.find().select('nom prenom telephone solde');
