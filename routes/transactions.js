@@ -139,7 +139,7 @@ router.post('/', verifyAdmin, async (req, res) => {
 });
 
 // GET historique - PROTÉGÉ
-router.get('/', verifyAdmin, async (req, res) => {
+router.get('/',  async (req, res) => {
   try {
     const transactions = await Transaction.find()
       .populate('expediteur', 'nom prenom')
