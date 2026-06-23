@@ -1,35 +1,25 @@
 const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
-  from: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  expediteur: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',
-    required: true 
+    required: true
   },
-  to: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  destinataire: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',
-    required: true 
+    required: true
   },
-  montant: { 
-    type: Number, 
+  montant: {
+    type: Number,
     required: true,
-    min: 1 
+    min: 1
   },
-  type: { 
-    type: String, 
-    enum: ['transfert', 'depot', 'retrait'], 
-    default: 'transfert' 
-  },
-  statut: { 
-    type: String, 
-    enum: ['succès', 'échec', 'en_attente'], 
-    default: 'succès' 
-  },
-  description: String,
-  date: { 
-    type: Date, 
-    default: Date.now 
+  motif: String,
+  date: {
+    type: Date,
+    default: Date.now
   }
 });
 
