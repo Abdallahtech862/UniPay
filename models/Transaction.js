@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
@@ -22,10 +21,9 @@ const transactionSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  statut: {
-    type: String,
-    enum: ['reussi', 'annule'],
-    default: 'reussi'
+  annulee: {
+    type: Boolean,
+    default: false
   },
   dateAnnulation: Date
 });
