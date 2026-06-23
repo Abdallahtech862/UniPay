@@ -3,7 +3,7 @@ const router = express.Router();
 const Client = require('../models/Client');
 const { verifyAdmin } = require('../middleware/auth'); // ← Ajoute ça en haut
 
-router.get('/add', verifyAdmin, (req, res) => {
+router.get('/add',  (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
