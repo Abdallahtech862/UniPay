@@ -53,12 +53,9 @@ router.get('/add', verifyAdmin, (req, res) => {
   `);
 });
 
-// Panel admin - PROTÉGÉ
-router.get('/admin', verifyAdmin, async (req, res) => {
-  try {
-    const clients = await Client.find();
-    
-    let html = `
+// Panel admin - Token vérifié côté client, pas côté serveur
+router.get('/admin', async (req, res) => {
+  res.send(`
     <!DOCTYPE html>
     <html>
     <head>
@@ -79,30 +76,7 @@ router.get('/admin', verifyAdmin, async (req, res) => {
       <button id="logout" onclick="logout()">Déconnexion</button>
       <a href="/api/clients/add"><button>+ Ajouter un client</button></a>
       
-      <table>
-        <tr>
-          <th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Solde</th><th>Actions</th>
-        </tr>
-    `;
-    
-    clients.forEach(c => {
-      html += `
-        <tr id="row-${c._id}">
-          <td>${c.nom}</td>
-          <td>${c.prenom}</td>
-          <td>${c.email}</td>
-          <td>${c.telephone}</td>
-          <td>${c.solde} FCFA</td>
-          <td>
-            <button class="edit" onclick="modifierClient('${c._id}', '${c.nom}', ${c.solde})">Modifier</button>
-            <button class="delete" onclick="supprimerClient('${c._id}')">Supprimer</button>
-          </td>
-        </tr>
-      `;
-    });
-    
-    html += `
-      </table>
+      <div id="content">Chargement...</div>
 
       <script>
         const token = localStorage.getItem('token');
@@ -112,20 +86,58 @@ router.get('/admin', verifyAdmin, async (req, res) => {
           window.location.href = '/api/auth/login';
         }
 
+        // Charge les clients avec le token
+        async function loadClients() {
+          const res = await fetch('/api/clients', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          
+          if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('token');
+            window.location.href = '/api/auth/login';
+            return;
+          }
+          
+          const clients = await res.json();
+          renderTable(clients);
+        }
+
+        function renderTable(clients) {
+          let html = '<table><tr><th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Solde</th><th>Actions</th></tr>';
+          
+          clients.forEach(c => {
+            html += \`
+              <tr id="row-\${c._id}">
+                <td>\${c.nom}</td>
+                <td>\${c.prenom}</td>
+                <td>\${c.email}</td>
+                <td>\${c.telephone}</td>
+                <td>\${c.solde} FCFA</td>
+                <td>
+                  <button class="edit" onclick="modifierClient('\${c._id}', '\${c.nom}', \${c.solde})">Modifier</button>
+                  <button class="delete" onclick="supprimerClient('\${c._id}')">Supprimer</button>
+                </td>
+              </tr>
+            \`;
+          });
+          
+          html += '</table>';
+          document.getElementById('content').innerHTML = html;
+        }
+
         async function supprimerClient(id) {
-          if (!confirm('Supprimer ce client définitivement ?')) return;
+          if (!confirm('Supprimer ce client ?')) return;
           
           const res = await fetch('/api/clients/' + id, {
             method: 'DELETE',
             headers: { 'Authorization': 'Bearer ' + token }
           });
           
-          const data = await res.json();
           if (res.ok) {
             document.getElementById('row-' + id).remove();
-            alert(data.message);
+            alert('Client supprimé');
           } else {
-            alert('Erreur: ' + data.message);
+            alert('Erreur');
           }
         }
         
@@ -142,12 +154,11 @@ router.get('/admin', verifyAdmin, async (req, res) => {
             body: JSON.stringify({ solde: Number(nouveauSolde) })
           });
           
-          const data = await res.json();
           if (res.ok) {
-            alert(data.message);
-            location.reload();
+            alert('Client modifié');
+            loadClients();
           } else {
-            alert('Erreur: ' + data.message);
+            alert('Erreur');
           }
         }
 
@@ -155,15 +166,12 @@ router.get('/admin', verifyAdmin, async (req, res) => {
           localStorage.removeItem('token');
           window.location.href = '/api/auth/login';
         }
+
+        loadClients();
       </script>
     </body>
     </html>
-    `;
-    
-    res.send(html);
-  } catch (error) {
-    res.status(500).send('Erreur: ' + error.message);
-  }
+  `);
 });
 
 // 2. ROUTES CRUD
