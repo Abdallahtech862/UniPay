@@ -3,19 +3,53 @@ const router = express.Router();
 const Client = require('../models/Client');
 const { verifyAdmin } = require('../middleware/auth'); // ← Ajoute ça en haut
 
-// 1. ROUTES SPECIFIQUES EN PREMIER - AVANT /:id
-// Page formulaire ajout - PROTÉGÉE
 router.get('/add', verifyAdmin, (req, res) => {
   res.send(`
-    <h2>Ajouter un client</h2>
-    <form method="POST" action="/api/clients">
-      <input name="nom" placeholder="Nom" required><br><br>
-      <input name="prenom" placeholder="Prénom" required><br><br>
-      <input name="email" type="email" placeholder="Email" required><br><br>
-      <input name="telephone" placeholder="Téléphone" required><br><br>
-      <input name="solde" type="number" placeholder="Solde" value="0"><br><br>
-      <button type="submit">Créer</button>
-    </form>
+    <!DOCTYPE html>
+    <html>
+    <head><title>Ajouter Client</title></head>
+    <body>
+      <h2>Ajouter un client</h2>
+      <a href="/api/clients/admin">← Retour</a><br><br>
+      <form id="addForm">
+        <input name="nom" placeholder="Nom" required><br><br>
+        <input name="prenom" placeholder="Prénom" required><br><br>
+        <input name="email" type="email" placeholder="Email" required><br><br>
+        <input name="telephone" placeholder="Téléphone" required><br><br>
+        <input name="solde" type="number" placeholder="Solde" value="0"><br><br>
+        <button type="submit">Créer</button>
+      </form>
+      <div id="msg"></div>
+
+      <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/api/auth/login';
+        
+        addForm.onsubmit = async e => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const body = Object.fromEntries(formData);
+          
+          const res = await fetch('/api/clients', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token 
+            },
+            body: JSON.stringify(body)
+          });
+          
+          const data = await res.json();
+          if (res.ok) {
+            msg.innerHTML = 'Client créé! <a href="/api/clients/admin">Voir la liste</a>';
+            e.target.reset();
+          } else {
+            msg.innerText = 'Erreur: ' + data.error;
+          }
+        };
+      </script>
+    </body>
+    </html>
   `);
 });
 
