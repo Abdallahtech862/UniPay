@@ -123,6 +123,7 @@ router.get('/add', async (req, res) => {
 });
 
 // Page HTML Historique
+// Page HTML Historique
 router.get('/', async (req, res) => {
   const clients = await Client.find().select('nom prenom');
   let optionsClients = '<option value="">Tous les clients</option>';
@@ -141,12 +142,16 @@ router.get('/', async (req, res) => {
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #007bff; color: white; }
         tr:nth-child(even) { background: #f2f2f2; }
+        tr.annulee { opacity: 0.5; background: #ffe6e6; }
        .montant { color: #28a745; font-weight: bold; }
        .filtres { margin: 15px 0; }
         select, input, button { padding: 8px; margin-right: 10px; }
        .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
        .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
-        @media print {.filtres,.actions, a { display: none; } }
+       .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; }
+       .badge-ok { color: #28a745; font-weight: bold; }
+       .badge-ko { color: #dc3545; font-weight: bold; }
+        @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
       </style>
     </head>
     <body>
@@ -172,6 +177,7 @@ router.get('/', async (req, res) => {
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/api/auth/login';
         let currentTransactions = [];
+        
         async function loadTransactions() {
           const clientId = document.getElementById('filterClient').value;
           const dateDebut = document.getElementById('dateDebut').value;
@@ -191,37 +197,79 @@ router.get('/', async (req, res) => {
           renderTable(data.transactions);
           renderStats(data.stats);
         }
+        
         function renderStats(stats) {
           document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
         }
+        
         function renderTable(transactions) {
           if (transactions.length === 0) {
-            document.getElementById('content').innerHTML = 'Aucune transaction';
+            document.getElementById('content').innerHTML = 'Aucune transaction trouvée';
             return;
           }
-          let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th></tr>';
+          
+          let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
           transactions.forEach(t => {
             const date = new Date(t.date).toLocaleString('fr-FR');
-            html += '<tr><td>' + date + '</td><td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td><td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td><td class="montant">' + t.montant.toLocaleString() + ' FCFA</td><td>' + (t.motif || '-') + '</td></tr>';
+            const diffHeures = (Date.now() - new Date(t.date)) / (1000 * 60 * 60);
+            const peutAnnuler = diffHeures <= 24 && !t.annulee;
+            const statut = t.annulee ? '<span class="badge-ko">ANNULÉE</span>' : '<span class="badge-ok">VALIDÉE</span>';
+            
+            let bouton = '-';
+            if (peutAnnuler) {
+              bouton = '<button class="btn-annuler" onclick="annulerTx(\'' + t._id + '\')">Annuler</button>';
+            } else if (t.annulee) {
+              bouton = '-';
+            } else {
+              bouton = '<span style="color:#999">Expiré</span>';
+            }
+            
+            html += '<tr' + (t.annulee ? ' class="annulee"' : '') + '>';
+            html += '<td>' + date + '</td>';
+            html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
+            html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
+            html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
+            html += '<td>' + (t.motif || '-') + '</td>';
+            html += '<td>' + statut + '</td>';
+            html += '<td>' + bouton + '</td>';
+            html += '</tr>';
           });
           html += '</table>';
           document.getElementById('content').innerHTML = html;
         }
+        
+        async function annulerTx(id) {
+          if (!confirm('Confirmer l\\'annulation ? Les soldes seront remboursés.')) return;
+          const res = await fetch('/api/transactions/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          const data = await res.json();
+          if (res.ok) {
+            alert(data.message);
+            loadTransactions();
+          } else {
+            alert('Erreur: ' + data.error);
+          }
+        }
+        
         function exportCSV() {
           if (currentTransactions.length === 0) { alert('Aucune donnée'); return; }
-          let csv = 'Date,Expéditeur,Destinataire,Montant,Motif\\n';
+          let csv = 'Date,Expéditeur,Destinataire,Montant,Motif,Statut\\n';
           currentTransactions.forEach(t => {
             const date = new Date(t.date).toLocaleString('fr-FR');
             const exp = t.expediteur.prenom + ' ' + t.expediteur.nom;
             const dest = t.destinataire.prenom + ' ' + t.destinataire.nom;
-            csv += '"' + date + '","' + exp + '","' + dest + '",' + t.montant + ',"' + (t.motif || '') + '"\\n';
+            const statut = t.annulee ? 'Annulée' : 'Validée';
+            csv += '"' + date + '","' + exp + '","' + dest + '",' + t.montant + ',"' + (t.motif || '') + '","' + statut + '"\\n';
           });
           const blob = new Blob([csv], { type: 'text/csv' });
           const link = document.createElement('a');
           link.href = URL.createObjectURL(blob);
-          link.download = 'transactions.csv';
+          link.download = 'transactions_' + new Date().toISOString().split('T')[0] + '.csv';
           link.click();
         }
+        
         function exportPDF() {
           if (currentTransactions.length === 0) { alert('Aucune donnée'); return; }
           const { jsPDF } = window.jspdf;
@@ -233,22 +281,25 @@ router.get('/', async (req, res) => {
             t.expediteur.prenom + ' ' + t.expediteur.nom,
             t.destinataire.prenom + ' ' + t.destinataire.nom,
             t.montant.toLocaleString() + ' FCFA',
-            t.motif || '-'
+            t.motif || '-',
+            t.annulee ? 'Annulée' : 'Validée'
           ]);
           doc.autoTable({
-            head: [['Date', 'Expéditeur', 'Destinataire', 'Montant', 'Motif']],
+            head: [['Date', 'Expéditeur', 'Destinataire', 'Montant', 'Motif', 'Statut']],
             body: tableData,
             startY: 30,
             styles: { fontSize: 8 }
           });
           doc.save('transactions.pdf');
         }
+        
         function resetFiltres() {
           document.getElementById('filterClient').value = '';
           document.getElementById('dateDebut').value = '';
           document.getElementById('dateFin').value = '';
           loadTransactions();
         }
+        
         loadTransactions();
       </script>
     </body>
