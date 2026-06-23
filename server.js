@@ -20,6 +20,7 @@ app.get('/', (req, res) => res.status(200).json({
 
 mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 
+
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/transfer', require('./routes/transfer'));
