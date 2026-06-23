@@ -68,6 +68,7 @@ router.get('/add', async (req, res) => {
 });
 
 // Page HTML Historique - PUBLIQUE
+// Page HTML Historique - PUBLIQUE
 router.get('/', async (req, res) => {
   const clients = await Client.find().select('nom prenom');
   let optionsClients = '<option value="">Tous les clients</option>';
@@ -88,8 +89,15 @@ router.get('/', async (req, res) => {
         tr:nth-child(even) { background: #f2f2f2; }
         .montant { color: #28a745; font-weight: bold; }
         .filtres { margin: 15px 0; }
-        select, input { padding: 8px; margin-right: 10px; }
-        button { padding: 8px 15px; cursor: pointer; }
+        select, input, button { padding: 8px; margin-right: 10px; }
+        .actions button { margin: 5px; background: #28a745; color: white; border: none; cursor: pointer; }
+        .actions button.print { background: #6c757d; }
+        .actions button.csv { background: #17a2b8; }
+        .actions button.pdf { background: #dc3545; }
+        @media print {
+          .filtres, .actions, a { display: none; }
+          body { padding: 0; }
+        }
       </style>
     </head>
     <body>
@@ -103,13 +111,24 @@ router.get('/', async (req, res) => {
         <button onclick="loadTransactions()">Filtrer</button>
         <button onclick="resetFiltres()">Reset</button>
       </div>
+
+      <div class="actions">
+        <button class="print" onclick="window.print()">🖨️ Imprimer</button>
+        <button class="csv" onclick="exportCSV()">📊 Export CSV</button>
+        <button class="pdf" onclick="exportPDF()">📄 Export PDF</button>
+      </div>
       
       <div id="stats"></div>
       <div id="content">Chargement...</div>
 
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+      
       <script>
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/api/auth/login';
+        
+        let currentTransactions = [];
 
         async function loadTransactions() {
           const clientId = document.getElementById('filterClient').value;
@@ -130,6 +149,7 @@ router.get('/', async (req, res) => {
           }
           
           const data = await res.json();
+          currentTransactions = data.transactions;
           renderTable(data.transactions);
           renderStats(data.stats);
         }
@@ -137,7 +157,7 @@ router.get('/', async (req, res) => {
         function renderStats(stats) {
           document.getElementById('stats').innerHTML = \`
             <p><b>Total transactions:</b> \${stats.total} | 
-            <b>Volume total:</b> \${stats.volumeTotal} FCFA</p>
+            <b>Volume total:</b> \${stats.volumeTotal.toLocaleString()} FCFA</p>
           \`;
         }
 
@@ -147,7 +167,7 @@ router.get('/', async (req, res) => {
             return;
           }
           
-          let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th></tr>';
+          let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th></tr>';
           transactions.forEach(t => {
             const date = new Date(t.date).toLocaleString('fr-FR');
             html += \`
@@ -162,6 +182,60 @@ router.get('/', async (req, res) => {
           });
           html += '</table>';
           document.getElementById('content').innerHTML = html;
+        }
+
+        function exportCSV() {
+          if (currentTransactions.length === 0) {
+            alert('Aucune donnée à exporter');
+            return;
+          }
+          
+          let csv = 'Date,Expéditeur,Destinataire,Montant,Motif\\n';
+          currentTransactions.forEach(t => {
+            const date = new Date(t.date).toLocaleString('fr-FR');
+            const exp = \`\${t.expediteur.prenom} \${t.expediteur.nom}\`;
+            const dest = \`\${t.destinataire.prenom} \${t.destinataire.nom}\`;
+            csv += \`"\${date}","\${exp}","\${dest}",\${t.montant},"\${t.motif || ''}"\\n\`;
+          });
+          
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = 'transactions_unipay_' + new Date().toISOString().split('T')[0] + '.csv';
+          link.click();
+        }
+
+        function exportPDF() {
+          if (currentTransactions.length === 0) {
+            alert('Aucune donnée à exporter');
+            return;
+          }
+          
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF();
+          
+          doc.setFontSize(18);
+          doc.text('Historique Transactions UniPay', 14, 20);
+          doc.setFontSize(10);
+          doc.text('Généré le ' + new Date().toLocaleString('fr-FR'), 14, 28);
+          
+          const tableData = currentTransactions.map(t => [
+            new Date(t.date).toLocaleString('fr-FR'),
+            \`\${t.expediteur.prenom} \${t.expediteur.nom}\`,
+            \`\${t.destinataire.prenom} \${t.destinataire.nom}\`,
+            t.montant.toLocaleString() + ' FCFA',
+            t.motif || '-'
+          ]);
+          
+          doc.autoTable({
+            head: [['Date', 'Expéditeur', 'Destinataire', 'Montant', 'Motif']],
+            body: tableData,
+            startY: 35,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [0, 123, 255] }
+          });
+          
+          doc.save('transactions_unipay_' + new Date().toISOString().split('T')[0] + '.pdf');
         }
 
         function resetFiltres() {
