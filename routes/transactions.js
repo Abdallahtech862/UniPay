@@ -67,15 +67,8 @@ router.get('/add', async (req, res) => {
   `);
 });
 
-// Page HTML Historique - PUBLIQUE
-// Page HTML Historique - PUBLIQUE
+// GET historique - Page HTML publique, data chargée via JS
 router.get('/', async (req, res) => {
-  const clients = await Client.find().select('nom prenom');
-  let optionsClients = '<option value="">Tous les clients</option>';
-  clients.forEach(c => {
-    optionsClients += `<option value="${c._id}">${c.prenom} ${c.nom}</option>`;
-  });
-
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -84,63 +77,28 @@ router.get('/', async (req, res) => {
       <style>
         body { font-family: Arial; padding: 20px; }
         table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background: #007bff; color: white; }
-        tr:nth-child(even) { background: #f2f2f2; }
-        .montant { color: #28a745; font-weight: bold; }
-        .filtres { margin: 15px 0; }
-        select, input, button { padding: 8px; margin-right: 10px; }
-        .actions button { margin: 5px; background: #28a745; color: white; border: none; cursor: pointer; }
-        .actions button.print { background: #6c757d; }
-        .actions button.csv { background: #17a2b8; }
-        .actions button.pdf { background: #dc3545; }
-        @media print {
-          .filtres, .actions, a { display: none; }
-          body { padding: 0; }
-        }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f2f2f2; }
+        .montant { color: green; font-weight: bold; }
       </style>
     </head>
     <body>
       <h2>Historique des transactions</h2>
-      <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a>
+      <a href="/api/clients/admin">← Retour Admin</a> | 
+      <a href="/api/transactions/add">Nouveau transfert</a><br><br>
       
-      <div class="filtres">
-        <select id="filterClient">${optionsClients}</select>
-        <input type="date" id="dateDebut">
-        <input type="date" id="dateFin">
-        <button onclick="loadTransactions()">Filtrer</button>
-        <button onclick="resetFiltres()">Reset</button>
-      </div>
-
-      <div class="actions">
-        <button class="print" onclick="window.print()">🖨️ Imprimer</button>
-        <button class="csv" onclick="exportCSV()">📊 Export CSV</button>
-        <button class="pdf" onclick="exportPDF()">📄 Export PDF</button>
-      </div>
-      
-      <div id="stats"></div>
       <div id="content">Chargement...</div>
 
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-      
       <script>
         const token = localStorage.getItem('token');
-        if (!token) window.location.href = '/api/auth/login';
-        
-        let currentTransactions = [];
+        if (!token) {
+          window.location.href = '/api/auth/login';
+        }
 
         async function loadTransactions() {
-          const clientId = document.getElementById('filterClient').value;
-          const dateDebut = document.getElementById('dateDebut').value;
-          const dateFin = document.getElementById('dateFin').value;
-          
-          let url = '/api/transactions/data?';
-          if (clientId) url += 'client=' + clientId + '&';
-          if (dateDebut) url += 'debut=' + dateDebut + '&';
-          if (dateFin) url += 'fin=' + dateFin;
-          
-          const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+          const res = await fetch('/api/transactions/data', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
           
           if (res.status === 401 || res.status === 403) {
             localStorage.removeItem('token');
@@ -148,26 +106,18 @@ router.get('/', async (req, res) => {
             return;
           }
           
-          const data = await res.json();
-          currentTransactions = data.transactions;
-          renderTable(data.transactions);
-          renderStats(data.stats);
-        }
-
-        function renderStats(stats) {
-          document.getElementById('stats').innerHTML = \`
-            <p><b>Total transactions:</b> \${stats.total} | 
-            <b>Volume total:</b> \${stats.volumeTotal.toLocaleString()} FCFA</p>
-          \`;
+          const transactions = await res.json();
+          renderTable(transactions);
         }
 
         function renderTable(transactions) {
           if (transactions.length === 0) {
-            document.getElementById('content').innerHTML = 'Aucune transaction trouvée';
+            document.getElementById('content').innerHTML = 'Aucune transaction';
             return;
           }
           
-          let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th></tr>';
+          let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th></tr>';
+          
           transactions.forEach(t => {
             const date = new Date(t.date).toLocaleString('fr-FR');
             html += \`
@@ -175,74 +125,14 @@ router.get('/', async (req, res) => {
                 <td>\${date}</td>
                 <td>\${t.expediteur.prenom} \${t.expediteur.nom}</td>
                 <td>\${t.destinataire.prenom} \${t.destinataire.nom}</td>
-                <td class="montant">\${t.montant.toLocaleString()} FCFA</td>
+                <td class="montant">\${t.montant} FCFA</td>
                 <td>\${t.motif || '-'}</td>
               </tr>
             \`;
           });
+          
           html += '</table>';
           document.getElementById('content').innerHTML = html;
-        }
-
-        function exportCSV() {
-          if (currentTransactions.length === 0) {
-            alert('Aucune donnée à exporter');
-            return;
-          }
-          
-          let csv = 'Date,Expéditeur,Destinataire,Montant,Motif\\n';
-          currentTransactions.forEach(t => {
-            const date = new Date(t.date).toLocaleString('fr-FR');
-            const exp = \`\${t.expediteur.prenom} \${t.expediteur.nom}\`;
-            const dest = \`\${t.destinataire.prenom} \${t.destinataire.nom}\`;
-            csv += \`"\${date}","\${exp}","\${dest}",\${t.montant},"\${t.motif || ''}"\\n\`;
-          });
-          
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = 'transactions_unipay_' + new Date().toISOString().split('T')[0] + '.csv';
-          link.click();
-        }
-
-        function exportPDF() {
-          if (currentTransactions.length === 0) {
-            alert('Aucune donnée à exporter');
-            return;
-          }
-          
-          const { jsPDF } = window.jspdf;
-          const doc = new jsPDF();
-          
-          doc.setFontSize(18);
-          doc.text('Historique Transactions UniPay', 14, 20);
-          doc.setFontSize(10);
-          doc.text('Généré le ' + new Date().toLocaleString('fr-FR'), 14, 28);
-          
-          const tableData = currentTransactions.map(t => [
-            new Date(t.date).toLocaleString('fr-FR'),
-            \`\${t.expediteur.prenom} \${t.expediteur.nom}\`,
-            \`\${t.destinataire.prenom} \${t.destinataire.nom}\`,
-            t.montant.toLocaleString() + ' FCFA',
-            t.motif || '-'
-          ]);
-          
-          doc.autoTable({
-            head: [['Date', 'Expéditeur', 'Destinataire', 'Montant', 'Motif']],
-            body: tableData,
-            startY: 35,
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: [0, 123, 255] }
-          });
-          
-          doc.save('transactions_unipay_' + new Date().toISOString().split('T')[0] + '.pdf');
-        }
-
-        function resetFiltres() {
-          document.getElementById('filterClient').value = '';
-          document.getElementById('dateDebut').value = '';
-          document.getElementById('dateFin').value = '';
-          loadTransactions();
         }
 
         loadTransactions();
@@ -252,6 +142,18 @@ router.get('/', async (req, res) => {
   `);
 });
 
+// Route API JSON pour les data - PROTÉGÉE
+router.get('/data', verifyAdmin, async (req, res) => {
+  try {
+    const transactions = await Transaction.find()
+      .populate('expediteur', 'nom prenom')
+      .populate('destinataire', 'nom prenom')
+      .sort({ date: -1 });
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // POST faire un transfert - PROTÉGÉ
 router.post('/', verifyAdmin, async (req, res) => {
   try {
