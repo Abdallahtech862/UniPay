@@ -74,6 +74,7 @@ router.get('/admin', async (req, res) => {
     <body>
       <h2>Gestion Clients UniPay</h2>
       <button id="logout" onclick="logout()">Déconnexion</button>
+      <a href="/api/transactions/add"><button>Faire un transfert</button></a>
       <a href="/api/clients/add"><button>+ Ajouter un client</button></a>
       
       <div id="content">Chargement...</div>
