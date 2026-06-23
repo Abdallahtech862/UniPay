@@ -2,44 +2,36 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 
-// POST /api/clients - Ajouter un client
+// GET formulaire
+router.get('/add', (req, res) => {
+  res.send(`
+    <h2>Ajouter un client</h2>
+    <form method="POST" action="/api/clients">
+      <input name="nom" placeholder="Nom" required><br><br>
+      <input name="prenom" placeholder="Prénom" required><br><br>
+      <input name="email" type="email" placeholder="Email" required><br><br>
+      <input name="telephone" placeholder="Téléphone" required><br><br>
+      <input name="solde" type="number" placeholder="Solde" value="0"><br><br>
+      <button type="submit">Créer</button>
+    </form>
+  `);
+});
+
+// POST créer client
 router.post('/', async (req, res) => {
   try {
-    const { nom, prenom, email, telephone, solde } = req.body;
-    
-    // Vérifier si email existe déjà
-    const clientExiste = await Client.findOne({ email });
-    if (clientExiste) {
-      return res.status(400).json({ message: 'Email déjà utilisé' });
-    }
-
-    const nouveauClient = new Client({
-      nom,
-      prenom,
-      email,
-      telephone,
-      solde: solde || 0
-    });
-
-    await nouveauClient.save();
-    res.status(201).json({ 
-      message: 'Client créé', 
-      client: nouveauClient 
-    });
-    
-  } catch (error) {
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+    const client = new Client(req.body);
+    await client.save();
+    res.json({ message: 'Client créé', client });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
-// GET /api/clients - Lister tous les clients
+// GET lister clients
 router.get('/', async (req, res) => {
-  try {
-    const clients = await Client.find();
-    res.json(clients);
-  } catch (error) {
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
+  const clients = await Client.find();
+  res.json(clients);
 });
 
 module.exports = router;
