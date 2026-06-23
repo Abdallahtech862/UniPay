@@ -300,18 +300,59 @@ router.get('/', async (req, res) => {
           document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
         }
         function renderTable(transactions) {
-          if (transactions.length === 0) {
-            document.getElementById('content').innerHTML = 'Aucune transaction';
-            return;
-          }
-          let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th></tr>';
-          transactions.forEach(t => {
-            const date = new Date(t.date).toLocaleString('fr-FR');
-            html += '<tr><td>' + date + '</td><td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td><td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td><td class="montant">' + t.montant.toLocaleString() + ' FCFA</td><td>' + (t.motif || '-') + '</td></tr>';
-          });
-          html += '</table>';
-          document.getElementById('content').innerHTML = html;
-        }
+  if (transactions.length === 0) {
+    document.getElementById('content').innerHTML = 'Aucune transaction';
+    return;
+  }
+  
+  let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
+  
+  transactions.forEach(t => {
+    const date = new Date(t.date).toLocaleString('fr-FR');
+    const diffHeures = (Date.now() - new Date(t.date)) / (1000 * 60 * 60);
+    const peutAnnuler = diffHeures <= 24 && !t.annulee;
+    const statut = t.annulee 
+      ? '<span style="color:#dc3545;font-weight:bold;">ANNULÉE</span>' 
+      : '<span style="color:#28a745;font-weight:bold;">VALIDÉE</span>';
+    
+    let bouton = '<span style="color:#999">Expiré</span>';
+    if (t.annulee) {
+      bouton = '-';
+    } else if (peutAnnuler) {
+      bouton = '<button onclick="annulerTx(\'' + t._id + '\')" style="background:#dc3545;color:white;border:none;padding:5px 10px;cursor:pointer;border-radius:3px;">Annuler</button>';
+    }
+    
+    html += '<tr' + (t.annulee ? ' style="opacity:0.5;background:#ffe6e6;"' : '') + '>';
+    html += '<td>' + date + '</td>';
+    html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
+    html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
+    html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
+    html += '<td>' + (t.motif || '-') + '</td>';
+    html += '<td>' + statut + '</td>';
+    html += '<td>' + bouton + '</td>';
+    html += '</tr>';
+  });
+  
+  html += '</table>';
+  document.getElementById('content').innerHTML = html;
+}
+
+async function annulerTx(id) {
+  if (!confirm('Confirmer l\'annulation ? Les soldes seront remboursés.')) return;
+  
+  const res = await fetch('/api/transactions/' + id, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  
+  const data = await res.json();
+  if (res.ok) {
+    alert(data.message);
+    loadTransactions();
+  } else {
+    alert('Erreur: ' + data.error);
+  }
+}
         function exportCSV() {
           if (currentTransactions.length === 0) { alert('Aucune donnée'); return; }
           let csv = 'Date,Expéditeur,Destinataire,Montant,Motif\\n';
