@@ -21,10 +21,10 @@ app.get('/', (req, res) => res.status(200).json({
 mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/wallet', require('./routes/wallet'));
-app.use('/api/transfer', require('./routes/transfer'));
-app.use('/api/cards', require('./routes/cards'));
-app.use('/api/clients', require('./routes/clients'));
+app.use('/wallet', require('./routes/wallet'));
+app.use('/transfer', require('./routes/transfer'));
+app.use('/cards', require('./routes/cards'));
+app.use('/clients', require('./routes/clients'));
 
 const PORT = process.env.PORT;
 app.listen(PORT, '0.0.0.0', () => {
