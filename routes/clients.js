@@ -2,57 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 
-// PUT /api/clients/:id - Modifier un client
-router.put('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    
-    const client = await Client.findByIdAndUpdate(
-      id, 
-      updates, 
-      { new: true, runValidators: true } // new: true renvoie le doc modifié
-    );
-    
-    if (!client) {
-      return res.status(404).json({ message: 'Client introuvable' });
-    }
-    
-    res.json({ message: 'Client modifié', client });
-  } catch (error) {
-    res.status(400).json({ message: 'Erreur', error: error.message });
-  }
-});
-
-// DELETE /api/clients/:id - Supprimer un client
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const client = await Client.findByIdAndDelete(id);
-    
-    if (!client) {
-      return res.status(404).json({ message: 'Client introuvable' });
-    }
-    
-    res.json({ message: 'Client supprimé', client });
-  } catch (error) {
-    res.status(400).json({ message: 'Erreur', error: error.message });
-  }
-});
-
-// GET /api/clients/:id - Voir un client
-router.get('/:id', async (req, res) => {
-  try {
-    const client = await Client.findById(req.params.id);
-    if (!client) return res.status(404).json({ message: 'Client introuvable' });
-    res.json(client);
-  } catch (error) {
-    res.status(400).json({ message: 'Erreur', error: error.message });
-  }
-});
-
-module.exports = router;
-// GET formulaire
+// 1. Routes spécifiques EN PREMIER
 router.get('/add', (req, res) => {
   res.send(`
     <h2>Ajouter un client</h2>
@@ -67,7 +17,13 @@ router.get('/add', (req, res) => {
   `);
 });
 
-// POST créer client
+// 2. Route GET tous les clients
+router.get('/', async (req, res) => {
+  const clients = await Client.find();
+  res.json(clients);
+});
+
+// 3. POST créer client
 router.post('/', async (req, res) => {
   try {
     const client = new Client(req.body);
@@ -78,10 +34,35 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET lister clients
-router.get('/', async (req, res) => {
-  const clients = await Client.find();
-  res.json(clients);
+// 4. Routes avec :id EN DERNIER
+router.get('/:id', async (req, res) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    if (!client) return res.status(404).json({ message: 'Client introuvable' });
+    res.json(client);
+  } catch (error) {
+    res.status(400).json({ message: 'Erreur', error: error.message });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  try {
+    const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!client) return res.status(404).json({ message: 'Client introuvable' });
+    res.json({ message: 'Client modifié', client });
+  } catch (error) {
+    res.status(400).json({ message: 'Erreur', error: error.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const client = await Client.findByIdAndDelete(req.params.id);
+    if (!client) return res.status(404).json({ message: 'Client introuvable' });
+    res.json({ message: 'Client supprimé' });
+  } catch (error) {
+    res.status(400).json({ message: 'Erreur', error: error.message });
+  }
 });
 
 module.exports = router;
