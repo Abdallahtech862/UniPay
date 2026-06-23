@@ -1,77 +1,11 @@
-
-const { verifyAdmin } = require('../middleware/auth');
 const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
+const { verifyAdmin } = require('../middleware/auth'); // ← Ajoute ça en haut
 
-// GET /api/clients/admin - Interface de gestion
-router.get('/admin', async (req, res) => {
-  try {
-    const clients = await Client.find();
-    
-    let html = `
-      <h2>Gestion Clients UniPay</h2>
-      <a href="/api/clients/add">+ Ajouter un client</a>
-      <table border="1" cellpadding="8" style="border-collapse:collapse; margin-top:20px">
-        <tr>
-          <th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Solde</th><th>Actions</th>
-        </tr>
-    `;
-    
-    clients.forEach(c => {
-      html += `
-        <tr>
-          <td>${c.nom}</td>
-          <td>${c.prenom}</td>
-          <td>${c.email}</td>
-          <td>${c.telephone}</td>
-          <td>${c.solde} FCFA</td>
-          <td>
-            <button onclick="modifierClient('${c._id}')">Modifier</button>
-            <button onclick="supprimerClient('${c._id}')">Supprimer</button>
-          </td>
-        </tr>
-      `;
-    });
-    
-    html += `
-      </table>
-      
-      <script>
-        async function supprimerClient(id) {
-          if (!confirm('Supprimer ce client ?')) return;
-          
-          const res = await fetch('/api/clients/' + id, { method: 'DELETE' });
-          const data = await res.json();
-          alert(data.message);
-          location.reload();
-        }
-        
-        function modifierClient(id) {
-          const nouveauSolde = prompt('Nouveau solde:');
-          if (nouveauSolde === null) return;
-          
-          fetch('/api/clients/' + id, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ solde: Number(nouveauSolde) })
-          })
-          .then(res => res.json())
-          .then(data => {
-            alert(data.message);
-            location.reload();
-          });
-        }
-      </script>
-    `;
-    
-    res.send(html);
-  } catch (error) {
-    res.status(500).send('Erreur: ' + error.message);
-  }
-});
-// 1. Routes spécifiques EN PREMIER
-router.get('/add', (req, res) => {
+// 1. ROUTES SPECIFIQUES EN PREMIER - AVANT /:id
+// Page formulaire ajout - PROTÉGÉE
+router.get('/add', verifyAdmin, (req, res) => {
   res.send(`
     <h2>Ajouter un client</h2>
     <form method="POST" action="/api/clients">
@@ -85,14 +19,26 @@ router.get('/add', (req, res) => {
   `);
 });
 
-// 2. Route GET tous les clients
-router.get('/', async (req, res) => {
+// Panel admin - PROTÉGÉ
+router.get('/admin', verifyAdmin, async (req, res) => {
   const clients = await Client.find();
-  res.json(clients);
+  res.send(`<h2>Panel Admin</h2><pre>${JSON.stringify(clients, null, 2)}</pre>`);
 });
 
-// 3. POST créer client
-router.post('/', async (req, res) => {
+// 2. ROUTES CRUD
+
+// GET tous les clients - PUBLIC
+router.get('/', async (req, res) => {
+  try {
+    const clients = await Client.find();
+    res.json(clients);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST créer client - PROTÉGÉ
+router.post('/', verifyAdmin, async (req, res) => {
   try {
     const client = new Client(req.body);
     await client.save();
@@ -102,7 +48,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 4. Routes avec :id EN DERNIER
+// GET un client par ID - PUBLIC
 router.get('/:id', async (req, res) => {
   try {
     const client = await Client.findById(req.params.id);
@@ -113,7 +59,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+// PUT modifier client - PROTÉGÉ
+router.put('/:id', verifyAdmin, async (req, res) => {
   try {
     const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!client) return res.status(404).json({ message: 'Client introuvable' });
@@ -123,7 +70,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+// DELETE supprimer client - PROTÉGÉ
+router.delete('/:id', verifyAdmin, async (req, res) => {
   try {
     const client = await Client.findByIdAndDelete(req.params.id);
     if (!client) return res.status(404).json({ message: 'Client introuvable' });
