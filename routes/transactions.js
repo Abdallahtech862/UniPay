@@ -4,6 +4,63 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin } = require('../middleware/auth');
 
+// Annuler une transaction - PROTÉGÉ
+router.delete('/:id', verifyAdmin, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id)
+     .populate('expediteur')
+     .populate('destinataire');
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction introuvable' });
+    }
+
+    // Check 24h max
+    const diffHeures = (Date.now() - transaction.date) / (1000 * 60 * 60);
+    if (diffHeures > 24) {
+      return res.status(400).json({ error: 'Annulation possible que pendant 24h' });
+    }
+
+    // Check si déjà annulée
+    if (transaction.annulee) {
+      return res.status(400).json({ error: 'Transaction déjà annulée' });
+    }
+
+    const clientExp = await Client.findById(transaction.expediteur._id);
+    const clientDest = await Client.findById(transaction.destinataire._id);
+
+    if (!clientExp || !clientDest) {
+      return res.status(404).json({ error: 'Client introuvable' });
+    }
+
+    // Vérifier que le destinataire a encore le montant
+    if (clientDest.solde < transaction.montant) {
+      return res.status(400).json({ 
+        error: 'Impossible d\'annuler : solde destinataire insuffisant (' + clientDest.solde + ' FCFA)' 
+      });
+    }
+
+    // Remboursement inverse
+    clientExp.solde += Number(transaction.montant);
+    clientDest.solde -= Number(transaction.montant);
+    
+    await clientExp.save();
+    await clientDest.save();
+
+    // Marquer comme annulée au lieu de supprimer
+    transaction.annulee = true;
+    transaction.dateAnnulation = new Date();
+    await transaction.save();
+
+    res.json({ 
+      message: 'Transaction annulée. ' + transaction.montant + ' FCFA remboursé à ' + clientExp.prenom + ' ' + clientExp.nom
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Page formulaire transfert
 router.get('/add', async (req, res) => {
   const clients = await Client.find().select('nom prenom telephone solde');
