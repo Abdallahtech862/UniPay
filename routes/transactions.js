@@ -4,6 +4,51 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin } = require('../middleware/auth');
 
+function renderTable(transactions) {
+  if (transactions.length === 0) {
+    document.getElementById('content').innerHTML = 'Aucune transaction trouvée';
+    return;
+  }
+  
+  let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
+  transactions.forEach(t => {
+    const date = new Date(t.date).toLocaleString('fr-FR');
+    const diffHeures = (Date.now() - new Date(t.date)) / (1000 * 60 * 60);
+    const peutAnnuler = diffHeures <= 24 && !t.annulee;
+    
+    let statut = t.annulee ? '<span style="color:red">Annulée</span>' : '<span style="color:green">Validée</span>';
+    let bouton = '';
+    
+    if (peutAnnuler) {
+      bouton = '<button onclick="annulerTx(\'' + t._id + '\')" style="background:#dc3545;color:white;border:none;padding:5px 10px;cursor:pointer;border-radius:3px;">Annuler</button>';
+    } else if (t.annulee) {
+      bouton = '-';
+    } else {
+      bouton = '<span style="color:#999">Expirée</span>';
+    }
+    
+    html += '<tr' + (t.annulee ? ' style="opacity:0.5"' : '') + '><td>' + date + '</td><td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td><td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td><td class="montant">' + t.montant.toLocaleString() + ' FCFA</td><td>' + (t.motif || '-') + '</td><td>' + statut + '</td><td>' + bouton + '</td></tr>';
+  });
+  html += '</table>';
+  document.getElementById('content').innerHTML = html;
+}
+
+async function annulerTx(id) {
+  if (!confirm('Annuler cette transaction ? Les soldes seront remboursés.')) return;
+  
+  const res = await fetch('/api/transactions/' + id, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  
+  const data = await res.json();
+  if (res.ok) {
+    alert(data.message);
+    loadTransactions();
+  } else {
+    alert('Erreur: ' + data.error);
+  }
+}
 // Annuler une transaction - PROTÉGÉ
 router.delete('/:id', verifyAdmin, async (req, res) => {
   try {
