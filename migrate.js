@@ -1,69 +1,36 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
 require('dotenv').config();
 
-// Import ton modèle Client
-const Client = require('./models/Client');
+const Transaction = require('./models/Transaction');
 
 async function migrate() {
   try {
     console.log('Connexion à MongoDB...');
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('Connecté ✅');
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('Connecté');
 
-    // 1. Ajouter limites aux clients existants
-    const resultLimites = await Client.updateMany(
-      { limiteJournaliere: { $exists: false } },
-      { 
-        $set: { 
-          limiteJournaliere: 500000, 
-          limiteMensuelle: 5000000 
-        } 
-      },
-      { runValidators: false }
+    // 1. Ajouter annulee: false sur toutes les tx qui l'ont pas
+    const result1 = await Transaction.updateMany(
+      { annulee: { $exists: false } },
+      { $set: { annulee: false } }
     );
-    console.log(`${resultLimites.modifiedCount} clients : limites ajoutées`);
+    console.log(`${result1.modifiedCount} transactions mises à jour avec annulee: false`);
 
-    // 2. Ajouter pseudo aux clients qui n'en ont pas
-    const clientsSansPseudo = await Client.find({ pseudo: { $exists: false } });
-    let countPseudo = 0;
+    // 2. Compter les transactions
+    const total = await Transaction.countDocuments();
+    const annulees = await Transaction.countDocuments({ annulee: true });
+    const valides = await Transaction.countDocuments({ annulee: false });
     
-    for (const client of clientsSansPseudo) {
-      // Génère un pseudo basé sur prenom+nom+random
-      const basePseudo = (client.prenom + client.nom).toLowerCase().replace(/\s/g, '');
-      let pseudo = basePseudo;
-      let i = 1;
-      
-      // Si le pseudo existe déjà, ajoute un numéro
-      while (await Client.findOne({ pseudo })) {
-        pseudo = basePseudo + i;
-        i++;
-      }
-      
-      client.pseudo = pseudo;
-      await client.save({ validateBeforeSave: false });
-      countPseudo++;
-    }
-    console.log(`${countPseudo} clients : pseudo généré`);
+    console.log('\n=== STATS ===');
+    console.log(`Total transactions: ${total}`);
+    console.log(`Validées: ${valides}`);
+    console.log(`Annulées: ${annulees}`);
 
-    // 3. Fix clients sans password
-    const clientsSansPassword = await Client.find({ password: { $exists: false } });
-    let countPassword = 0;
-    
-    for (const client of clientsSansPassword) {
-      // Password = téléphone hashé
-      const hashedPassword = await bcrypt.hash(client.telephone, 10);
-      client.password = hashedPassword;
-      await client.save({ validateBeforeSave: false });
-      countPassword++;
-    }
-    console.log(`${countPassword} clients : password ajouté`);
-
-    console.log('\n✅ Migration terminée avec succès');
+    await mongoose.disconnect();
+    console.log('\nMigration terminée avec succès');
     process.exit(0);
-    
-  } catch (err) {
-    console.error('❌ Erreur migration:', err);
+  } catch (error) {
+    console.error('Erreur migration:', error);
     process.exit(1);
   }
 }
