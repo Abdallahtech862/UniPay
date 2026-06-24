@@ -6,44 +6,65 @@ const { verifyAdmin } = require('../middleware/auth');
 
 // ==================== ROUTES API JSON ====================
 
-// GET /api/transactions/data - Données pour le tableau
+// GET /api/transactions/data - Données pour le tableau avec recherche
 router.get('/data', verifyAdmin, async (req, res) => {
   try {
-    const { client, debut, fin } = req.query;
+    const { client, debut, fin, q, montantMin, montantMax } = req.query;
     let query = {};
     
+    // Filtre par client depuis select
     if (client) {
       query = { $or: [{ expediteur: client }, { destinataire: client }] };
     }
     
+    // Filtre par date
     if (debut || fin) {
       query.date = {};
       if (debut) query.date.$gte = new Date(debut);
       if (fin) query.date.$lte = new Date(fin + 'T23:59:59');
     }
     
-    const transactions = await Transaction.find(query)
-     .populate('expediteur', 'nom prenom')
-     .populate('destinataire', 'nom prenom')
+    // Filtre par montant
+    if (montantMin || montantMax) {
+      query.montant = {};
+      if (montantMin) query.montant.$gte = Number(montantMin);
+      if (montantMax) query.montant.$lte = Number(montantMax);
+    }
+    
+    let transactions = await Transaction.find(query)
+     .populate('expediteur', 'nom prenom telephone')
+     .populate('destinataire', 'nom prenom telephone')
      .sort({ date: -1 })
      .lean();
     
     // Filtrer transactions avec clients supprimés
-    const validTx = transactions.filter(t => t.expediteur && t.destinataire);
+    transactions = transactions.filter(t => t.expediteur && t.destinataire);
     
-    const volumeTotal = validTx
+    // Recherche texte : nom ou téléphone
+    if (q && q.trim() !== '') {
+      const search = q.toLowerCase();
+      transactions = transactions.filter(t => {
+        const expNom = `${t.expediteur.prenom} ${t.expediteur.nom}`.toLowerCase();
+        const destNom = `${t.destinataire.prenom} ${t.destinataire.nom}`.toLowerCase();
+        const expTel = t.expediteur.telephone || '';
+        const destTel = t.destinataire.telephone || '';
+        return expNom.includes(search) || destNom.includes(search) || 
+               expTel.includes(search) || destTel.includes(search);
+      });
+    }
+    
+    const volumeTotal = transactions
       .filter(t => !t.annulee)
       .reduce((sum, t) => sum + t.montant, 0);
     
     res.json({ 
-      transactions: validTx, 
-      stats: { total: validTx.length, volumeTotal } 
+      transactions, 
+      stats: { total: transactions.length, volumeTotal } 
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
-
 // GET /api/transactions/stats - Stats dashboard
 router.get('/stats', verifyAdmin, async (req, res) => {
   try {
@@ -288,11 +309,15 @@ router.get('/', async (req, res) => {
     tr:nth-child(even) { background: #f2f2f2; }
     tr.annulee { opacity: 0.5; background: #ffe6e6; }
    .montant { color: #28a745; font-weight: bold; }
-   .filtres { margin: 15px 0; }
-    select, input, button { padding: 8px; margin-right: 10px; }
+   .filtres { margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 5px; }
+   .filtres-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    select, input, button { padding: 8px; }
+    input[type="text"] { flex: 1; min-width: 200px; }
+    input[type="number"] { width: 120px; }
    .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
    .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
    .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
+   .btn-primary { background: #007bff; color: white; border: none; cursor: pointer; }
    .badge-ok { color: #28a745; font-weight: bold; }
    .badge-ko { color: #dc3545; font-weight: bold; }
     @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
@@ -301,20 +326,31 @@ router.get('/', async (req, res) => {
 <body>
   <h2>Historique des transactions</h2>
   <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a>
+  
   <div class="filtres">
-    <select id="filterClient">${optionsClients}</select>
-    <input type="date" id="dateDebut">
-    <input type="date" id="dateFin">
-    <button onclick="loadTransactions()">Filtrer</button>
-    <button onclick="resetFiltres()">Reset</button>
+    <div class="filtres-row">
+      <input type="text" id="searchText" placeholder="Rechercher par nom ou téléphone...">
+      <input type="number" id="montantMin" placeholder="Montant min" min="0">
+      <input type="number" id="montantMax" placeholder="Montant max" min="0">
+    </div>
+    <div class="filtres-row">
+      <select id="filterClient">${optionsClients}</select>
+      <input type="date" id="dateDebut">
+      <input type="date" id="dateFin">
+      <button class="btn-primary" onclick="loadTransactions()">Rechercher</button>
+      <button onclick="resetFiltres()">Reset</button>
+    </div>
   </div>
+  
   <div class="actions">
     <button class="print" onclick="window.print()">Imprimer</button>
     <button class="csv" onclick="exportCSV()">Export CSV</button>
     <button class="pdf" onclick="exportPDF()">Export PDF</button>
   </div>
+  
   <div id="stats"></div>
   <div id="content">Chargement...</div>
+  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
   <script>
@@ -324,15 +360,25 @@ router.get('/', async (req, res) => {
     
     async function loadTransactions() {
       try {
+        const params = new URLSearchParams();
         const clientId = document.getElementById('filterClient').value;
         const dateDebut = document.getElementById('dateDebut').value;
         const dateFin = document.getElementById('dateFin').value;
-        let url = '/api/transactions/data?';
-        if (clientId) url += 'client=' + clientId + '&';
-        if (dateDebut) url += 'debut=' + dateDebut + '&';
-        if (dateFin) url += 'fin=' + dateFin;
+        const q = document.getElementById('searchText').value;
+        const montantMin = document.getElementById('montantMin').value;
+        const montantMax = document.getElementById('montantMax').value;
         
-        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+        if (clientId) params.append('client', clientId);
+        if (dateDebut) params.append('debut', dateDebut);
+        if (dateFin) params.append('fin', dateFin);
+        if (q) params.append('q', q);
+        if (montantMin) params.append('montantMin', montantMin);
+        if (montantMax) params.append('montantMax', montantMax);
+        
+        const res = await fetch('/api/transactions/data?' + params.toString(), { 
+          headers: { 'Authorization': 'Bearer ' + token } 
+        });
+        
         if (res.status === 401 || res.status === 403) {
           localStorage.removeItem('token');
           window.location.href = '/api/auth/login';
@@ -355,7 +401,7 @@ router.get('/', async (req, res) => {
     
     function renderTable(transactions) {
       if (!transactions || transactions.length === 0) {
-        document.getElementById('content').innerHTML = 'Aucune transaction';
+        document.getElementById('content').innerHTML = 'Aucune transaction trouvée';
         return;
       }
       
@@ -380,8 +426,8 @@ router.get('/', async (req, res) => {
         
         html += '<tr' + (t.annulee ? ' class="annulee"' : '') + '>';
         html += '<td>' + date + '</td>';
-        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
-        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
+        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + (t.expediteur.telephone || '') + '</small></td>';
+        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '<br><small>' + (t.destinataire.telephone || '') + '</small></td>';
         html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
         html += '<td>' + (t.motif || '-') + '</td>';
         html += '<td>' + statut + '</td>';
@@ -410,7 +456,7 @@ router.get('/', async (req, res) => {
     
     function exportCSV() {
       if (currentTransactions.length === 0) { alert('Aucune donnée'); return; }
-      let csv = 'Date,Expéditeur,Destinataire,Montant,Motif,Statut\\n';
+      let csv = 'Date,Expéditeur,Téléphone Exp,Montant,Motif,Statut\\n';
       currentTransactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
         const date = new Date(t.date).toLocaleString('fr-FR');
@@ -453,8 +499,17 @@ router.get('/', async (req, res) => {
       document.getElementById('filterClient').value = '';
       document.getElementById('dateDebut').value = '';
       document.getElementById('dateFin').value = '';
+      document.getElementById('searchText').value = '';
+      document.getElementById('montantMin').value = '';
+      document.getElementById('montantMax').value = '';
       loadTransactions();
     }
+    
+    // Recherche en temps réel quand on tape
+    document.getElementById('searchText').addEventListener('input', () => {
+      clearTimeout(window.searchTimeout);
+      window.searchTimeout = setTimeout(loadTransactions, 500);
+    });
     
     loadTransactions();
   </script>
