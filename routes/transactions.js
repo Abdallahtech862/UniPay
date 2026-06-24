@@ -643,93 +643,49 @@ router.get('/', async (req, res) => {
 // ==================== ROUTES ACTION ====================
 
 // POST /api/transactions - Créer transfert avec check limites
-router.post('/', verifyAdmin, async (req, res) => {
+const multer = require('multer');
+const bcrypt = require('bcrypt');
+const upload = multer({ dest: 'uploads/' }); // Stockage temporaire
+
+// POST /api/clients - Créer client avec fichiers
+router.post('/', verifyAdmin, upload.fields([
+  { name: 'photoProfil', maxCount: 1 },
+  { name: 'carteRecto', maxCount: 1 },
+  { name: 'carteVerso', maxCount: 1 }
+]), async (req, res) => {
   try {
-    const { expediteur, destinataire, montant, motif } = req.body;
-    const montantNum = Number(montant);
-    
-    if (expediteur === destinataire) {
-      return res.status(400).json({ error: 'Même compte' });
-    }
-    
-    const clientExp = await Client.findById(expediteur);
-    const clientDest = await Client.findById(destinataire);
-    
-    if (!clientExp || !clientDest) {
-      return res.status(404).json({ error: 'Client introuvable' });
-    }
-    
-    // Check solde
-    if (clientExp.solde < montantNum) {
-      return res.status(400).json({ error: 'Solde insuffisant: ' + clientExp.solde + ' FCFA' });
-    }
-    
-    // Check limite journalière
-    const debutJour = new Date();
-    debutJour.setHours(0, 0, 0, 0);
-    const finJour = new Date();
-    finJour.setHours(23, 59, 59, 999);
-    
-    const txJour = await Transaction.find({
-      expediteur: expediteur,
-      annulee: { $ne: true },
-      date: { $gte: debutJour, $lte: finJour }
+    const { nom, prenom, pseudo, email, telephone, solde, limiteJournaliere, limiteMensuelle } = req.body;
+
+    // Check si pseudo existe déjà
+    const existPseudo = await Client.findOne({ pseudo });
+    if (existPseudo) return res.status(400).json({ error: 'Pseudo déjà utilisé' });
+
+    // Password par défaut = téléphone, à changer à la 1ère connexion
+    const hashedPassword = await bcrypt.hash(telephone, 10);
+
+    // Pour l'instant on stocke juste le nom du fichier
+    // Plus tard tu pourras uploader sur Cloudinary/S3
+    const photoProfil = req.files['photoProfil']? req.files['photoProfil'][0].filename : null;
+    const carteRecto = req.files['carteRecto']? req.files['carteRecto'][0].filename : null;
+    const carteVerso = req.files['carteVerso']? req.files['carteVerso'][0].filename : null;
+
+    const client = new Client({
+      nom,
+      prenom,
+      pseudo,
+      email,
+      telephone,
+      solde: Number(solde) || 0,
+      password: hashedPassword,
+      limiteJournaliere: Number(limiteJournaliere) || 500000,
+      limiteMensuelle: Number(limiteMensuelle) || 5000000,
+      photoProfil,
+      carteRecto,
+      carteVerso
     });
-    
-    const totalJour = txJour.reduce((sum, t) => sum + t.montant, 0);
-    
-    if (totalJour + montantNum > clientExp.limiteJournaliere) {
-      const restant = clientExp.limiteJournaliere - totalJour;
-      return res.status(400).json({ 
-        error: `Limite journalière dépassée. Limite: ${clientExp.limiteJournaliere.toLocaleString()} FCFA. Déjà utilisé: ${totalJour.toLocaleString()} FCFA. Restant: ${restant.toLocaleString()} FCFA` 
-      });
-    }
-    
-    // Check limite mensuelle
-    const debutMois = new Date();
-    debutMois.setDate(1);
-    debutMois.setHours(0, 0, 0, 0);
-    
-    const txMois = await Transaction.find({
-      expediteur: expediteur,
-      annulee: { $ne: true },
-      date: { $gte: debutMois }
-    });
-    
-    const totalMois = txMois.reduce((sum, t) => sum + t.montant, 0);
-    
-    if (totalMois + montantNum > clientExp.limiteMensuelle) {
-      const restant = clientExp.limiteMensuelle - totalMois;
-      return res.status(400).json({ 
-        error: `Limite mensuelle dépassée. Limite: ${clientExp.limiteMensuelle.toLocaleString()} FCFA. Déjà utilisé: ${totalMois.toLocaleString()} FCFA. Restant: ${restant.toLocaleString()} FCFA` 
-      });
-    }
-    
-    // Si tout est OK, on exécute le transfert
-    clientExp.solde -= montantNum;
-    clientDest.solde += montantNum;
-    await clientExp.save();
-    await clientDest.save();
-    
-    const transaction = new Transaction({ expediteur, destinataire, montant: montantNum, motif });
-    await transaction.save();
-    
-    res.json({ 
-      message: 'Transfert de ' + montantNum.toLocaleString() + ' FCFA réussi', 
-      transaction,
-      limites: {
-        journalier: {
-          utilise: totalJour + montantNum,
-          limite: clientExp.limiteJournaliere,
-          restant: clientExp.limiteJournaliere - (totalJour + montantNum)
-        },
-        mensuel: {
-          utilise: totalMois + montantNum,
-          limite: clientExp.limiteMensuelle,
-          restant: clientExp.limiteMensuelle - (totalMois + montantNum)
-        }
-      }
-    });
+
+    await client.save();
+    res.json({ message: 'Client créé', client });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
