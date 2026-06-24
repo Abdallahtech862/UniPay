@@ -67,7 +67,7 @@ addForm.onsubmit = async e => {
   }
 };
 </script>
-      <div id="msg"></div>
+      
 
       <script>
         const token = localStorage.getItem('token');
