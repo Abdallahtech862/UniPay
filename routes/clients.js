@@ -11,14 +11,62 @@ router.get('/add',  (req, res) => {
     <body>
       <h2>Ajouter un client</h2>
       <a href="/api/clients/admin">← Retour</a><br><br>
-      <form id="addForm">
-        <input name="nom" placeholder="Nom" required><br><br>
-        <input name="prenom" placeholder="Prénom" required><br><br>
-        <input name="email" type="email" placeholder="Email" required><br><br>
-        <input name="telephone" placeholder="Téléphone" required><br><br>
-        <input name="solde" type="number" placeholder="Solde" value="0"><br><br>
-        <button type="submit">Créer</button>
-      </form>
+      <form id="addForm" enctype="multipart/form-data">
+  <input name="nom" placeholder="Nom" required><br><br>
+  <input name="prenom" placeholder="Prénom" required><br><br>
+  <input name="pseudo" placeholder="Pseudo unique" required><br><br>
+  <input name="email" type="email" placeholder="Email" required><br><br>
+  <input name="telephone" placeholder="Téléphone" required><br><br>
+  <input name="solde" type="number" placeholder="Solde initial" value="0"><br><br>
+
+  <fieldset style="border:1px solid #ddd; padding:10px; margin:10px 0;">
+    <legend>Limites de transfert</legend>
+    <label>Limite journalière (FCFA):</label>
+    <input name="limiteJournaliere" type="number" value="500000" min="0"><br><br>
+    <label>Limite mensuelle (FCFA):</label>
+    <input name="limiteMensuelle" type="number" value="5000000" min="0">
+  </fieldset>
+
+  <fieldset style="border:1px solid #ddd; padding:10px; margin:10px 0;">
+    <legend>Documents</legend>
+    <label>Photo de profil:</label>
+    <input name="photoProfil" type="file" accept="image/*"><br><br>
+    <label>Carte d'identité recto:</label>
+    <input name="carteRecto" type="file" accept="image/*"><br><br>
+    <label>Carte d'identité verso:</label>
+    <input name="carteVerso" type="file" accept="image/*">
+  </fieldset>
+
+  <button type="submit">Créer le client</button>
+</form>
+
+<div id="msg"></div>
+
+<script>
+const token = localStorage.getItem('token');
+if (!token) window.location.href = '/api/auth/login';
+
+addForm.onsubmit = async e => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+
+  const res = await fetch('/api/clients', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token },
+    body: formData
+  });
+
+  const data = await res.json();
+  if (res.ok) {
+    msg.className = 'success';
+    msg.innerText = 'Client créé : ' + data.client.pseudo;
+    e.target.reset();
+  } else {
+    msg.className = 'error';
+    msg.innerText = 'Erreur: ' + data.error;
+  }
+};
+</script>
       <div id="msg"></div>
 
       <script>
