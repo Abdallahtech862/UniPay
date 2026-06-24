@@ -115,6 +115,67 @@ router.get('/stats', verifyAdmin, async (req, res) => {
   }
 });
 
+// GET /api/transactions/top-clients - Top expéditeurs/destinataires
+router.get('/top-clients', verifyAdmin, async (req, res) => {
+  try {
+    const jours = parseInt(req.query.jours) || 30;
+    const limit = parseInt(req.query.limit) || 10;
+    const dateDebut = new Date();
+    dateDebut.setDate(dateDebut.getDate() - jours);
+
+    const transactions = await Transaction.find({
+      date: { $gte: dateDebut },
+      annulee: { $ne: true }
+    }).populate('expediteur', 'nom prenom telephone').populate('destinataire', 'nom prenom telephone').lean();
+
+    const expediteurs = {};
+    const destinataires = {};
+
+    transactions.forEach(t => {
+      if (!t.expediteur ||!t.destinataire) return;
+
+      // Top expéditeurs
+      const expId = t.expediteur._id.toString();
+      if (!expediteurs[expId]) {
+        expediteurs[expId] = {
+          id: expId,
+          nom: t.expediteur.prenom + ' ' + t.expediteur.nom,
+          telephone: t.expediteur.telephone,
+          volume: 0,
+          nbTx: 0
+        };
+      }
+      expediteurs[expId].volume += t.montant;
+      expediteurs[expId].nbTx += 1;
+
+      // Top destinataires
+      const destId = t.destinataire._id.toString();
+      if (!destinataires[destId]) {
+        destinataires[destId] = {
+          id: destId,
+          nom: t.destinataire.prenom + ' ' + t.destinataire.nom,
+          telephone: t.destinataire.telephone,
+          volume: 0,
+          nbTx: 0
+        };
+      }
+      destinataires[destId].volume += t.montant;
+      destinataires[destId].nbTx += 1;
+    });
+
+    const topExpediteurs = Object.values(expediteurs)
+     .sort((a, b) => b.volume - a.volume)
+     .slice(0, limit);
+
+    const topDestinataires = Object.values(destinataires)
+     .sort((a, b) => b.volume - a.volume)
+     .slice(0, limit);
+
+    res.json({ topExpediteurs, topDestinataires });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // ==================== ROUTES HTML ====================
 
 // GET /api/transactions/add - Formulaire transfert
@@ -182,7 +243,7 @@ router.get('/add', async (req, res) => {
   }
 });
 
-// GET /api/transactions/dashboard - Dashboard
+// GET /api/transactions/dashboard - Dashboard avec top clients
 router.get('/dashboard', async (req, res) => {
   res.send(`<!DOCTYPE html>
 <html>
@@ -192,42 +253,79 @@ router.get('/dashboard', async (req, res) => {
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: Arial; padding: 20px; background: #f5f5f5; }
-   .container { max-width: 1200px; margin: auto; }
-   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
-   .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-   .card h3 { margin: 0 0 10px 0; color: #666; font-size: 14px; }
-   .value { font-size: 32px; font-weight: bold; color: #007bff; }
-   .chart-container { background: white; padding: 20px; border-radius: 8px; margin-top: 20px; }
+  .container { max-width: 1400px; margin: auto; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+  .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .card h3 { margin: 0 0 10px 0; color: #666; font-size: 14px; }
+  .value { font-size: 32px; font-weight: bold; color: #007bff; }
+  .chart-container { background: white; padding: 20px; border-radius: 8px; margin-top: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .top-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .top-table th { background: #007bff; color: white; padding: 10px; text-align: left; }
+  .top-table td { border: 1px solid #ddd; padding: 8px; }
+  .top-table tr:nth-child(even) { background: #f2f2f2; }
+  .rank { font-weight: bold; color: #007bff; }
+  .montant-top { color: #28a745; font-weight: bold; }
     button { padding: 10px 20px; margin: 5px; border: none; cursor: pointer; border-radius: 4px; background: #007bff; color: white; }
-   .filtres { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+  .filtres { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
     select { padding: 8px; margin-right: 10px; }
+    @media (max-width: 768px) {.grid-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Dashboard UniPay</h1>
     <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a>
+
     <div class="filtres">
       <select id="periode">
         <option value="7">7 derniers jours</option>
         <option value="30" selected>30 derniers jours</option>
         <option value="90">90 derniers jours</option>
+        <option value="365">1 an</option>
       </select>
-      <button onclick="loadDashboard()">Actualiser</button>
+      <button onclick="loadAll()">Actualiser</button>
     </div>
+
     <div class="cards">
       <div class="card"><h3>TOTAL TRANSACTIONS</h3><div class="value" id="totalTx">0</div></div>
       <div class="card"><h3>VOLUME TOTAL</h3><div class="value" id="volumeTotal">0 FCFA</div></div>
       <div class="card"><h3>TRANSACTION MOYENNE</h3><div class="value" id="moyenne">0 FCFA</div></div>
       <div class="card"><h3>CLIENTS ACTIFS</h3><div class="value" id="clientsActifs">0</div></div>
     </div>
-    <div class="chart-container"><h3>Volume par jour</h3><canvas id="volumeChart"></canvas></div>
-    <div class="chart-container"><h3>Nombre de transactions par jour</h3><canvas id="countChart"></canvas></div>
+
+    <div class="grid-2">
+      <div class="chart-container"><h3>Volume par jour</h3><canvas id="volumeChart"></canvas></div>
+      <div class="chart-container"><h3>Nombre de transactions par jour</h3><canvas id="countChart"></canvas></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="chart-container">
+        <h3>🏆 Top 10 Expéditeurs</h3>
+        <table class="top-table" id="topExpediteurs">
+          <tr><th>#</th><th>Client</th><th>Volume</th><th>Nb Tx</th></tr>
+          <tr><td colspan="4">Chargement...</td></tr>
+        </table>
+      </div>
+      <div class="chart-container">
+        <h3>🎯 Top 10 Destinataires</h3>
+        <table class="top-table" id="topDestinataires">
+          <tr><th>#</th><th>Client</th><th>Volume</th><th>Nb Tx</th></tr>
+          <tr><td colspan="4">Chargement...</td></tr>
+        </table>
+      </div>
+    </div>
   </div>
+
   <script>
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/api/auth/login';
     let volumeChart, countChart;
+
+    async function loadAll() {
+      await Promise.all([loadDashboard(), loadTopClients()]);
+    }
+
     async function loadDashboard() {
       const jours = document.getElementById('periode').value;
       const res = await fetch('/api/transactions/stats?jours=' + jours, {
@@ -243,6 +341,7 @@ router.get('/dashboard', async (req, res) => {
       document.getElementById('volumeTotal').innerText = data.volumeTotal.toLocaleString() + ' FCFA';
       document.getElementById('moyenne').innerText = Math.round(data.moyenne).toLocaleString() + ' FCFA';
       document.getElementById('clientsActifs').innerText = data.clientsActifs;
+
       if (volumeChart) volumeChart.destroy();
       volumeChart = new Chart(document.getElementById('volumeChart'), {
         type: 'line',
@@ -263,6 +362,7 @@ router.get('/dashboard', async (req, res) => {
           scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() + ' FCFA' } } }
         }
       });
+
       if (countChart) countChart.destroy();
       countChart = new Chart(document.getElementById('countChart'), {
         type: 'bar',
@@ -281,12 +381,32 @@ router.get('/dashboard', async (req, res) => {
         }
       });
     }
-    loadDashboard();
+
+    async function loadTopClients() {
+      const jours = document.getElementById('periode').value;
+      const res = await fetch('/api/transactions/top-clients?jours=' + jours + '&limit=10', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await res.json();
+
+      let htmlExp = '<tr><th>#</th><th>Client</th><th>Volume</th><th>Nb Tx</th></tr>';
+      data.topExpediteurs.forEach((c, i) => {
+        htmlExp += '<tr><td class="rank">' + (i+1) + '</td><td>' + c.nom + '<br><small>' + c.telephone + '</small></td><td class="montant-top">' + c.volume.toLocaleString() + ' FCFA</td><td>' + c.nbTx + '</td></tr>';
+      });
+      document.getElementById('topExpediteurs').innerHTML = htmlExp;
+
+      let htmlDest = '<tr><th>#</th><th>Client</th><th>Volume</th><th>Nb Tx</th></tr>';
+      data.topDestinataires.forEach((c, i) => {
+        htmlDest += '<tr><td class="rank">' + (i+1) + '</td><td>' + c.nom + '<br><small>' + c.telephone + '</small></td><td class="montant-top">' + c.volume.toLocaleString() + ' FCFA</td><td>' + c.nbTx + '</td></tr>';
+      });
+      document.getElementById('topDestinataires').innerHTML = htmlDest;
+    }
+
+    loadAll();
   </script>
 </body>
 </html>`);
 });
-
 // GET /api/transactions - Page HTML Historique
 router.get('/', async (req, res) => {
   try {
