@@ -100,6 +100,67 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// GET /api/transactions/top-clients - Top expéditeurs/destinataires
+router.get('/top-clients', async (req, res) => {
+  try {
+    const jours = parseInt(req.query.jours) || 30;
+    const limit = parseInt(req.query.limit) || 10;
+    const dateDebut = new Date();
+    dateDebut.setDate(dateDebut.getDate() - jours);
+
+    const transactions = await Transaction.find({
+      date: { $gte: dateDebut },
+      annulee: { $ne: true }
+    }).populate('expediteur', 'nom prenom telephone').populate('destinataire', 'nom prenom telephone').lean();
+
+    const expediteurs = {};
+    const destinataires = {};
+
+    transactions.forEach(t => {
+      if (!t.expediteur ||!t.destinataire) return;
+
+      // Top expéditeurs
+      const expId = t.expediteur._id.toString();
+      if (!expediteurs[expId]) {
+        expediteurs[expId] = {
+          id: expId,
+          nom: t.expediteur.prenom + ' ' + t.expediteur.nom,
+          telephone: t.expediteur.telephone,
+          volume: 0,
+          nbTx: 0
+        };
+      }
+      expediteurs[expId].volume += t.montant;
+      expediteurs[expId].nbTx += 1;
+
+      // Top destinataires
+      const destId = t.destinataire._id.toString();
+      if (!destinataires[destId]) {
+        destinataires[destId] = {
+          id: destId,
+          nom: t.destinataire.prenom + ' ' + t.destinataire.nom,
+          telephone: t.destinataire.telephone,
+          volume: 0,
+          nbTx: 0
+        };
+      }
+      destinataires[destId].volume += t.montant;
+      destinataires[destId].nbTx += 1;
+    });
+
+    const topExpediteurs = Object.values(expediteurs)
+     .sort((a, b) => b.volume - a.volume)
+     .slice(0, limit);
+
+    const topDestinataires = Object.values(destinataires)
+     .sort((a, b) => b.volume - a.volume)
+     .slice(0, limit);
+
+    res.json({ topExpediteurs, topDestinataires });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // GET /api/transactions/add - Formulaire de transfert
 router.get('/add', async (req, res) => {
   try {
