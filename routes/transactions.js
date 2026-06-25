@@ -407,7 +407,6 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
-// GET /api/transactions - Page HTML Historique
 router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
@@ -429,15 +428,11 @@ router.get('/', async (req, res) => {
     tr:nth-child(even) { background: #f2f2f2; }
     tr.annulee { opacity: 0.5; background: #ffe6e6; }
    .montant { color: #28a745; font-weight: bold; }
-   .filtres { margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 5px; }
-   .filtres-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+   .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     select, input, button { padding: 8px; }
-    input[type="text"] { flex: 1; min-width: 200px; }
-    input[type="number"] { width: 120px; }
    .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
    .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
    .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
-   .btn-primary { background: #007bff; color: white; border: none; cursor: pointer; }
    .badge-ok { color: #28a745; font-weight: bold; }
    .badge-ko { color: #dc3545; font-weight: bold; }
     @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
@@ -448,29 +443,22 @@ router.get('/', async (req, res) => {
   <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a>
   
   <div class="filtres">
-    <div class="filtres-row">
-      <input type="text" id="searchText" placeholder="Rechercher par nom ou téléphone...">
-      <input type="number" id="montantMin" placeholder="Montant min" min="0">
-      <input type="number" id="montantMax" placeholder="Montant max" min="0">
-    </div>
-    <div class="filtres-row">
-      <select id="filterClient">${optionsClients}</select>
-      <input type="date" id="dateDebut">
-      <input type="date" id="dateFin">
-      <button class="btn-primary" onclick="loadTransactions()">Rechercher</button>
-      <button onclick="resetFiltres()">Reset</button>
-    </div>
+    <select id="filterClient">${optionsClients}</select>
+    <input type="text" id="filterNumero" placeholder="Rechercher par numéro">
+    <input type="number" id="filterMontant" placeholder="Montant exact">
+    <input type="date" id="dateDebut">
+    <input type="date" id="dateFin">
+    <button onclick="loadTransactions()">Filtrer</button>
+    <button onclick="resetFiltres()">Reset</button>
   </div>
-  
+
   <div class="actions">
     <button class="print" onclick="window.print()">Imprimer</button>
     <button class="csv" onclick="exportCSV()">Export CSV</button>
     <button class="pdf" onclick="exportPDF()">Export PDF</button>
   </div>
-  
   <div id="stats"></div>
   <div id="content">Chargement...</div>
-  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
   <script>
@@ -480,26 +468,20 @@ router.get('/', async (req, res) => {
     
     async function loadTransactions() {
       try {
-        const params = new URLSearchParams();
         const clientId = document.getElementById('filterClient').value;
+        const numero = document.getElementById('filterNumero').value;
+        const montant = document.getElementById('filterMontant').value;
         const dateDebut = document.getElementById('dateDebut').value;
         const dateFin = document.getElementById('dateFin').value;
-        const q = document.getElementById('searchText').value;
-        const montantMin = document.getElementById('montantMin').value;
-        const montantMax = document.getElementById('montantMax').value;
-        const montantMax = document.getElementById('montantMax').value;
         
-        if (clientId) params.append('client', clientId);
-        if (dateDebut) params.append('debut', dateDebut);
-        if (dateFin) params.append('fin', dateFin);
-        if (q) params.append('q', q);
-        if (montantMin) params.append('montantMin', montantMin);
-        if (montantMax) params.append('searchText', searchText);
+        let url = '/api/transactions/data?';
+        if (clientId) url += 'client=' + clientId + '&';
+        if (numero) url += 'numero=' + numero + '&';
+        if (montant) url += 'montant=' + montant + '&';
+        if (dateDebut) url += 'debut=' + dateDebut + '&';
+        if (dateFin) url += 'fin=' + dateFin;
         
-        const res = await fetch('/api/transactions/data?' + params.toString(), { 
-          headers: { 'Authorization': 'Bearer ' + token } 
-        });
-        
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
         if (res.status === 401 || res.status === 403) {
           localStorage.removeItem('token');
           window.location.href = '/api/auth/login';
@@ -512,7 +494,6 @@ router.get('/', async (req, res) => {
         renderStats(data.stats);
       } catch (err) {
         document.getElementById('content').innerHTML = 'Erreur: ' + err.message;
-        console.error(err);
       }
     }
     
@@ -522,11 +503,11 @@ router.get('/', async (req, res) => {
     
     function renderTable(transactions) {
       if (!transactions || transactions.length === 0) {
-        document.getElementById('content').innerHTML = 'Aucune transaction trouvée';
+        document.getElementById('content').innerHTML = 'Aucune transaction';
         return;
       }
       
-      let html = '<table id="tableTransactions"><tr><th>Date</th><th>Expéditeur</th><th>Destinataire</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
+      let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Tél Exp.</th><th>Destinataire</th><th>Tél Dest.</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
       
       transactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
@@ -534,9 +515,7 @@ router.get('/', async (req, res) => {
         const date = new Date(t.date).toLocaleString('fr-FR');
         const diffMinutes = (Date.now() - new Date(t.date)) / 60000;
         const peutAnnuler = diffMinutes <= 1440 && !t.annulee;
-        const statut = t.annulee 
-          ? '<span class="badge-ko">ANNULÉE</span>' 
-          : '<span class="badge-ok">VALIDÉE</span>';
+        const statut = t.annulee ? '<span class="badge-ko">ANNULÉE</span>' : '<span class="badge-ok">VALIDÉE</span>';
         
         let bouton = '<span style="color:#999">Expiré</span>';
         if (t.annulee) {
@@ -547,8 +526,10 @@ router.get('/', async (req, res) => {
         
         html += '<tr' + (t.annulee ? ' class="annulee"' : '') + '>';
         html += '<td>' + date + '</td>';
-        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + (t.expediteur.telephone || '') + '</small></td>';
-        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '<br><small>' + (t.destinataire.telephone || '') + '</small></td>';
+        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
+        html += '<td>' + t.expediteur.telephone + '</td>';
+        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
+        html += '<td>' + t.destinataire.telephone + '</td>';
         html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
         html += '<td>' + (t.motif || '-') + '</td>';
         html += '<td>' + statut + '</td>';
@@ -561,76 +542,65 @@ router.get('/', async (req, res) => {
     }
     
     async function annulerTx(id) {
-      if (!confirm('Confirmer l\\'annulation ? Les soldes seront remboursés.')) return;
+      if (!confirm('Confirmer l\\'annulation ?')) return;
       const res = await fetch('/api/transactions/' + id, {
         method: 'DELETE',
         headers: { 'Authorization': 'Bearer ' + token }
       });
       const data = await res.json();
-      if (res.ok) {
-        alert(data.message);
-        loadTransactions();
-      } else {
-        alert('Erreur: ' + data.error);
-      }
+      alert(data.message || data.error);
+      loadTransactions();
     }
     
     function exportCSV() {
-      if (currentTransactions.length === 0) { alert('Aucune donnée'); return; }
-      let csv = 'Date,Expéditeur,Téléphone Exp,Montant,Motif,Statut\\n';
+      if (!currentTransactions.length) { alert('Aucune donnée'); return; }
+      let csv = 'Date,Expéditeur,Tél Exp,Destinataire,Tél Dest,Montant,Motif,Statut\\n';
       currentTransactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
         const date = new Date(t.date).toLocaleString('fr-FR');
-        const exp = t.expediteur.prenom + ' ' + t.expediteur.nom;
-        const dest = t.destinataire.prenom + ' ' + t.destinataire.nom;
         const statut = t.annulee ? 'Annulée' : 'Validée';
-        csv += '"' + date + '","' + exp + '","' + dest + '",' + t.montant + ',"' + (t.motif || '') + '","' + statut + '"\\n';
+        csv += '"' + date + '","' + t.expediteur.prenom + ' ' + t.expediteur.nom + '","' + t.expediteur.telephone + '","' + t.destinataire.prenom + ' ' + t.destinataire.nom + '","' + t.destinataire.telephone + '",' + t.montant + ',"' + (t.motif || '') + '","' + statut + '"\\n';
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'transactions_' + new Date().toISOString().split('T')[0] + '.csv';
+      link.download = 'transactions.csv';
       link.click();
     }
     
     function exportPDF() {
-      if (currentTransactions.length === 0) { alert('Aucune donnée'); return; }
+      if (!currentTransactions.length) { alert('Aucune donnée'); return; }
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text('Historique Transactions UniPay', 14, 20);
+      const doc = new jsPDF('l');
+      doc.setFontSize(16);
+      doc.text('Historique Transactions UniPay', 14, 15);
       const tableData = currentTransactions.filter(t => t.expediteur && t.destinataire).map(t => [
         new Date(t.date).toLocaleString('fr-FR'),
         t.expediteur.prenom + ' ' + t.expediteur.nom,
+        t.expediteur.telephone,
         t.destinataire.prenom + ' ' + t.destinataire.nom,
+        t.destinataire.telephone,
         t.montant.toLocaleString() + ' FCFA',
         t.motif || '-',
         t.annulee ? 'Annulée' : 'Validée'
       ]);
       doc.autoTable({
-        head: [['Date', 'Expéditeur', 'Destinataire', 'Montant', 'Motif', 'Statut']],
+        head: [['Date', 'Expéditeur', 'Tél Exp', 'Destinataire', 'Tél Dest', 'Montant', 'Motif', 'Statut']],
         body: tableData,
-        startY: 30,
-        styles: { fontSize: 8 }
+        startY: 25,
+        styles: { fontSize: 7 }
       });
       doc.save('transactions.pdf');
     }
     
     function resetFiltres() {
       document.getElementById('filterClient').value = '';
+      document.getElementById('filterNumero').value = '';
+      document.getElementById('filterMontant').value = '';
       document.getElementById('dateDebut').value = '';
       document.getElementById('dateFin').value = '';
-      document.getElementById('searchText').value = '';
-      document.getElementById('montantMin').value = '';
-      document.getElementById('montantMax').value = '';
       loadTransactions();
     }
-    
-    // Recherche en temps réel quand on tape
-    document.getElementById('searchText').addEventListener('input', () => {
-      clearTimeout(window.searchTimeout);
-      window.searchTimeout = setTimeout(loadTransactions, 500);
-    });
     
     loadTransactions();
   </script>
