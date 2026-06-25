@@ -27,7 +27,7 @@ const upload = multer({ storage });
 // ==================== ROUTES HTML ====================
 
 // GET /api/clients/add - Formulaire
-router.get('/add', (req, res) => {
+router.get('/add', verifyAdmin, (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -40,8 +40,8 @@ router.get('/add', (req, res) => {
         button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
         fieldset { border: 1px solid #ddd; padding: 10px; margin: 10px 0; }
         #msg { margin-top: 15px; padding: 10px; }
-      .success { background: #d4edda; color: #155724; }
-      .error { background: #f8d7da; color: #721c24; }
+     .success { background: #d4edda; color: #155724; }
+     .error { background: #f8d7da; color: #721c24; }
       </style>
     </head>
     <body>
@@ -115,8 +115,8 @@ router.get('/add', (req, res) => {
   `);
 });
 
-// GET /api/clients/admin - Panel admin
-router.get('/admin', async (req, res) => {
+// GET /api/clients/admin - Panel admin - AJOUT verifyAdmin ICI
+router.get('/admin', verifyAdmin, async (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -129,8 +129,8 @@ router.get('/admin', async (req, res) => {
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #f2f2f2; }
         button { padding: 5px 10px; margin: 2px; cursor: pointer; }
-      .delete { background: #ff4444; color: white; border: none; }
-      .edit { background: #44bb44; color: white; border: none; }
+     .delete { background: #ff4444; color: white; border: none; }
+     .edit { background: #44bb44; color: white; border: none; }
         #logout { float: right; }
         img.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
       </style>
@@ -199,7 +199,8 @@ router.get('/admin', async (req, res) => {
             document.getElementById('row-' + id).remove();
             alert('Client supprimé');
           } else {
-            alert('Erreur');
+            const data = await res.json();
+            alert('Erreur: ' + data.error);
           }
         }
 
@@ -218,7 +219,8 @@ router.get('/admin', async (req, res) => {
             alert('Client modifié');
             loadClients();
           } else {
-            alert('Erreur');
+            const data = await res.json();
+            alert('Erreur: ' + data.error);
           }
         }
 
@@ -279,7 +281,7 @@ router.post('/', verifyAdmin, upload.fields([
     });
 
     await client.save();
-    res.json({ message: 'Client créé', client });
+    res.status(201).json({ message: 'Client créé', client });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -289,10 +291,10 @@ router.post('/', verifyAdmin, upload.fields([
 router.get('/:id', verifyAdmin, async (req, res) => {
   try {
     const client = await Client.findById(req.params.id).select('-password');
-    if (!client) return res.status(404).json({ message: 'Client introuvable' });
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
     res.json(client);
   } catch (error) {
-    res.status(400).json({ message: 'Erreur', error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -300,10 +302,10 @@ router.get('/:id', verifyAdmin, async (req, res) => {
 router.put('/:id', verifyAdmin, async (req, res) => {
   try {
     const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
-    if (!client) return res.status(404).json({ message: 'Client introuvable' });
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
     res.json({ message: 'Client modifié', client });
   } catch (error) {
-    res.status(400).json({ message: 'Erreur', error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -311,10 +313,10 @@ router.put('/:id', verifyAdmin, async (req, res) => {
 router.delete('/:id', verifyAdmin, async (req, res) => {
   try {
     const client = await Client.findByIdAndDelete(req.params.id);
-    if (!client) return res.status(404).json({ message: 'Client introuvable' });
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
     res.json({ message: 'Client supprimé' });
   } catch (error) {
-    res.status(400).json({ message: 'Erreur', error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
