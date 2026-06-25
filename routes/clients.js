@@ -4,7 +4,7 @@ const Client = require('../models/Client');
 const { verifyAdmin } = require('../middleware/auth');
 
 // GET /api/clients/admin - Page admin
-router.get('/admin', verifyAdmin, async (req, res) => {
+router.get('/admin', async (req, res) => {
   try {
     const clients = await Client.find().select('-password').sort({ createdAt: -1 }).lean();
 
