@@ -116,7 +116,7 @@ router.get('/add', verifyAdmin, (req, res) => {
 });
 
 // GET /api/clients/admin - Panel admin - AJOUT verifyAdmin ICI
-router.get('/admin', verifyAdmin, async (req, res) => {
+router.get('/admin', async (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
