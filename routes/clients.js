@@ -286,7 +286,7 @@ router.post('/', verifyAdmin, upload.fields([
     res.status(400).json({ error: err.message });
   }
 });
-
+const.logs(client);
 // GET un client - DOIT ÊTRE EN DERNIER
 router.get('/:id', verifyAdmin, async (req, res) => {
   try {
