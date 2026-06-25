@@ -164,6 +164,111 @@ router.get('/add', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
+
+// GET /api/transactions/dashboard - Dashboard avec graphiques
+router.get('/dashboard', async (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard UniPay</title>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+   .container { max-width: 1200px; margin: auto; }
+   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+   .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+   .card h3 { margin: 0 0 10px 0; color: #666; font-size: 14px; }
+   .value { font-size: 32px; font-weight: bold; color: #007bff; }
+   .chart-container { background: white; padding: 20px; border-radius: 8px; margin-top: 20px; }
+    button { padding: 10px 20px; margin: 5px; border: none; cursor: pointer; border-radius: 4px; background: #007bff; color: white; }
+   .filtres { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+    select { padding: 8px; margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Dashboard UniPay</h1>
+    <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a>
+    <div class="filtres">
+      <select id="periode">
+        <option value="7">7 derniers jours</option>
+        <option value="30" selected>30 derniers jours</option>
+        <option value="90">90 derniers jours</option>
+      </select>
+      <button onclick="loadDashboard()">Actualiser</button>
+    </div>
+    <div class="cards">
+      <div class="card"><h3>TOTAL TRANSACTIONS</h3><div class="value" id="totalTx">0</div></div>
+      <div class="card"><h3>VOLUME TOTAL</h3><div class="value" id="volumeTotal">0 FCFA</div></div>
+      <div class="card"><h3>TRANSACTION MOYENNE</h3><div class="value" id="moyenne">0 FCFA</div></div>
+      <div class="card"><h3>CLIENTS ACTIFS</h3><div class="value" id="clientsActifs">0</div></div>
+    </div>
+    <div class="chart-container"><h3>Volume par jour</h3><canvas id="volumeChart"></canvas></div>
+    <div class="chart-container"><h3>Nombre de transactions par jour</h3><canvas id="countChart"></canvas></div>
+  </div>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/api/auth/login';
+    let volumeChart, countChart;
+    async function loadDashboard() {
+      const jours = document.getElementById('periode').value;
+      const res = await fetch('/api/transactions/stats?jours=' + jours, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('token');
+        window.location.href = '/api/auth/login';
+        return;
+      }
+      const data = await res.json();
+      document.getElementById('totalTx').innerText = data.totalTx.toLocaleString();
+      document.getElementById('volumeTotal').innerText = data.volumeTotal.toLocaleString() + ' FCFA';
+      document.getElementById('moyenne').innerText = Math.round(data.moyenne).toLocaleString() + ' FCFA';
+      document.getElementById('clientsActifs').innerText = data.clientsActifs;
+      if (volumeChart) volumeChart.destroy();
+      volumeChart = new Chart(document.getElementById('volumeChart'), {
+        type: 'line',
+        data: {
+          labels: data.parJour.map(d => d.date),
+          datasets: [{
+            label: 'Volume FCFA',
+            data: data.parJour.map(d => d.volume),
+            borderColor: '#007bff',
+            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() + ' FCFA' } } }
+        }
+      });
+      if (countChart) countChart.destroy();
+      countChart = new Chart(document.getElementById('countChart'), {
+        type: 'bar',
+        data: {
+          labels: data.parJour.map(d => d.date),
+          datasets: [{
+            label: 'Transactions',
+            data: data.parJour.map(d => d.count),
+            backgroundColor: '#28a745'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+      });
+    }
+    loadDashboard();
+  </script>
+</body>
+</html>`);
+});
 // ==================== PAGES HTML ====================
 
 router.get('/', async (req, res) => {
