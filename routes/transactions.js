@@ -7,7 +7,7 @@ const { verifyAdmin } = require('../middleware/auth');
 // ==================== API JSON ====================
 
 // GET /api/transactions/data - Données JSON pour l'historique avec filtres
-router.get('/data', verifyAdmin, async (req, res) => {
+router.get('/data', async (req, res) => {
   try {
     const { client, debut, fin } = req.query;
     let query = {};
@@ -41,7 +41,7 @@ router.get('/data', verifyAdmin, async (req, res) => {
 });
 
 // GET /api/transactions/stats - Stats pour le dashboard
-router.get('/stats', verifyAdmin, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const jours = parseInt(req.query.jours) || 30;
     const dateDebut = new Date();
@@ -93,7 +93,7 @@ router.get('/stats', verifyAdmin, async (req, res) => {
 // ==================== PAGES HTML ====================
 
 // GET /api/transactions/add - Formulaire de transfert
-router.get('/add', verifyAdmin, async (req, res) => {
+router.get('/add', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom telephone solde').lean();
     let options = '';
@@ -158,7 +158,7 @@ router.get('/add', verifyAdmin, async (req, res) => {
 });
 
 // GET /api/transactions/dashboard - Dashboard avec graphiques
-router.get('/dashboard', verifyAdmin, async (req, res) => {
+router.get('/dashboard', async (req, res) => {
   res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -263,7 +263,7 @@ router.get('/dashboard', verifyAdmin, async (req, res) => {
 });
 
 // GET /api/transactions - Historique avec filtres et export
-router.get('/', verifyAdmin, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
@@ -464,7 +464,7 @@ router.get('/', verifyAdmin, async (req, res) => {
 // ==================== ACTIONS ====================
 
 // POST /api/transactions - Créer un transfert
-router.post('/', verifyAdmin, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     if (expediteur === destinataire) return res.status(400).json({ error: 'Même compte' });
@@ -490,7 +490,7 @@ router.post('/', verifyAdmin, async (req, res) => {
 // ==================== ROUTES AVEC :id EN DERNIER ====================
 
 // DELETE /api/transactions/:id - Annuler une transaction < 24h
-router.delete('/:id', verifyAdmin, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id)
      .populate('expediteur')
