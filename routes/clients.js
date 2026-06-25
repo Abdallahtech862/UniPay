@@ -7,7 +7,7 @@ const { verifyAdmin } = require('../middleware/auth');
 router.get('/admin', verifyAdmin, async (req, res) => {
   try {
     const clients = await Client.find().select('-password').sort({ createdAt: -1 }).lean();
-    
+
     let rows = '';
     clients.forEach(c => {
       rows += `<tr>
@@ -38,8 +38,8 @@ router.get('/admin', verifyAdmin, async (req, res) => {
 </head>
 <body>
   <h2>Administration Clients</h2>
-  <a href="/api/transactions">Historique</a> | 
-  <a href="/api/transactions/add">Nouveau transfert</a> | 
+  <a href="/api/transactions">Historique</a> |
+  <a href="/api/transactions/add">Nouveau transfert</a> |
   <a href="/api/transactions/dashboard">Dashboard</a> |
   <button onclick="logout()">Déconnexion</button>
   <table>
@@ -49,9 +49,9 @@ router.get('/admin', verifyAdmin, async (req, res) => {
   <script>
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/api/auth/login';
-    
+
     async function deleteClient(id) {
-      if (!confirm('Supprimer ce client ?')) return;
+      if (!confirm('Supprimer ce client?')) return;
       const res = await fetch('/api/clients/' + id, {
         method: 'DELETE',
         headers: { 'Authorization': 'Bearer ' + token }
@@ -64,7 +64,7 @@ router.get('/admin', verifyAdmin, async (req, res) => {
         alert('Erreur: ' + data.error);
       }
     }
-    
+
     function logout() {
       localStorage.removeItem('token');
       window.location.href = '/api/auth/login';
@@ -76,7 +76,6 @@ router.get('/admin', verifyAdmin, async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-
 // GET /api/clients - Liste JSON
 router.get('/', verifyAdmin, async (req, res) => {
   try {
