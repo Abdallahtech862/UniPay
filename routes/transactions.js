@@ -487,13 +487,14 @@ router.get('/', async (req, res) => {
         const q = document.getElementById('searchText').value;
         const montantMin = document.getElementById('montantMin').value;
         const montantMax = document.getElementById('montantMax').value;
+        const montantMax = document.getElementById('montantMax').value;
         
         if (clientId) params.append('client', clientId);
         if (dateDebut) params.append('debut', dateDebut);
         if (dateFin) params.append('fin', dateFin);
         if (q) params.append('q', q);
         if (montantMin) params.append('montantMin', montantMin);
-        if (montantMax) params.append('montantMax', montantMax);
+        if (montantMax) params.append('searchText', searchText);
         
         const res = await fetch('/api/transactions/data?' + params.toString(), { 
           headers: { 'Authorization': 'Bearer ' + token } 
