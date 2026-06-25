@@ -279,14 +279,14 @@ router.post('/', verifyAdmin, upload.fields([
       carteRecto: req.files['carteRecto']?.[0]?.path || null,
       carteVerso: req.files['carteVerso']?.[0]?.path || null
     });
-
+    console.log('client:', client);
     await client.save();
     res.status(201).json({ message: 'Client créé', client });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
-console.log('client:', client);
+
 // GET un client - DOIT ÊTRE EN DERNIER
 router.get('/:id', async (req, res) => {
   try {
