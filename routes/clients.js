@@ -239,7 +239,7 @@ router.get('/admin', async (req, res) => {
 // ==================== ROUTES API ====================
 
 // GET tous les clients
-router.get('/', verifyAdmin, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('-password');
     res.json(clients);
@@ -286,9 +286,9 @@ router.post('/', verifyAdmin, upload.fields([
     res.status(400).json({ error: err.message });
   }
 });
-consol.logs(client);
+console.log('client:', client);
 // GET un client - DOIT ÊTRE EN DERNIER
-router.get('/:id', verifyAdmin, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const client = await Client.findById(req.params.id).select('-password');
     if (!client) return res.status(404).json({ error: 'Client introuvable' });
@@ -299,7 +299,7 @@ router.get('/:id', verifyAdmin, async (req, res) => {
 });
 
 // PUT modifier client
-router.put('/:id', verifyAdmin, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
     if (!client) return res.status(404).json({ error: 'Client introuvable' });
@@ -310,7 +310,7 @@ router.put('/:id', verifyAdmin, async (req, res) => {
 });
 
 // DELETE supprimer client
-router.delete('/:id', verifyAdmin, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const client = await Client.findByIdAndDelete(req.params.id);
     if (!client) return res.status(404).json({ error: 'Client introuvable' });
