@@ -27,7 +27,7 @@ const upload = multer({ storage });
 // ==================== ROUTES HTML ====================
 
 // GET /api/clients/add - Formulaire
-router.get('/add', verifyAdmin, (req, res) => {
+router.get('/add', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
