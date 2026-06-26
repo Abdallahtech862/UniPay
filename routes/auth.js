@@ -66,8 +66,8 @@ const uploads = multer({
   }
 });
 router.post('/register', uploads.fields([
-  { name: 'carteRecto', maxCount: 1 },
-  { name: 'carteVerso', maxCount: 1 }
+  { name: 'cniRecto', maxCount: 1 },
+  { name: 'cniVerso', maxCount: 1 }
 ]), async (req, res) => {
   try {
     console.log('Body reçu:', req.body);
