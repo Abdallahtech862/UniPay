@@ -248,6 +248,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/clients/me - Profil du client connecté
+router.get('/me', verifyToken, async (req, res) => {
+  res.json(req.client);
+});
+
+// GET /api/clients/search - Chercher client par téléphone/pseudo pour transfert
+router.get('/search', verifyToken, async (req, res) => {
+  try {
+    const { q } = req.query; // q = téléphone ou pseudo
+    if (!q) return res.json([]);
+
+    const clients = await Client.find({
+      $and: [
+        { _id: { $ne: req.client._id } }, // Pas soi-même
+        {
+          $or: [
+            { telephone: { $regex: q, $options: 'i' } },
+            { pseudo: { $regex: q, $options: 'i' } },
+            { nom: { $regex: q, $options: 'i' } },
+            { prenom: { $regex: q, $options: 'i' } }
+          ]
+        }
+      ]
+    }).select('nom prenom pseudo telephone photoProfil').limit(10);
+
+    res.json(clients);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // POST créer client avec upload
 router.post('/', verifyAdmin, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
