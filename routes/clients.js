@@ -249,7 +249,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/clients/me - Profil du client connecté
-router.get('/me', verifyToken, async (req, res) => {
+router.get('/me', async (req, res) => {
   res.json(req.client);
 });
 
