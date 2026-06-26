@@ -7,7 +7,7 @@ require('dotenv').config();
 //app.use(cors({
 //  origin: '*', // Accepte tout pour tester
 //  credentials: true
-}));
+//}));
 
 const app = express();
 app.use(cors());
