@@ -57,9 +57,9 @@ router.post('/login-phone', async (req, res) => {
 
 
 // POST /api/auth/registerrr - Version SANS images pour debug
-const storage = multer.memoryStorage();
+const storagee = multer.memoryStorage();
 const upload = multer({ 
-  storage,
+  storagee,
   limits: { 
     fileSize: 10 * 1024 * 1024, // 10MB au lieu de 5MB
     fieldSize: 10 * 1024 
