@@ -58,14 +58,14 @@ router.post('/login-phone', async (req, res) => {
 
 // POST /api/auth/registerrr - Version SANS images pour debug
 const storagee = multer.memoryStorage();
-const upload = multer({ 
+const uploads = multer({ 
   storagee,
   limits: { 
     fileSize: 10 * 1024 * 1024, // 10MB au lieu de 5MB
     fieldSize: 10 * 1024 
   }
 });
-router.post('/register', upload.fields([
+router.post('/register', uploads.fields([
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
 ]), async (req, res) => {
