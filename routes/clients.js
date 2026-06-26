@@ -254,7 +254,7 @@ router.get('/me', async (req, res) => {
 });
 
 // GET /api/clients/search - Chercher client par téléphone/pseudo pour transfert
-router.get('/search', verifyToken, async (req, res) => {
+router.get('/search', async (req, res) => {
   try {
     const { q } = req.query; // q = téléphone ou pseudo
     if (!q) return res.json([]);
