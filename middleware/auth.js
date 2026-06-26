@@ -1,20 +1,35 @@
 const jwt = require('jsonwebtoken');
+const Client = require('../models/Client');
 
-const verifyAdmin = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).send('Accès refusé. Connecte-toi sur /api/auth/login');
-  }
-
+// Vérifie juste que l'user est connecté
+const verifyToken = async (req, res, next) => {
   try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Token manquant' });
+    }
+
+    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = decoded;
+    const client = await Client.findById(decoded.id).select('-password');
+
+    if (!client) return res.status(401).json({ error: 'Client introuvable' });
+
+    req.client = client; // On met le client connecté dans req
     next();
   } catch (error) {
-    res.status(403).send('Token invalide ou expiré');
+    return res.status(401).json({ error: 'Token invalide ou expiré' });
   }
 };
 
-module.exports = { verifyAdmin };
+// Vérifie que c'est un admin
+const verifyAdmin = async (req, res, next) => {
+  await verifyToken(req, res, () => {
+    if (req.client.role!== 'admin') {
+      return res.status(403).json({ error: 'Accès admin requis' });
+    }
+    next();
+  });
+};
+
+module.exports = { verifyToken, verifyAdmin };
