@@ -20,6 +20,14 @@ const upload = multer({
 });
 
 // DÉFINIS LA FONCTION ICI
+router.get('/cloudinary-test', async (req, res) => {
+  try {
+    const result = await cloudinary.api.ping();
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message, details: err });
+  }
+});
 
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
