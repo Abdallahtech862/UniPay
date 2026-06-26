@@ -176,6 +176,78 @@ router.get('/top-clients', verifyAdmin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// POST /api/transactions/send - Un client envoie à un autre
+router.post('/send', verifyToken, async (req, res) => {
+  try {
+    const { destinataire, montant, motif } = req.body; // destinataire = _id ou téléphone
+    const expediteur = req.client._id; // Auto = client connecté
+
+    if (expediteur.toString() === destinataire) {
+      return res.status(400).json({ error: 'Tu ne peux pas t\'envoyer à toi-même' });
+    }
+
+    // Si destinataire = téléphone, on cherche l'_id
+    let destId = destinataire;
+    if (!mongoose.Types.ObjectId.isValid(destinataire)) {
+      const dest = await Client.findOne({ telephone: destinataire });
+      if (!dest) return res.status(404).json({ error: 'Destinataire introuvable' });
+      destId = dest._id;
+    }
+
+    const clientExp = await Client.findById(expediteur);
+    const clientDest = await Client.findById(destId);
+
+    if (!clientDest) return res.status(404).json({ error: 'Destinataire introuvable' });
+    if (clientExp.solde < montant) {
+      return res.status(400).json({ error: `Solde insuffisant: ${clientExp.solde} FCFA` });
+    }
+
+    // Limites journalières
+    const debutJour = new Date();
+    debutJour.setHours(0, 0, 0, 0);
+    const totalJour = await Transaction.aggregate([
+      { $match: { expediteur: clientExp._id, date: { $gte: debutJour }, annulee: { $ne: true } } },
+      { $group: { _id: null, total: { $sum: '$montant' } } }
+    ]);
+    const dejaEnvoye = totalJour[0]?.total || 0;
+    if (dejaEnvoye + montant > clientExp.limiteJournaliere) {
+      return res.status(400).json({ error: `Limite journalière dépassée: ${clientExp.limiteJournaliere} FCFA` });
+    }
+
+    // Transfert atomique
+    await Client.updateOne({ _id: expediteur }, { $inc: { solde: -Number(montant) } });
+    await Client.updateOne({ _id: destId }, { $inc: { solde: Number(montant) } });
+
+    const transaction = new Transaction({
+      expediteur,
+      destinataire: destId,
+      montant: Number(montant),
+      motif
+    });
+    await transaction.save();
+
+    res.status(201).json({
+      message: `Transfert de ${montant} FCFA à ${clientDest.prenom} réussi`,
+      transaction
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/transactions/my - Historique du client connecté
+router.get('/my', verifyToken, async (req, res) => {
+  const transactions = await Transaction.find({
+    $or: [{ expediteur: req.client._id }, { destinataire: req.client._id }]
+  })
+ .populate('expediteur', 'nom prenom telephone photoProfil')
+ .populate('destinataire', 'nom prenom telephone photoProfil')
+ .sort({ date: -1 })
+ .lean();
+
+  res.json(transactions);
+});
 // ==================== ROUTES HTML ====================
 
 // GET /api/transactions/add - Formulaire transfert
