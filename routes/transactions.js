@@ -7,7 +7,7 @@ const { verifyAdmin } = require('../middleware/auth');
 // ==================== ROUTES API JSON ====================
 
 // GET /api/transactions/data - Données pour le tableau avec recherche
-router.get('/data', verifyAdmin, async (req, res) => {
+router.get('/data', async (req, res) => {
   try {
     const { client, debut, fin, q, montantMin, montantMax } = req.query;
     let query = {};
