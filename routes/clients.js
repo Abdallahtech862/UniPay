@@ -279,7 +279,7 @@ router.get('/search', async (req, res) => {
   }
 });
 // POST créer client avec upload
-router.post('/', verifyAdmin, upload.fields([
+router.post('/', upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
