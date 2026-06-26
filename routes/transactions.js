@@ -178,7 +178,7 @@ router.get('/top-clients', verifyAdmin, async (req, res) => {
 });
 
 // POST /api/transactions/send - Un client envoie à un autre
-router.post('/send', verifyToken, async (req, res) => {
+router.post('/send', async (req, res) => {
   try {
     const { destinataire, montant, motif } = req.body; // destinataire = _id ou téléphone
     const expediteur = req.client._id; // Auto = client connecté
