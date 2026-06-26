@@ -35,6 +35,33 @@ router.get('/login', (req, res) => {
   `);
 });
 
+// POST /api/auth/register - Inscription client
+router.post('/register', async (req, res) => {
+  try {
+    const { nom, prenom, telephone, email, password } = req.body;
+
+    if (await Client.findOne({ $or: [{ email }, { telephone }] })) {
+      return res.status(400).json({ error: 'Email ou téléphone déjà utilisé' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const client = new Client({
+      nom, prenom, telephone, email,
+      password: hashedPassword,
+      solde: 0,
+      role: 'client',
+      limiteJournaliere: 500000,
+      limiteMensuelle: 5000000
+    });
+
+    await client.save();
+
+    const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ message: 'Compte créé', token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // API Login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
