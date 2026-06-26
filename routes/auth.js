@@ -20,23 +20,27 @@ const upload = multer({
 });
 
 // DÉFINIS LA FONCTION ICI
+
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
-    if (!process.env.CLOUDINARY_CLOUD_NAME) {
-      return reject(new Error('CLOUDINARY_CLOUD_NAME manquant'));
+    console.log('Cloudinary upload start. Cloud:', process.env.CLOUDINARY_CLOUD_NAME);
+    
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+      return reject(new Error('Variables Cloudinary manquantes'));
     }
 
     const stream = cloudinary.uploader.upload_stream(
-      {
+      { 
         folder: 'unipay_clients',
-        resource_type: 'image'
+        resource_type: 'image',
+        timeout: 60000
       },
       (error, result) => {
         if (error) {
-          console.error('Cloudinary error:', error);
-          reject(error);
+          console.error('Cloudinary ERROR complet:', JSON.stringify(error, null, 2));
+          reject(new Error(`Cloudinary: ${error.message || error}`));
         } else {
-          console.log('Cloudinary OK:', result.secure_url);
+          console.log('Cloudinary SUCCESS:', result.secure_url);
           resolve(result);
         }
       }
@@ -44,7 +48,6 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
-
 router.post('/register', upload.any(), async (req, res) => {
   try {
     console.log('=== START REGISTER ===');
