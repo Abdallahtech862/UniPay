@@ -3,6 +3,12 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
+const cors = require('cors');
+app.use(cors({
+  origin: '*', // Accepte tout pour tester
+  credentials: true
+}));
+
 const app = express();
 app.use(cors());
 app.use(express.json());
