@@ -58,33 +58,40 @@ router.post('/login-phone', async (req, res) => {
 
 
 // POST /api/auth/registerrr - Version SANS images pour debug
-const storagee = multer.memoryStorage();
-const uploads = multer({ 
-  storagee,
-  limits: { 
-    fileSize: 10 * 1024 * 1024, // 10MB au lieu de 5MB
-    fieldSize: 10 * 1024 
-  }
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
-router.post('/register', (req, res, next) => {
-  console.log('Fields reçus:', Object.keys(req.body || {}));
-  next();
-}, upload.fields([
-  { name: 'carteRecto', maxCount: 1 },
-  { name: 'carteVerso', maxCount: 1 }
-]), async (req, res) => {
-  console.log('Fichiers:', req.files);
-  console.log('Body:', req.body);
-  try {
-    console.log('Body reçu:', req.body);
-    const { nom, prenom, telephone, email, password } = req.body;
 
-    if (!nom ||!prenom ||!telephone ||!password) {
+router.post('/register', upload.any(), async (req, res) => {
+  try {
+    console.log('=== DEBUG MULTER ===');
+    console.log('req.files:', req.files); // Array de fichiers
+    console.log('req.body:', req.body);   // Fields texte
+    
+    const { nom, prenom, telephone, email, password } = req.body;
+    
+    if (!nom || !prenom || !telephone || !password) {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    if (await Client.findOne({ $or: [{ email }, { telephone }] })) {
-      return res.status(400).json({ error: 'Email ou téléphone déjà utilisé' });
+    let carteRectoUrl = null;
+    let carteVersoUrl = null;
+
+    // Trouve les fichiers par leur fieldname
+    const rectoFile = req.files?.find(f => f.fieldname === 'carteRecto');
+    const versoFile = req.files?.find(f => f.fieldname === 'carteVerso');
+
+    console.log('Recto trouvé:', !!rectoFile);
+    console.log('Verso trouvé:', !!versoFile);
+
+    if (rectoFile) {
+      const result = await uploadToCloudinary(rectoFile.buffer);
+      carteRectoUrl = result.secure_url;
+    }
+    if (versoFile) {
+      const result = await uploadToCloudinary(versoFile.buffer);
+      carteVersoUrl = result.secure_url;
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -98,61 +105,19 @@ router.post('/register', (req, res, next) => {
       role: 'client',
       limiteJournaliere: 500000,
       limiteMensuelle: 5000000,
-      // carteRecto: null, // désactivé pour test
-      // carteVerso: null
+      carteRecto: carteRectoUrl,
+      carteVerso: carteVersoUrl
     });
 
     await client.save();
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({ message: 'Compte créé', token });
   } catch (err) {
-    console.error('Erreur register complète:', err);
+    console.error('Erreur register:', err);
     res.status(500).json({ error: err.message });
   }
 });
-// POST /api/auth/register
-router.post('/registerr', upload.fields([
-  { name: 'cniRecto', maxCount: 1 },
-  { name: 'cniVerso', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    console.log('Body reçu:', req.body);
-    console.log('Files reçus:', req.files);
 
-    const { nom, prenom, telephone, email, password } = req.body;
-
-    if (!nom ||!prenom ||!telephone ||!password) {
-      return res.status(400).json({ error: 'Champs requis manquants' });
-    }
-
-    if (await Client.findOne({ $or: [{ email }, { telephone }] })) {
-      return res.status(400).json({ error: 'Email ou téléphone déjà utilisé' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const client = new Client({
-      nom: nom.trim(),
-      prenom: prenom.trim(),
-      telephone,
-      email: email || `${telephone.replace('+226', '')}@unipay.local`,
-      password: hashedPassword,
-      solde: 0,
-      role: 'client',
-      limiteJournaliere: 500000,
-      limiteMensuelle: 5000000,
-      carteRecto: req.files?.['carteRecto']?.[0]?.path || null,
-      carteVerso: req.files?.['carteVerso']?.[0]?.path || null
-    });
-
-    await client.save();
-
-    const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ message: 'Compte créé', token });
-  } catch (err) {
-    console.error('Erreur register complète:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
