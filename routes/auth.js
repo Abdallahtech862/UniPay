@@ -24,9 +24,64 @@ const storage = new CloudinaryStorage({
   }
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 }
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+router.post('/register', upload.any(), async (req, res) => {
+  try {
+    console.log('=== DEBUG MULTER ===');
+    console.log('req.files:', req.files); // Array de fichiers
+    console.log('req.body:', req.body);   // Fields texte
+    
+    const { nom, prenom, telephone, email, password } = req.body;
+    
+    if (!nom || !prenom || !telephone || !password) {
+      return res.status(400).json({ error: 'Champs requis manquants' });
+    }
+
+    let carteRectoUrl = null;
+    let carteVersoUrl = null;
+
+    // Trouve les fichiers par leur fieldname
+    const rectoFile = req.files?.find(f => f.fieldname === 'carteRecto');
+    const versoFile = req.files?.find(f => f.fieldname === 'carteVerso');
+
+    console.log('Recto trouvé:', !!rectoFile);
+    console.log('Verso trouvé:', !!versoFile);
+
+    if (rectoFile) {
+      const result = await uploadToCloudinary(rectoFile.buffer);
+      carteRectoUrl = result.secure_url;
+    }
+    if (versoFile) {
+      const result = await uploadToCloudinary(versoFile.buffer);
+      carteVersoUrl = result.secure_url;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const client = new Client({
+      nom: nom.trim(),
+      prenom: prenom.trim(),
+      telephone,
+      email: email || `${telephone.replace('+226', '')}@unipay.local`,
+      password: hashedPassword,
+      solde: 0,
+      role: 'client',
+      limiteJournaliere: 500000,
+      limiteMensuelle: 5000000,
+      carteRecto: carteRectoUrl,
+      carteVerso: carteVersoUrl
+    });
+
+    await client.save();
+    const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ message: 'Compte créé', token });
+  } catch (err) {
+    console.error('Erreur register:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/auth/check-phone
