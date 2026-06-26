@@ -54,7 +54,12 @@ router.post('/login-phone', async (req, res) => {
   }
 });
 
-// POST /api/auth/register - Version SANS images pour debug
+//teste
+router.post('/register', (req, res) => {
+  console.log('Route atteinte');
+  res.status(200).json({ message: 'OK test' });
+});
+// POST /api/auth/registerrr - Version SANS images pour debug
 router.post('/register', async (req, res) => {
   try {
     console.log('Body reçu:', req.body);
