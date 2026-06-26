@@ -55,7 +55,7 @@ router.post('/login-phone', async (req, res) => {
 });
 
 //teste
-router.post('/register', (req, res) => {
+router.post('/registerrr', (req, res) => {
   console.log('Route atteinte');
   res.status(200).json({ message: 'OK test' });
 });
