@@ -55,13 +55,14 @@ router.post('/login-phone', async (req, res) => {
   }
 });
 
-//teste
-router.post('/registerrr', (req, res) => {
-  console.log('Route atteinte');
-  res.status(200).json({ message: 'OK test' });
-});
+
 // POST /api/auth/registerrr - Version SANS images pour debug
-router.post('/register', async (req, res) => {
+router.post('/register',const upload = multer(); // ou multer.memoryStorage()
+
+router.post('/register', upload.fields([
+  { name: 'carteRecto', maxCount: 1 },
+  { name: 'carteVerso', maxCount: 1 }
+]), async (req, res) => {
   try {
     console.log('Body reçu:', req.body);
     const { nom, prenom, telephone, email, password } = req.body;
