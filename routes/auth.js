@@ -1,62 +1,64 @@
-
-
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const Client = require('../models/Client');
 const multer = require('multer');
+const streamifier = require('streamifier');
 const { v2: cloudinary } = require('cloudinary');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const Client = require('../models/Client');
 
-// Config Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'unipay_clients',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-  }
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ 
-  storage: multer.memoryStorage(),
+  storage,
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-router.post('/register', upload.any(), async (req, res) => {
+// DÉFINIS LA FONCTION ICI
+const uploadToCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'unipay_clients',
+        transformation: [{ width: 800, crop: 'limit' }]
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+};
+
+router.post('/register', upload.fields([
+  { name: 'carteRecto', maxCount: 1 },
+  { name: 'carteVerso', maxCount: 1 }
+]), async (req, res) => {
   try {
-    console.log('=== DEBUG MULTER ===');
-    console.log('req.files:', req.files); // Array de fichiers
-    console.log('req.body:', req.body);   // Fields texte
-    
     const { nom, prenom, telephone, email, password } = req.body;
-    
-    if (!nom || !prenom || !telephone || !password) {
-      return res.status(400).json({ error: 'Champs requis manquants' });
+    console.log('Body:', req.body);
+    console.log('Files:', req.files);
+
+    if (await Client.findOne({ $or: [{ email }, { telephone }] })) {
+      return res.status(400).json({ error: 'Email ou téléphone déjà utilisé' });
     }
 
     let carteRectoUrl = null;
     let carteVersoUrl = null;
 
-    // Trouve les fichiers par leur fieldname
-    const rectoFile = req.files?.find(f => f.fieldname === 'carteRecto');
-    const versoFile = req.files?.find(f => f.fieldname === 'carteVerso');
-
-    console.log('Recto trouvé:', !!rectoFile);
-    console.log('Verso trouvé:', !!versoFile);
-
-    if (rectoFile) {
-      const result = await uploadToCloudinary(rectoFile.buffer);
+    if (req.files?.carteRecto?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteRecto[0].buffer);
       carteRectoUrl = result.secure_url;
     }
-    if (versoFile) {
-      const result = await uploadToCloudinary(versoFile.buffer);
+
+    if (req.files?.carteVerso?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteVerso[0].buffer);
       carteVersoUrl = result.secure_url;
     }
 
@@ -83,6 +85,7 @@ router.post('/register', upload.any(), async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // POST /api/auth/check-phone
 router.post('/check-phone', async (req, res) => {
