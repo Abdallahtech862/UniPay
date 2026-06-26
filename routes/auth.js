@@ -65,10 +65,15 @@ const uploads = multer({
     fieldSize: 10 * 1024 
   }
 });
-router.post('/register', uploads.fields([
-  { name: 'cniRecto', maxCount: 1 },
-  { name: 'cniVerso', maxCount: 1 }
+router.post('/register', (req, res, next) => {
+  console.log('Fields reçus:', Object.keys(req.body || {}));
+  next();
+}, upload.fields([
+  { name: 'carteRecto', maxCount: 1 },
+  { name: 'carteVerso', maxCount: 1 }
 ]), async (req, res) => {
+  console.log('Fichiers:', req.files);
+  console.log('Body:', req.body);
   try {
     console.log('Body reçu:', req.body);
     const { nom, prenom, telephone, email, password } = req.body;
