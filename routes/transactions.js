@@ -237,7 +237,7 @@ router.post('/send', verifyToken, async (req, res) => {
 });
 
 // GET /api/transactions/my - Historique du client connecté
-router.get('/my', verifyToken, async (req, res) => {
+router.get('/my', async (req, res) => {
   const transactions = await Transaction.find({
     $or: [{ expediteur: req.client._id }, { destinataire: req.client._id }]
   })
