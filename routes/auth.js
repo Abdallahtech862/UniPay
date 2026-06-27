@@ -360,16 +360,7 @@ router.post('/login', async (req, res) => {
       $or: [{ telephone: identifier }, { email: identifier }]
     });
 
-    if (!user) {
-      return res.status(401).json({ error: 'Identifiants incorrects' });
-    }
-
-    // Compare le password avec le hash bcrypt
-    const isMatch = await bcrypt.compare(password, user.password);
     
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Identifiants incorrects' });
-    }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
