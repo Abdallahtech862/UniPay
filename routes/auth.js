@@ -193,11 +193,7 @@ router.post('/login-password', async (req, res) => {
 });
 
 // 3. Vérifier OTP et connecter
-//const Transaction = require('../models/Transaction'); // adapte le nom
-
 const Transaction = require('../models/Transaction'); // Assure-toi que le chemin est bon
-//const jwt = require('jsonwebtoken');
-
 router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
@@ -263,6 +259,7 @@ router.post('/verify-otp', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // POST /api/auth/check-phone
 router.post('/check-phonee', async (req, res) => {
   try {
@@ -291,9 +288,48 @@ router.post('/login-phone', async (req, res) => {
 });
 
 
+router.post('/login', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
 
+    // Cherche par tel OU email
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
 
+    if (!user) {
+      return res.status(401).json({ error: 'Identifiants incorrects' });
+    }
+
+    // Compare le password avec le hash bcrypt
+    const isMatch = await bcrypt.compare(password, user.password);
+    
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Identifiants incorrects' });
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      message: 'Connexion réussie',
+      token,
+      user: {
+        id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        pseudo: user.pseudo,
+        telephone: user.telephone,
+        email: user.email,
+        solde: user.solde
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // POST /api/auth/login
+
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
