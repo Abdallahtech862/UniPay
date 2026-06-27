@@ -56,59 +56,35 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
-router.post('/register', upload.any(), async (req, res) => {
+router.post('/register', upload.fields([
+  { name: 'carteRecto', maxCount: 1 },
+  { name: 'carteVerso', maxCount: 1 }
+]), async (req, res) => {
   try {
-    console.log('=== START REGISTER ===');
-    console.log('Body:', req.body);
-    console.log('Files count:', req.files?.length);
-
     const { nom, prenom, telephone, email, password } = req.body;
-
-    if (!nom ||!prenom ||!telephone ||!password) {
-      console.log('Champs manquants');
+    
+    if (!nom || !prenom || !telephone || !password) {
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    const exists = await Client.findOne({ $or: [{ email }, { telephone }] });
-    if (exists) {
-      console.log('User existe déjà');
+    if (await Client.findOne({ $or: [{ email }, { telephone }] })) {
       return res.status(400).json({ error: 'Email ou téléphone déjà utilisé' });
     }
 
     let carteRectoUrl = null;
     let carteVersoUrl = null;
 
-    const rectoFile = req.files?.find(f => f.fieldname === 'carteRecto');
-    const versoFile = req.files?.find(f => f.fieldname === 'carteVerso');
-
-    if (rectoFile) {
-      console.log('Upload recto...', rectoFile.size);
-      try {
-        const result = await uploadToCloudinary(rectoFile.buffer);
-        carteRectoUrl = result.secure_url;
-        console.log('Recto OK:', carteRectoUrl);
-      } catch (err) {
-        console.error('Erreur upload recto:', err.message);
-        return res.status(500).json({ error: 'Upload recto échoué: ' + err.message });
-      }
+    if (req.files?.carteRecto?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteRecto[0].buffer);
+      carteRectoUrl = result.secure_url;
     }
 
-    if (versoFile) {
-      console.log('Upload verso...', versoFile.size);
-      try {
-        const result = await uploadToCloudinary(versoFile.buffer);
-        carteVersoUrl = result.secure_url;
-        console.log('Verso OK:', carteVersoUrl);
-      } catch (err) {
-        console.error('Erreur upload verso:', err.message);
-        return res.status(500).json({ error: 'Upload verso échoué: ' + err.message });
-      }
+    if (req.files?.carteVerso?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteVerso[0].buffer);
+      carteVersoUrl = result.secure_url;
     }
 
-    console.log('Hash password...');
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    console.log('Create client...');
     const client = new Client({
       nom: nom.trim(),
       prenom: prenom.trim(),
@@ -124,16 +100,12 @@ router.post('/register', upload.any(), async (req, res) => {
     });
 
     await client.save();
-    console.log('Client saved:', client._id);
-
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    console.log('=== SUCCESS ===');
-    return res.status(201).json({ message: 'Compte créé', token });
-
+    res.status(201).json({ message: 'Compte créé', token });
+    
   } catch (err) {
-    console.error('=== ERREUR REGISTER ===', err);
-    return res.status(500).json({ error: err.message || 'Erreur serveur' });
+    console.error('Erreur register:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 // POST /api/auth/check-phone
