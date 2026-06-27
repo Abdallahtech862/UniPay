@@ -124,37 +124,34 @@ router.post('/check-user', async (req, res) => {
 });
 
 // 2. Login avec password + envoi OTP
+router.post('/login-password', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
 
-const mongoose = require('mongoose');
-const clientSchema = new mongoose.Schema({
-  nom: { type: String, required: true, trim: true },
-  prenom: { type: String, required: true, trim: true },
-  telephone: { type: String, required: true, unique: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true, minlength: 4 },
-  solde: { type: Number, default: 0, min: 0 },
-  role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
-  carteRecto: { type: String, default: null },
-  carteVerso: { type: String, default: null },
-  limiteJournaliere: { type: Number, default: 500000 },
-  limiteMensuelle: { type: Number, default: 5000000 },
-  isVerified: { type: Boolean, default: false },
-  
-  // AJOUTE CES 2 LIGNES
-  otpCode: { type: String, default: null },
-  otpExpires: { type: Date, default: null },
-  
-  createdAt: { type: Date, default: Date.now }
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000; // 5min
+    await user.save(); // ← CRUCIAL
+
+    console.log(`OTP pour ${identifier}: ${otp}, expire: ${new Date(user.otpExpires)}`);
+    res.json({ message: 'OTP envoyé', otp }); // Retire otp en prod
+    
+  } catch (err) {
+    console.error('Erreur login-password:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-clientSchema.methods.comparePassword = async function(candidatePassword) {
-  const bcrypt = require('bcryptjs');
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-module.exports = mongoose.model('Client', clientSchema);
-
-//poste verify otp client
+// 3. Vérifier OTP et connecter
 router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
