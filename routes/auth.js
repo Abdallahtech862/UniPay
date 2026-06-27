@@ -155,7 +155,7 @@ router.post('/login-password', async (req, res) => {
 //const Transaction = require('../models/Transaction'); // adapte le nom
 
 const Transaction = require('../models/Transaction'); // Assure-toi que le chemin est bon
-const jwt = require('jsonwebtoken');
+//const jwt = require('jsonwebtoken');
 
 router.post('/verify-otp', async (req, res) => {
   try {
