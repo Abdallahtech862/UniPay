@@ -152,36 +152,65 @@ router.post('/login-password', async (req, res) => {
 });
 
 // 3. Vérifier OTP et connecter
+const Transaction = require('../models/Transaction'); // adapte le nom
+
 router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
-    console.log('Verify OTP:', { identifier, otp });
-    
+
     const user = await Client.findOne({
       $or: [{ telephone: identifier }, { email: identifier }]
-    });
+    }).select('-password'); // Exclut le password
 
-    console.log('User OTP:', user?.otpCode, 'Expires:', user?.otpExpires, 'Now:', Date.now());
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    if (user.otpCode!== otp) return res.status(401).json({ error: 'Code invalide' });
+    if (Date.now() > user.otpExpires) return res.status(401).json({ error: 'Code expiré' });
 
-    if (!user) {
-      return res.status(404).json({ error: 'Utilisateur introuvable' });
-    }
-    
-    if (user.otpCode !== otp) {
-      return res.status(401).json({ error: 'Code invalide' });
-    }
-    
-    if (Date.now() > user.otpExpires) {
-      return res.status(401).json({ error: 'Code expiré' });
-    }
+    // Récupère les 20 dernières transactions
+    const transactions = await Transaction.find({
+      $or: [{ senderId: user._id }, { receiverId: user._id }]
+    })
+   .sort({ createdAt: -1 })
+   .limit(20)
+   .populate('senderId', 'nom prenom telephone')
+   .populate('receiverId', 'nom prenom telephone');
 
     user.otpCode = null;
     user.otpExpires = null;
     await user.save();
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion réussie', token });
-    
+
+    res.json({
+      message: 'Connexion réussie',
+      token,
+      user: {
+        id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        pseudo: user.pseudo || `${user.prenom}${user.nom[0]}`, // Génère si pas de pseudo
+        telephone: user.telephone,
+        email: user.email,
+        photoProfil: user.photoProfil || null, // Ajoute ce champ dans Client.js si besoin
+        solde: user.solde,
+        carteRecto: user.carteRecto,
+        carteVerso: user.carteVerso,
+        isVerified: user.isVerified,
+        limiteJournaliere: user.limiteJournaliere,
+        limiteMensuelle: user.limiteMensuelle
+      },
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.senderId._id.equals(user._id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.senderId._id.equals(user._id)? t.receiverId : t.senderId,
+        motif: t.motif,
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
   } catch (err) {
     console.error('Erreur verify-otp:', err);
     res.status(500).json({ error: err.message });
