@@ -8,6 +8,9 @@ const clientSchema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 4 },
   solde: { type: Number, default: 0, min: 0 },
   role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
+  pseudo: { type: String, unique: true, sparse: true },
+  photoProfil: { type: String, default: null },
+
   carteRecto: { type: String, default: null },
   carteVerso: { type: String, default: null },
   limiteJournaliere: { type: Number, default: 500000 },
