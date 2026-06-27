@@ -46,7 +46,7 @@ router.get('/login-test', (req, res) => {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(e.target));
       console.log('Envoi:', body);
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/loginn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -288,7 +288,7 @@ router.post('/login-phone', async (req, res) => {
 });
 
 
-router.post('/login', async (req, res) => {
+router.post('/loginn', async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
