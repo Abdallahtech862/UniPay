@@ -28,7 +28,56 @@ router.get('/cloudinary-test', async (req, res) => {
     res.status(500).json({ error: err.message, details: err });
   }
 });
-
+// test login transfert
+router.get('/login-test', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Login Test UniPay</title>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 400px; margin: 50px auto; }
+    input { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
+    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; cursor: pointer; }
+    #msg { margin-top: 15px; padding: 10px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+  <h2>Login Test Admin</h2>
+  <form id="loginForm">
+    <label>Telephone ou Email:</label>
+    <input name="identifier" placeholder="0771234567" required>
+    <label>Mot de passe:</label>
+    <input name="password" type="password" required>
+    <button type="submit">Se connecter</button>
+  </form>
+  <div id="msg"></div>
+  <script>
+    loginForm.onsubmit = async e => {
+      e.preventDefault();
+      const body = Object.fromEntries(new FormData(e.target));
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        msg.className = 'success';
+        msg.innerHTML = 'Connecté! <a href="/api/transactions/add">Aller au transfert</a>';
+      } else {
+        msg.className = 'error'; 
+        msg.innerText = 'Erreur: ' + data.error;
+      }
+    };
+  </script>
+</body>
+</html>`);
+});
+//fin des test
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
     console.log('Cloudinary upload start. Cloud:', process.env.CLOUDINARY_CLOUD_NAME);
@@ -56,6 +105,9 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
+
+// test register
+
 router.post('/register', upload.fields([
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
