@@ -124,6 +124,8 @@ router.post('/check-user', async (req, res) => {
 });
 
 // 2. Login avec password + envoi OTP
+
+const mongoose = require('mongoose');
 const clientSchema = new mongoose.Schema({
   nom: { type: String, required: true, trim: true },
   prenom: { type: String, required: true, trim: true },
