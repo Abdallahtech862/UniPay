@@ -151,16 +151,29 @@ clientSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 module.exports = mongoose.model('Client', clientSchema);
-// 3. Vérifier OTP et connecter
+
+//poste verify otp client
 router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
+    console.log('Verify OTP:', { identifier, otp });
+    
     const user = await Client.findOne({
       $or: [{ telephone: identifier }, { email: identifier }]
     });
 
-    if (!user || user.otpCode !== otp || Date.now() > user.otpExpires) {
-      return res.status(401).json({ error: 'Code invalide ou expiré' });
+    console.log('User OTP:', user?.otpCode, 'Expires:', user?.otpExpires, 'Now:', Date.now());
+
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+    
+    if (user.otpCode !== otp) {
+      return res.status(401).json({ error: 'Code invalide' });
+    }
+    
+    if (Date.now() > user.otpExpires) {
+      return res.status(401).json({ error: 'Code expiré' });
     }
 
     user.otpCode = null;
@@ -168,9 +181,10 @@ router.post('/verify-otp', async (req, res) => {
     await user.save();
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion réussie', token, user: { nom: user.nom, prenom: user.prenom } });
+    res.json({ message: 'Connexion réussie', token });
     
   } catch (err) {
+    console.error('Erreur verify-otp:', err);
     res.status(500).json({ error: err.message });
   }
 });
