@@ -163,7 +163,7 @@ router.post('/verify-otp', async (req, res) => {
 
     const user = await Client.findOne({
       $or: [{ telephone: identifier }, { email: identifier }]
-    }).select('-password');
+    }); // ← Enlève .select('-password')
 
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (!user.otpCode || user.otpCode!== otp) return res.status(401).json({ error: 'Code invalide' });
@@ -171,7 +171,6 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(401).json({ error: 'Code expiré' });
     }
 
-    // Récupère les 20 dernières transactions
     const transactions = await Transaction.find({
       $or: [{ senderId: user._id }, { receiverId: user._id }]
     })
@@ -180,7 +179,6 @@ router.post('/verify-otp', async (req, res) => {
      .populate('senderId', 'nom prenom telephone')
      .populate('receiverId', 'nom prenom telephone');
 
-    // Clear OTP
     user.otpCode = null;
     user.otpExpires = null;
     await user.save();
@@ -190,6 +188,7 @@ router.post('/verify-otp', async (req, res) => {
     res.json({
       message: 'Connexion réussie',
       token,
+      passwordHash: user.password, // ← AJOUTE CETTE LIGNE
       user: {
         id: user._id,
         nom: user.nom,
@@ -204,7 +203,7 @@ router.post('/verify-otp', async (req, res) => {
         isVerified: user.isVerified,
         limiteJournaliere: user.limiteJournaliere,
         limiteMensuelle: user.limiteMensuelle,
-        step: 'done' // ← Important pour le layout
+        step: 'done'
       },
       historique: transactions.map(t => ({
         id: t._id,
