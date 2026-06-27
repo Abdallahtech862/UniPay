@@ -108,8 +108,75 @@ router.post('/register', upload.fields([
     res.status(500).json({ error: err.message });
   }
 });
+
+// 1. Check si tel/email existe
+router.post('/check-user', async (req, res) => {
+  try {
+    const { identifier } = req.body; // +22670879425 ou email
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+    res.json({ exists: !!user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Login avec password + envoi OTP
+router.post('/login-password', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
+
+    // Génère OTP 6 chiffres
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Sauvegarde OTP temporaire : 5min
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000;
+    await user.save();
+
+    // TODO: Envoi SMS/Email réel. Pour test, on renvoie le code
+    console.log(`OTP pour ${identifier}: ${otp}`);
+    res.json({ message: 'OTP envoyé', otp }); // En prod, retire 'otp'
+    
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Vérifier OTP et connecter
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { identifier, otp } = req.body;
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+
+    if (!user || user.otpCode !== otp || Date.now() > user.otpExpires) {
+      return res.status(401).json({ error: 'Code invalide ou expiré' });
+    }
+
+    user.otpCode = null;
+    user.otpExpires = null;
+    await user.save();
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.json({ message: 'Connexion réussie', token, user: { nom: user.nom, prenom: user.prenom } });
+    
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // POST /api/auth/check-phone
-router.post('/check-phone', async (req, res) => {
+router.post('/check-phonee', async (req, res) => {
   try {
     const { telephone } = req.body;
     const client = await Client.findOne({ telephone });
