@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
 const clientSchema = new mongoose.Schema({
   nom: {
@@ -28,7 +27,7 @@ const clientSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
-    minlength: 6
+    minlength: 4 // Tu utilises PIN 4 chiffres
   },
   solde: {
     type: Number,
@@ -37,8 +36,28 @@ const clientSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['client', 'admin'],
+    enum: ['client', 'admin', 'merchant'],
     default: 'client'
+  },
+  carteRecto: {
+    type: String,
+    default: null
+  },
+  carteVerso: {
+    type: String,
+    default: null
+  },
+  limiteJournaliere: {
+    type: Number,
+    default: 500000
+  },
+  limiteMensuelle: {
+    type: Number,
+    default: 5000000
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
   },
   createdAt: {
     type: Date,
@@ -46,15 +65,12 @@ const clientSchema = new mongoose.Schema({
   }
 });
 
-// Hash password avant save
-clientSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
+// SUPPRIME LE PRE SAVE - tu hash déjà dans la route
+// clientSchema.pre('save', async function(next) { ... });
 
-// Méthode pour vérifier password
+// Garde juste la méthode compare
 clientSchema.methods.comparePassword = async function(candidatePassword) {
+  const bcrypt = require('bcryptjs');
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
