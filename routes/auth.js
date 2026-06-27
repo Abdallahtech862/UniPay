@@ -348,40 +348,6 @@ router.post('/login-phone', async (req, res) => {
 
 // POST /api/auth/login
 
-//const bcrypt = require('bcryptjs');
-//const jwt = require('jsonwebtoken');
-
-router.post('/login', async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-
-    // Cherche par tel OU email
-    const user = await Client.findOne({
-      $or: [{ telephone: identifier }, { email: identifier }]
-    });
-
-    
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({
-      message: 'Connexion réussie',
-      token,
-      user: {
-        id: user._id,
-        nom: user.nom,
-        prenom: user.prenom,
-        pseudo: user.pseudo,
-        telephone: user.telephone,
-        email: user.email,
-        solde: user.solde
-      }
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 router.post('/loginn', async (req, res) => {
   try {
     const { email, password } = req.body;
