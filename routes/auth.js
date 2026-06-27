@@ -90,7 +90,7 @@ router.post('/register', upload.fields([
       prenom: prenom.trim(),
       telephone,
       email: email || `${telephone.replace('+226', '')}@unipay.local`,
-      password: hashedPassword,
+      password: hashedPassword, // Déjà hashé
       solde: 0,
       role: 'client',
       limiteJournaliere: 500000,
@@ -98,8 +98,9 @@ router.post('/register', upload.fields([
       carteRecto: carteRectoUrl,
       carteVerso: carteVersoUrl
     });
-
-    await client.save();
+    
+    await client.save(); // Plus de pre('save') donc pas de double hash
+    
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({ message: 'Compte créé', token });
     
