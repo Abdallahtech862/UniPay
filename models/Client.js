@@ -26,6 +26,13 @@ clientSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+//module.exports = mongoose.model('Client', clientSchema);
+
+clientSchema.methods.comparePassword = async function(candidatePassword) {
+  const bcrypt = require('bcryptjs');
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
 module.exports = mongoose.model('Client', clientSchema);
 
 // SUPPRIME LE PRE SAVE - tu hash déjà dans la route
