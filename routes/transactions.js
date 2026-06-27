@@ -269,13 +269,13 @@ router.get('/add', async (req, res) => {
     input, select { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }
     button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
     #msg { margin-top: 15px; padding: 10px; }
-   .success { background: #d4edda; color: #155724; }
-   .error { background: #f8d7da; color: #721c24; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
   </style>
 </head>
 <body>
   <h2>Effectuer un transfert</h2>
-  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a> | <a href="/api/transactions/dashboard">Dashboard</a><br><br>
+  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a> | <a href="/api/transactions/dashboard">Dashboard</a> | <a href="#" onclick="logout()">Déconnexion</a><br><br>
   <form id="transferForm">
     <label>Expéditeur:</label><select name="expediteur" required><option value="">Choisir...</option>${options}</select>
     <label>Destinataire:</label><select name="destinataire" required><option value="">Choisir...</option>${options}</select>
@@ -286,7 +286,16 @@ router.get('/add', async (req, res) => {
   <div id="msg"></div>
   <script>
     const token = localStorage.getItem('token');
-    if (!token) window.location.href = '/api/auth/login';
+    if (!token) {
+      alert('Token manquant. Connecte-toi d\\'abord.');
+      window.location.href = '/api/auth/login-test';
+    }
+    
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = '/api/auth/login-test';
+    }
+    
     transferForm.onsubmit = async e => {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(e.target));
@@ -304,7 +313,11 @@ router.get('/add', async (req, res) => {
         msg.innerHTML = data.message + '<br><a href="/api/transactions">Voir historique</a>';
         e.target.reset();
       } else {
-        msg.className = 'error'; msg.innerText = 'Erreur: ' + data.error;
+        msg.className = 'error'; 
+        msg.innerText = 'Erreur: ' + data.error;
+        if (res.status === 401) {
+          setTimeout(() => window.location.href = '/api/auth/login-test', 2000);
+        }
       }
     };
   </script>
@@ -314,7 +327,6 @@ router.get('/add', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-
 // GET /api/transactions/dashboard - Dashboard avec top clients
 router.get('/dashboard', async (req, res) => {
   res.send(`<!DOCTYPE html>
