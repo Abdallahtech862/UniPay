@@ -698,7 +698,7 @@ router.get('/', async (req, res) => {
 // ==================== ROUTES ACTION ====================
 
 // POST /api/transactions - Créer transfert
-router.post('/', verifyAdmin, async (req, res) => {
+router.post('/',  async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     if (expediteur === destinataire) return res.status(400).json({ error: 'Même compte' });
