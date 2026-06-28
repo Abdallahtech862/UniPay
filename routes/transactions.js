@@ -696,10 +696,80 @@ router.get('/', async (req, res) => {
 });
 
 // ==================== ROUTES ACTION ====================
+router.post('/', authUser, async (req, res) => {
+  try {
+    const { expediteur, destinataire, montant, motif } = req.body;
+    
+    if (req.user.id !== expediteur) {
+      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
+    }
 
+    const exp = await Client.findById(expediteur);
+    const dest = await Client.findById(destinataire);
+
+    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
+    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
+
+    const frais = Math.round(montant * 0.01); // 1% frais
+
+    // Créer transaction
+    const tx = new Transaction({
+      expediteur: exp,
+      destinataire: dest,
+      montant: Number(montant),
+      motif,
+      frais,
+      status: 'validee'
+    });
+    
+
+    // Update soldes sans re-valider le password
+    await Client.findByIdAndUpdate(
+      expediteur, 
+      { $inc: { solde: -(montant + frais) } },
+      { new: true }
+    );
+
+    await Client.findByIdAndUpdate(
+      destinataire, 
+      { $inc: { solde: montant } },
+      { new: true }
+    );
+
+    // Récupère le nouveau solde
+    const updatedExp = await Client.findById(expediteur).select('solde');
+
+    // Renvoie historique à jour
+    const transactions = await Transaction.find({
+      $or: [{ senderId: exp._id }, { receiverId: exp._id }]
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .populate('senderId', 'nom prenom telephone pseudo photoProfil')
+    .populate('receiverId', 'nom prenom telephone pseudo photoProfil');
+
+    res.json({
+      message: 'Transfert effectué',
+      nouveauSolde: updatedExp.solde,
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.senderId._id.equals(exp._id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.senderId._id.equals(exp._id)? t.receiverId : t.senderId,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // POST /api/transactions - Créer transfert
 // ✅ BON - auth simple pour tout user connecté
-router.post('/', authUser, async (req, res) => {
+router.post('/s', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     console.log(expediteur);
