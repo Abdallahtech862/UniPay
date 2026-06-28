@@ -729,6 +729,7 @@ router.post('/', authUser, async (req, res) => {
     exp.solde -= (montant + frais);
     dest.solde += montant;
     console.log(tx,dest.solde,exp.password);
+    console.log(tx);
     await tx.save();
     await exp.save();
     await dest.save();
