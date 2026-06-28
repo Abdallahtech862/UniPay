@@ -699,7 +699,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/transactions - Créer transfert
 // ✅ BON - auth simple pour tout user connecté
-router.post('/', authUser, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     console.log(expediteur);
@@ -728,7 +728,7 @@ router.post('/', authUser, async (req, res) => {
 
     exp.solde -= (montant + frais);
     dest.solde += montant;
-
+    console.log(tx,dest.solde,exp.password);
     await tx.save();
     await exp.save();
     await dest.save();
