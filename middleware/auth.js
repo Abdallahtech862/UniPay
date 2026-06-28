@@ -32,4 +32,25 @@ const verifyAdmin = async (req, res, next) => {
   });
 };
 
-module.exports = { verifyToken, verifyAdmin };
+const authUser = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Token manquant' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await Client.findById(decoded.id).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Utilisateur introuvable' });
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Token invalide ou expiré' });
+  }
+};
+module.exports = { verifyToken, verifyAdmin, authUser };
