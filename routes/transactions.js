@@ -251,10 +251,10 @@ router.get('/me', authUser, async (req, res) => {
     // Format pour le front
     const formatted = transactions.map(t => ({
       id: t._id,
-      type: t.senderId._id.equals(req.user._id) ? 'envoi' : 'reception',
+      type: t.expediteur._id.equals(req.user._id) ? 'envoi' : 'reception',
       montant: t.montant,
       frais: t.frais || 0,
-      contact: t.senderId._id.equals(req.user._id) ? t.receiverId : t.senderId,
+      contact: t.expediteur._id.equals(req.user._id) ? t.destinataire : t.expediteur,
       motif: t.motif || '',
       status: t.status,
       date: t.createdAt
