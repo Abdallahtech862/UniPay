@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
-const { verifyAdmin } = require('../middleware/auth');
+const { verifyAdmin, authUser } = require('../middleware/auth');
 
 // ==================== ROUTES API JSON ====================
 
