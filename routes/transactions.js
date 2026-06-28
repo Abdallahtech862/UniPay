@@ -751,22 +751,22 @@ router.post('/', authUser, async (req, res) => {
 
     // Renvoie historique à jour
     const transactions = await Transaction.find({
-      $or: [{ senderId: exp._id }, { receiverId: exp._id }]
+      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
     })
     .sort({ createdAt: -1 })
     .limit(20)
-    .populate('senderId', 'nom prenom telephone pseudo photoProfil')
-    .populate('receiverId', 'nom prenom telephone pseudo photoProfil');
+    .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
+    .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
 
     res.json({
       message: 'Transfert effectué',
       nouveauSolde: updatedExp.solde,
       historique: transactions.map(t => ({
         id: t._id,
-        type: t.senderId._id.equals(exp._id)? 'envoi' : 'reception',
+        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
         montant: t.montant,
         frais: t.frais || 0,
-        contact: t.senderId._id.equals(exp._id)? t.receiverId : t.senderId,
+        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
         motif: t.motif || '',
         status: t.status,
         date: t.createdAt
