@@ -260,8 +260,26 @@ router.get('/me', authUser, async (req, res) => {
       date: t.createdAt
     }));
 
-    res.json(solde: user?.solde || 0,formatted);
+    //res.json(formatted);
 
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+res.json({
+      solde: user?.solde || 0, // ✅ Fallback à 0
+      transactions: transactions.map(t => ({
+        id: t._id,
+        type: t.expediteur._id.equals(req.user.id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.expediteur._id.equals(req.user.id)? t.destinataire : t.expediteur,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
