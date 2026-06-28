@@ -241,10 +241,10 @@ router.post('/send', async (req, res) => {
 router.get('/me', authUser, async (req, res) => {
   try {
     const transactions = await Transaction.find({
-      $or: [{ senderId: req.user._id }, { receiverId: req.user._id }]
+      $or: [{expediteur: req.user._id }, { destinataire: req.user._id }]
     })
-    .populate('senderId', 'nom prenom telephone photoProfil pseudo')
-    .populate('receiverId', 'nom prenom telephone photoProfil pseudo')
+    .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
+    .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
     .sort({ createdAt: -1 }) // ← createdAt, pas date si tu utilises timestamps
     .lean();
 
