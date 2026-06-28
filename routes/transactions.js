@@ -699,7 +699,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/transactions - Créer transfert
 // ✅ BON - auth simple pour tout user connecté
-router.post('/', async (req, res) => {
+router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     console.log(expediteur);
