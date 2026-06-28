@@ -235,34 +235,16 @@ router.post('/send', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-// GET /api/transactions/me - Historique du client connecté
 router.get('/me', authUser, async (req, res) => {
-  try {
-    const transactions = await Transaction.find({
-      $or: [{ senderId: req.user._id }, { receiverId: req.user._id }]
-    })
-    .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
-    .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
-    .sort({ createdAt: -1 }) // ← createdAt, pas date si tu utilises timestamps
-    .lean();
+  const transactions = await Transaction.find({
+    $or: [{ expediteur: req.user._id }, { destinataire: req.user._id }]
+  })
+  .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
+  .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
+  .sort({ createdAt: -1 })
+  .lean();
 
-    // Format pour le front
-    const formatted = transactions.map(t => ({
-      id: t._id,
-      type: t.senderId._id.equals(req.user._id) ? 'envoi' : 'reception',
-      montant: t.montant,
-      frais: t.frais || 0,
-      contact: t.senderId._id.equals(req.user._id) ? t.receiverId : t.senderId,
-      motif: t.motif || '',
-      status: t.status,
-      date: t.createdAt
-    }));
-
-    res.json(formatted);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  res.json(transactions);
 });
 // GET /api/transactions/my - Historique du client connecté
 router.get('/my', async (req, res) => {
