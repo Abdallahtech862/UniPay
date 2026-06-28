@@ -698,26 +698,67 @@ router.get('/', async (req, res) => {
 // ==================== ROUTES ACTION ====================
 
 // POST /api/transactions - Créer transfert
-router.post('/',  async (req, res) => {
+// ✅ BON - auth simple pour tout user connecté
+router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
-    if (expediteur === destinataire) return res.status(400).json({ error: 'Même compte' });
     
-    const clientExp = await Client.findById(expediteur);
-    const clientDest = await Client.findById(destinataire);
-    if (!clientExp || !clientDest) return res.status(404).json({ error: 'Client introuvable' });
-    if (clientExp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant: ' + clientExp.solde + ' FCFA' });
-    
-    clientExp.solde -= Number(montant);
-    clientDest.solde += Number(montant);
-    await clientExp.save();
-    await clientDest.save();
-    
-    const transaction = new Transaction({ expediteur, destinataire, montant, motif });
-    await transaction.save();
-    res.json({ message: 'Transfert de ' + montant + ' FCFA réussi', transaction });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Vérifie que l'expéditeur = user connecté
+    if (req.user.id !== expediteur) {
+      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
+    }
+
+    const exp = await Client.findById(expediteur);
+    const dest = await Client.findById(destinataire);
+
+    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
+    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
+
+    const frais = montant * 0.01; // 1% frais exemple
+
+    // Transaction
+    const tx = new Transaction({
+      senderId: expediteur,
+      receiverId: destinataire,
+      montant,
+      frais,
+      motif,
+      status: 'validee'
+    });
+
+    exp.solde -= (montant + frais);
+    dest.solde += montant;
+
+    await tx.save();
+    await exp.save();
+    await dest.save();
+
+    // Renvoie historique à jour
+    const transactions = await Transaction.find({
+      $or: [{ senderId: exp._id }, { receiverId: exp._id }]
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .populate('senderId', 'nom prenom telephone pseudo')
+    .populate('receiverId', 'nom prenom telephone pseudo');
+
+    res.json({
+      message: 'Transfert effectué',
+      nouveauSolde: exp.solde,
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.senderId._id.equals(exp._id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.senderId._id.equals(exp._id)? t.receiverId : t.senderId,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
