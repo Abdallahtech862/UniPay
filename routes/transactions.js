@@ -718,8 +718,8 @@ router.post('/', authUser, async (req, res) => {
 
     // Transaction
     const tx = new Transaction({
-      expediteur: expediteur,
-      destinataire: destinateur,
+      expediteur: exp,
+      destinataire: dest,
       montant: Number(montant),
       motif,
       frais,
