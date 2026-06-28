@@ -702,7 +702,7 @@ router.get('/', async (req, res) => {
 router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
-    
+    console.log(expediteur);
     // Vérifie que l'expéditeur = user connecté
     if (req.user.id !== expediteur) {
       return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
