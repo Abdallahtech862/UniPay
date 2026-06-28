@@ -698,10 +698,12 @@ router.get('/', async (req, res) => {
 // ==================== ROUTES ACTION ====================
 
 // POST /api/transactions - Créer transfert
+// ✅ BON - auth simple pour tout user connecté
 router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
+    // Vérifie que l'expéditeur = user connecté
     if (req.user.id !== expediteur) {
       return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
     }
@@ -712,10 +714,10 @@ router.post('/', authUser, async (req, res) => {
     if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
     if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
 
-    const frais = Math.round(montant * 0.01); // 1% frais
+    const frais = montant * 0.01; // 1% frais exemple
 
-    // Créer transaction
-    const tx = await Transaction.create({
+    // Transaction
+    const tx = new Transaction({
       senderId: expediteur,
       receiverId: destinataire,
       montant,
@@ -724,21 +726,12 @@ router.post('/', authUser, async (req, res) => {
       status: 'validee'
     });
 
-    // Update soldes sans re-valider le password
-    await Client.findByIdAndUpdate(
-      expediteur, 
-      { $inc: { solde: -(montant + frais) } },
-      { new: true }
-    );
+    exp.solde -= (montant + frais);
+    dest.solde += montant;
 
-    await Client.findByIdAndUpdate(
-      destinataire, 
-      { $inc: { solde: montant } },
-      { new: true }
-    );
-
-    // Récupère le nouveau solde
-    const updatedExp = await Client.findById(expediteur).select('solde');
+    await tx.save();
+    await exp.save();
+    await dest.save();
 
     // Renvoie historique à jour
     const transactions = await Transaction.find({
@@ -746,12 +739,12 @@ router.post('/', authUser, async (req, res) => {
     })
     .sort({ createdAt: -1 })
     .limit(20)
-    .populate('senderId', 'nom prenom telephone pseudo photoProfil')
-    .populate('receiverId', 'nom prenom telephone pseudo photoProfil');
+    .populate('senderId', 'nom prenom telephone pseudo')
+    .populate('receiverId', 'nom prenom telephone pseudo');
 
     res.json({
       message: 'Transfert effectué',
-      nouveauSolde: updatedExp.solde,
+      nouveauSolde: exp.solde,
       historique: transactions.map(t => ({
         id: t._id,
         type: t.senderId._id.equals(exp._id)? 'envoi' : 'reception',
