@@ -240,6 +240,7 @@ router.post('/send', async (req, res) => {
 // GET /api/transactions/my - Historique du client connecté
 router.get('/me', authUser, async (req, res) => {
   try {
+    const user = await Client.findById(req.user.id).select('solde');
     const transactions = await Transaction.find({
       $or: [{expediteur: req.user._id }, { destinataire: req.user._id }]
     })
