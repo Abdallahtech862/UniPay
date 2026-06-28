@@ -698,12 +698,10 @@ router.get('/', async (req, res) => {
 // ==================== ROUTES ACTION ====================
 
 // POST /api/transactions - Créer transfert
-// ✅ BON - auth simple pour tout user connecté
 router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
-    // Vérifie que l'expéditeur = user connecté
     if (req.user.id !== expediteur) {
       return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
     }
@@ -714,10 +712,10 @@ router.post('/', authUser, async (req, res) => {
     if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
     if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
 
-    const frais = montant * 0.01; // 1% frais exemple
+    const frais = Math.round(montant * 0.01); // 1% frais
 
-    // Transaction
-    const tx = new Transaction({
+    // Créer transaction
+    const tx = await Transaction.create({
       senderId: expediteur,
       receiverId: destinataire,
       montant,
@@ -726,12 +724,21 @@ router.post('/', authUser, async (req, res) => {
       status: 'validee'
     });
 
-    exp.solde -= (montant + frais);
-    dest.solde += montant;
+    // Update soldes sans re-valider le password
+    await Client.findByIdAndUpdate(
+      expediteur, 
+      { $inc: { solde: -(montant + frais) } },
+      { new: true }
+    );
 
-    await tx.save();
-    await exp.save();
-    await dest.save();
+    await Client.findByIdAndUpdate(
+      destinataire, 
+      { $inc: { solde: montant } },
+      { new: true }
+    );
+
+    // Récupère le nouveau solde
+    const updatedExp = await Client.findById(expediteur).select('solde');
 
     // Renvoie historique à jour
     const transactions = await Transaction.find({
@@ -739,12 +746,12 @@ router.post('/', authUser, async (req, res) => {
     })
     .sort({ createdAt: -1 })
     .limit(20)
-    .populate('senderId', 'nom prenom telephone pseudo')
-    .populate('receiverId', 'nom prenom telephone pseudo');
+    .populate('senderId', 'nom prenom telephone pseudo photoProfil')
+    .populate('receiverId', 'nom prenom telephone pseudo photoProfil');
 
     res.json({
       message: 'Transfert effectué',
-      nouveauSolde: exp.solde,
+      nouveauSolde: updatedExp.solde,
       historique: transactions.map(t => ({
         id: t._id,
         type: t.senderId._id.equals(exp._id)? 'envoi' : 'reception',
@@ -761,7 +768,6 @@ router.post('/', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ==================== ROUTES AVEC :id EN DERNIER ====================
 
 // DELETE /api/transactions/:id - Annuler transaction
