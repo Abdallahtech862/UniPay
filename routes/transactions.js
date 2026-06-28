@@ -260,7 +260,7 @@ router.get('/me', authUser, async (req, res) => {
       date: t.createdAt
     }));
 
-    res.json(formatted);
+    res.json(solde: user?.solde || 0,formatted);
 
   } catch (err) {
     res.status(500).json({ error: err.message });
