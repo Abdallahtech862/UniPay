@@ -235,16 +235,35 @@ router.post('/send', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-router.get('/me', authUser, async (req, res) => {
-  const transactions = await Transaction.find({
-    $or: [{ expediteur: req.user._id }, { destinataire: req.user._id }]
-  })
-  .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
-  .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
-  .sort({ createdAt: -1 })
-  .lean();
 
-  res.json(transactions);
+//trouve lhistorique dun seul client
+router.get('/me', authUser, async (req, res) => {
+  try {
+    const user = await Client.findById(req.user.id).select('solde');
+    const transactions = await Transaction.find({
+      $or: [{ senderId: req.user.id }, { receiverId: req.user.id }]
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .populate('senderId', 'nom prenom telephone pseudo photoProfil')
+    .populate('receiverId', 'nom prenom telephone pseudo photoProfil');
+
+    res.json({
+      solde: user?.solde || 0, // ✅ Fallback à 0
+      transactions: transactions.map(t => ({
+        id: t._id,
+        type: t.senderId._id.equals(req.user.id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.senderId._id.equals(req.user.id)? t.receiverId : t.senderId,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 // GET /api/transactions/my - Historique du client connecté
 router.get('/my', async (req, res) => {
