@@ -718,18 +718,18 @@ router.post('/', authUser, async (req, res) => {
 
     // Transaction
     const tx = new Transaction({
-      senderId: expediteur,
-      receiverId: destinataire,
-      montant,
-      frais,
+      expediteur: expediteur,
+      destinataire: destinateur,
+      montant: Number(montant),
       motif,
+      frais,
       status: 'validee'
     });
 
     exp.solde -= (montant + frais);
     dest.solde += montant;
 
-    //await tx.save();
+    await tx.save();
     await exp.save();
     await dest.save();
 
