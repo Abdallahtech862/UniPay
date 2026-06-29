@@ -281,6 +281,37 @@ router.get('/my', async (req, res) => {
 
   res.json(transactions);
 });
+
+//
+//rechercher un client par numero ou par pseudo
+router.get('/search', authUser, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) {
+      return res.status(400).json({ error: 'Recherche trop courte' });
+    }
+
+    const regex = new RegExp(q, 'i'); // case insensitive
+    
+    const users = await Client.find({
+      $or: [
+        { pseudo: regex },
+        { telephone: regex },
+        { nom: regex },
+        { prenom: regex }
+      ],
+      _id: { $ne: req.user.id } // Exclure soi-même
+    })
+    .select('nom prenom pseudo telephone photoProfil')
+    .limit(10)
+    .lean();
+
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== ROUTES HTML ====================
 
 // GET /api/transactions/add - Formulaire transfert
