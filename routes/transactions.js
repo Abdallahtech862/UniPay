@@ -826,7 +826,7 @@ router.post('/', authUser, async (req, res) => {
       soldeExpediteurApres: nouveauSoldeExp, // ✅ stocke le solde
       soldeDestinataireApres: nouveauSoldeDest // ✅ stocke le solde
     });
-    
+    await tx.save(); // ✅ MANQUAIT CETTE LIGNE
     await Promise.all([
       Client.findByIdAndUpdate(expediteur, { solde: nouveauSoldeExp }),
       Client.findByIdAndUpdate(destinataire, { solde: nouveauSoldeDest })
