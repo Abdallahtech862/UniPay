@@ -729,7 +729,7 @@ router.get('/', async (req, res) => {
 
 // ==================== ROUTES ACTION ====================
 
-router.post('/', authUser, async (req, res) => {
+router.post('/f', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
@@ -797,7 +797,8 @@ router.post('/', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-router.post('/f', authUser, async (req, res) => {
+// route nouvelle
+router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
@@ -811,36 +812,41 @@ router.post('/f', authUser, async (req, res) => {
     if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
     if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
 
-    const frais = Math.round(montant * 0.01); // 1% frais
-
-    // Créer transaction
-    const tx = new Transaction({
-      expediteur: exp,
-      destinataire: dest,
+    const frais = Math.round(montant * 0.01);
+    const nouveauSoldeExp = exp.solde - montant - frais;
+    const nouveauSoldeDest = dest.solde + montant;
+    
+    const tx = await Transaction.create({
+      expediteur: exp._id,
+      destinataire: dest._id,
       montant: Number(montant),
       motif,
       frais,
-      status: 'validee'
+      status: 'validee',
+      soldeExpediteurApres: nouveauSoldeExp, // ✅ stocke le solde
+      soldeDestinataireApres: nouveauSoldeDest // ✅ stocke le solde
     });
     
+    await Promise.all([
+      Client.findByIdAndUpdate(expediteur, { solde: nouveauSoldeExp }),
+      Client.findByIdAndUpdate(destinataire, { solde: nouveauSoldeDest })
+    ]);
 
-    // Update soldes sans re-valider le password
-    await Client.findByIdAndUpdate(
-      expediteur, 
-      { $inc: { solde: -(montant + frais) } },
-      { new: true }
-    );
+    // 2. Mettre à jour les soldes des 2 comptes
+    const [updatedExp, updatedDest] = await Promise.all([
+      Client.findByIdAndUpdate(
+        expediteur, 
+        { solde: nouveauSoldeExp },
+        { new: true, select: 'solde nom prenom' }
+      ),
+      Client.findByIdAndUpdate(
+        destinataire, 
+        { solde: nouveauSoldeDest },
+        { new: true, select: 'solde nom prenom' }
+      )
+    ]);
 
-    await Client.findByIdAndUpdate(
-      destinataire, 
-      { $inc: { solde: montant } },
-      { new: true }
-    );
-
-    // Récupère le nouveau solde
-    const updatedExp = await Client.findById(expediteur).select('solde');
-
-    // Renvoie historique à jour
+    // 3. Récupère l'historique
     const transactions = await Transaction.find({
       $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
     })
@@ -852,6 +858,7 @@ router.post('/f', authUser, async (req, res) => {
     res.json({
       message: 'Transfert effectué',
       nouveauSolde: updatedExp.solde,
+      nouveauSoldeDestinataire: updatedDest.solde, // ✅ tu peux renvoyer les 2
       historique: transactions.map(t => ({
         id: t._id,
         type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
