@@ -286,18 +286,20 @@ router.get('/my', async (req, res) => {
 router.get('/searchClient', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
-    console.log('query1:',req.query);
-    let query = {};
-    console.log('query2:',query);
-    if (pseudo) query.pseudo = pseudo.replace('@', '');
-    console.log('queryPseud2:',query.pseudo);
-    if (telephone) query.telephone = telephone;
     
-    if (!pseudo && !telephone) {
+    // ✅ Vérifie que c'est pas 'undefined' en string
+    const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
+    const cleanTel = telephone && telephone !== 'undefined' ? telephone : null;
+    
+    if (!cleanPseudo && !cleanTel) {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
     }
 
-    const user = await Client.findOne(query).select('nom prenom pseudo telephone photoProfil');
+    let query = {};
+    if (cleanPseudo) query.pseudo = cleanPseudo;
+    if (cleanTel) query.telephone = cleanTel;
+
+    const user = await Client.findOne(query).select('nom prenom pseudo telephone photoProfil').lean();
     
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
