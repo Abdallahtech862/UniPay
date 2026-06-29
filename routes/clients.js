@@ -5,7 +5,7 @@ const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Client = require('../models/Client');
-const { verifyAdmin } = require('../middleware/auth');
+const { verifyAdmin, authUser } = require('../middleware/auth');
 
 // Config Cloudinary
 cloudinary.config({
