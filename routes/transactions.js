@@ -284,7 +284,7 @@ router.get('/my', async (req, res) => {
 
 //
 
-router.get('/search', authUser, async (req, res) => {
+router.get('/searchh', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     let query = {};
@@ -309,7 +309,7 @@ router.get('/search', authUser, async (req, res) => {
 });
 
 //rechercher un client par numero ou par pseudo
-router.get('/searchh', authUser, async (req, res) => {
+router.get('/search', authUser, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.length < 2) {
