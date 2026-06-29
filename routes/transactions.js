@@ -287,7 +287,7 @@ router.get('/searchClient', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     let query = {};
-    
+    console.log('query:',query);
     if (pseudo) query.pseudo = pseudo.replace('@', '');
     if (telephone) query.telephone = telephone;
     
@@ -313,7 +313,7 @@ router.get('/search', authUser, async (req, res) => {
     if (!q || q.length < 2) {
       return res.status(400).json({ error: 'Recherche trop courte' });
     }
-    console.log(q);
+    
     const regex = new RegExp(q, 'i'); // case insensitive
     
     const users = await Client.find({
