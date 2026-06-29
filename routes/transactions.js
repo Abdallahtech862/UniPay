@@ -286,9 +286,10 @@ router.get('/my', async (req, res) => {
 router.get('/searchClient', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
-    let query = {};
+    //let query = {};
     console.log('query:',query);
     if (pseudo) query.pseudo = pseudo.replace('@', '');
+    console.log('queryPseudo:',query.pseudo);
     if (telephone) query.telephone = telephone;
     
     if (!pseudo && !telephone) {
