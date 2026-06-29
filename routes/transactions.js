@@ -261,6 +261,7 @@ router.get('/me', authUser, async (req, res) => {
             contact: t.expediteur._id.equals(req.user.id)? t.destinataire : t.expediteur,
             motif: t.motif || '',
             status: t.status,
+            soldeExpediteurApres: t.soldeExpediteurApres || 0,
             date: t.createdAt
           }))
         });
