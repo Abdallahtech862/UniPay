@@ -296,7 +296,7 @@ router.get('/search', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
     }
 
-    const user = await Client.findOne(query).select('nom prenom pseudo telephone');
+    const user = await Client.findOne(query).select('nom prenom pseudo telephone photoProfil');
     
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
