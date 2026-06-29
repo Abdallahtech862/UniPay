@@ -24,6 +24,34 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage });
 
+// rechercher un seul client pour un transfert par QRCode
+router.get('/searchClient', authUser, async (req, res) => {
+  try {
+    const { pseudo, telephone } = req.query;
+    
+    // ✅ Vérifie que c'est pas 'undefined' en string
+    const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
+    const cleanTel = telephone && telephone !== 'undefined' ? telephone : null;
+    console.log(cleanPseudo, cleanTel);
+    if (!cleanPseudo && !cleanTel) {
+      return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
+    }
+
+    let query = {};
+    if (cleanPseudo) query.pseudo = cleanPseudo;
+    if (cleanTel) query.telephone = cleanTel;
+
+    const user = await Client.findOne(query).select('nom prenom pseudo telephone photoProfil').lean();
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // ==================== ROUTES HTML ====================
 
 // GET /api/clients/add - Formulaire
