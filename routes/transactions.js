@@ -728,7 +728,76 @@ router.get('/', async (req, res) => {
 });
 
 // ==================== ROUTES ACTION ====================
+
 router.post('/', authUser, async (req, res) => {
+  try {
+    const { expediteur, destinataire, montant, motif } = req.body;
+    
+    if (req.user.id !== expediteur) {
+      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
+    }
+
+    const exp = await Client.findById(expediteur);
+    const dest = await Client.findById(destinataire);
+
+    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
+    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
+
+    const frais = Math.round(montant * 0.01);
+
+    // Créer transaction
+    const tx = new Transaction({
+      expediteur: exp._id, // ✅ passe l'ID, pas l'objet complet
+      destinataire: dest._id,
+      montant: Number(montant),
+      motif,
+      frais,
+      status: 'validee'
+    });
+
+    await tx.save(); // ✅ MANQUAIT CETTE LIGNE
+
+    // Update soldes
+    await Client.findByIdAndUpdate(
+      expediteur, 
+      { $inc: { solde: -(montant + frais) } }
+    );
+
+    await Client.findByIdAndUpdate(
+      destinataire, 
+      { $inc: { solde: montant } }
+    );
+
+    const updatedExp = await Client.findById(expediteur).select('solde');
+
+    const transactions = await Transaction.find({
+      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
+    .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
+
+    res.json({
+      message: 'Transfert effectué',
+      nouveauSolde: updatedExp.solde,
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.post('/f', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
