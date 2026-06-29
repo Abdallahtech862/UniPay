@@ -16,16 +16,23 @@ const transactionSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  frais: {
+    type: Number,
+    default: 0
+  },
   motif: String,
-  date: {
-    type: Date,
-    default: Date.now
+  status: {
+    type: String,
+    enum: ['validee', 'annulee', 'en_attente'],
+    default: 'validee'
   },
   annulee: {
     type: Boolean,
     default: false
   },
   dateAnnulation: Date
+}, { 
+  timestamps: true // ✅ Ajoute createdAt et updatedAt auto
 });
 
 module.exports = mongoose.model('Transaction', transactionSchema);
