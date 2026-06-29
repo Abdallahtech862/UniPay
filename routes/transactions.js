@@ -283,8 +283,33 @@ router.get('/my', async (req, res) => {
 });
 
 //
-//rechercher un client par numero ou par pseudo
+
 router.get('/search', authUser, async (req, res) => {
+  try {
+    const { pseudo, telephone } = req.query;
+    let query = {};
+    
+    if (pseudo) query.pseudo = pseudo.replace('@', '');
+    if (telephone) query.telephone = telephone;
+    
+    if (!pseudo && !telephone) {
+      return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
+    }
+
+    const user = await Client.findOne(query).select('nom prenom pseudo telephone');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//rechercher un client par numero ou par pseudo
+router.get('/searchh', authUser, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.length < 2) {
