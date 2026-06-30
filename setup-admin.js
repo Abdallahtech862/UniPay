@@ -1,12 +1,20 @@
 // setup-admin.js
 require('dotenv').config();
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const Client = require('./models/Client');
 
 const setupAdmin = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    // ✅ Utilise DATABASE_URL ou MONGODB_URI selon Railway
+    const mongoUri = mongodb://mongo:WWWpSIAoHXfouCvtZUxcNiMBtzaHfqjP@mongodb.railway.internal:27017;
+    
+    if (!mongoUri) {
+      throw new Error('Aucune URI Mongo trouvée. Check DATABASE_URL ou MONGODB_URI');
+    }
+
+    console.log('Connexion à Mongo...');
+    await mongoose.connect(mongoUri);
     console.log('MongoDB connecté');
 
     const existingAdmin = await Client.findOne({ email: process.env.ADMIN_EMAIL });
@@ -21,7 +29,7 @@ const setupAdmin = async () => {
       prenom: 'UniPay',
       email: process.env.ADMIN_EMAIL,
       password: hash,
-      role: 'admin', // ✅ Ton enum contient bien 'admin'
+      role: 'admin',
       telephone: '00000000',
       pseudo: 'admin',
       solde: 0
@@ -31,7 +39,7 @@ const setupAdmin = async () => {
     console.log('Email:', process.env.ADMIN_EMAIL);
     process.exit(0);
   } catch (err) {
-    console.error('Erreur:', err);
+    console.error('Erreur:', err.message);
     process.exit(1);
   }
 };
