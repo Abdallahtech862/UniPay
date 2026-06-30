@@ -28,6 +28,7 @@ router.get('/searchClient', async (req, res) => {
     .select('_id nom prenom pseudo telephone photoProfil')
     .lean();
     console.log('user:', user);
+    console.log('test1:', cleanPseudo, cleanTel);
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
