@@ -50,7 +50,119 @@ router.get('/searchClient', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/transactions/data - Données pour le tableau avec recherche
+
+// POST /api/transactions/withdraw/preview vrifie les frais lors de la recuperation
+router.post('/withdraw/preview', authUser, async (req, res) => {
+  try {
+    const { montant, operateur, numero } = req.body;
+    const userId = req.user.id;
+
+    if (!montant || montant <= 0 ||!operateur ||!numero) {
+      return res.status(400).json({ error: 'Données manquantes' });
+    }
+
+    const user = await Client.findById(userId);
+    if (user.solde < montant) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    // Calcule frais selon opérateur
+    const FRAIS = {
+      'MTN Money': 0.01, // 1%
+      'Orange Money': 0.01,
+      'Moov Money': 0.015,
+      'SankMoney': 0.005,
+      'Coris Money': 0.01,
+      'Wave': 0.01,
+      'XpresCash': 0.02,
+      'Carte Visa': 0.025
+    };
+
+    const tauxFrais = FRAIS[operateur] || 0.01;
+    const frais = Math.ceil(montant * tauxFrais);
+    const total = montant + frais;
+
+    if (user.solde < total) {
+      return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
+    }
+
+    // Crée transaction en attente
+    const transaction = await Transaction.create({
+      expediteur: userId,
+      type: 'retrait',
+      montant,
+      frais,
+      operateur,
+      numeroDestination: numero,
+      status: 'en_attente',
+      soldeExpediteurAvant: user.solde
+    });
+
+    res.json({
+      transactionId: transaction._id,
+      montant,
+      frais,
+      total,
+      operateur,
+      numero
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/transactions/withdraw/confirm confirme la transaction de recuperation
+router.post('/withdraw/confirm', authUser, async (req, res) => {
+  try {
+    const { transactionId, pin } = req.body; // pin vient de la page d'auth
+    const userId = req.user.id;
+
+    const user = await Client.findById(userId);
+    const transaction = await Transaction.findById(transactionId);
+
+    if (!transaction || transaction.expediteur.toString()!== userId) {
+      return res.status(404).json({ error: 'Transaction introuvable' });
+    }
+
+    if (transaction.status!== 'en_attente') {
+      return res.status(400).json({ error: 'Transaction déjà traitée' });
+    }
+
+    // Vérifie PIN
+    const pinValid = await bcrypt.compare(pin, user.pin);
+    if (!pinValid) {
+      return res.status(401).json({ error: 'Code PIN incorrect' });
+    }
+
+    const total = transaction.montant + transaction.frais;
+    if (user.solde < total) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    // Débite + valide
+    user.solde -= total;
+    transaction.status = 'validee';
+    transaction.soldeExpediteurApres = user.solde;
+    transaction.dateValidation = new Date();
+
+    await user.save();
+    await transaction.save();
+
+    // TODO: Appel API opérateur Mobile Money ici
+
+    res.json({
+      success: true,
+      nouveauSolde: user.solde,
+      transaction
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/transactions/data - Données pour le tableau avec recherche historique de toute les transactions
 router.get('/data', async (req, res) => {
   try {
     const { client, debut, fin, q, montantMin, montantMax } = req.query;
