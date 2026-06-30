@@ -56,7 +56,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
   try {
     const { montant, operateur, numero } = req.body;
     const userId = req.user.id;
-
+    console.log('req:', req.body);
     if (!montant || montant <= 0 ||!operateur ||!numero) {
       return res.status(400).json({ error: 'Données manquantes' });
     }
@@ -98,7 +98,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       soldeExpediteurAvant: user.solde
     });
 
-    res.json({
+    const aa =res.json({
       transactionId: transaction._id,
       montant,
       frais,
@@ -106,9 +106,10 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       operateur,
       numero
     });
-
+    console.log('res:', aa);
   } catch (err) {
     res.status(500).json({ error: err.message });
+    console.log('req0:',res);
   }
 });
 
