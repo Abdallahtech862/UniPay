@@ -353,23 +353,29 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
-      const token = jwt.sign({ email, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '24h' });
-      return res.json({ message: 'Connecté', token, role: 'admin' });
-    }
+    const user = await Client.findOne({ email });
+    if (!user) return res.status(401).json({ error: 'Identifiants incorrects' });
 
-    const client = await Client.findOne({ email });
-    if (!client) return res.status(401).json({ error: 'Identifiants incorrects' });
-
-    const validPassword = await bcrypt.compare(password, client.password);
+    const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(401).json({ error: 'Identifiants incorrects' });
 
-    const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion réussie', token, user: client });
+    const token = jwt.sign(
+      { id: user._id, role: user.role || 'user' }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: user.role === 'admin'? '24h' : '7d' }
+    );
+    
+    res.json({ 
+      message: 'Connexion réussie', 
+      token, 
+      user,
+      role: user.role 
+    });
   } catch (err) {
     console.error('Erreur login:', err);
     res.status(500).json({ error: err.message });
   }
+});
 });
 
 module.exports = router;
