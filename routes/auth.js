@@ -29,37 +29,75 @@ router.get('/cloudinary-test', async (req, res) => {
   }
 });
 // test login transfert
+// test login transfert
 router.get('/login-test', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html>
-<head><title>Login Test</title><meta charset="UTF-8"></head>
+<head>
+  <title>Login Test</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
 <body style="font-family:Arial;max-width:400px;margin:50px auto;padding:20px">
-  <h2>Login Test UniPay</h2>
+  <h2>Login UniPay</h2>
   <form id="loginForm">
-    <input name="identifier" placeholder="0771234567" required style="width:100%;padding:10px;margin:8px 0">
-    <input name="password" type="password" placeholder="Mot de passe" required style="width:100%;padding:10px;margin:8px 0">
-    <button type="submit" style="width:100%;padding:12px;background:#007bff;color:white;border:none;cursor:pointer">Se connecter</button>
+    <label>Email ou Téléphone</label>
+    <input 
+      name="identifier" 
+      placeholder="admin@unipay.bf ou 0771234567" 
+      required 
+      style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box"
+    >
+    <label>Mot de passe</label>
+    <input 
+      name="password" 
+      type="password" 
+      placeholder="Mot de passe" 
+      required 
+      style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box"
+    >
+    <button 
+      type="submit" 
+      style="width:100%;padding:12px;background:#007bff;color:white;border:none;cursor:pointer;border-radius:4px"
+    >
+      Se connecter
+    </button>
   </form>
-  <div id="msg" style="margin-top:15px;padding:10px"></div>
+  <div id="msg" style="margin-top:15px;padding:10px;border-radius:4px;display:none"></div>
+  
   <script>
     loginForm.onsubmit = async e => {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(e.target));
       console.log('Envoi:', body);
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      console.log('Réponse:', data);
-      if (res.ok) {
-        localStorage.setItem('token', data.token);
-        msg.style.background = '#d4edda';
-        msg.innerHTML = 'Connecté! <a href="/api/transactions/add">Aller au transfert</a>';
-      } else {
+      
+      msg.style.display = 'block';
+      msg.style.background = '#fff3cd';
+      msg.innerText = 'Connexion...';
+      
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        console.log('Réponse:', data);
+        
+        if (res.ok) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          msg.style.background = '#d4edda';
+          msg.innerHTML = 'Connecté en tant que <b>' + data.role + '</b><br>' +
+                          'Nom: ' + data.user.nom + ' ' + data.user.prenom + '<br>' +
+                          '<a href="/api/transactions/add">Aller au transfert</a>';
+        } else {
+          msg.style.background = '#f8d7da';
+          msg.innerText = 'Erreur: ' + data.error;
+        }
+      } catch (err) {
         msg.style.background = '#f8d7da';
-        msg.innerText = 'Erreur: ' + data.error;
+        msg.innerText = 'Erreur réseau: ' + err.message;
       }
     };
   </script>
