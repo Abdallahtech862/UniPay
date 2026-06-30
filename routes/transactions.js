@@ -17,7 +17,7 @@ router.get('/searchClient', async (req, res) => {
     if (!cleanPseudo && !cleanTel) {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
     }
-    console.log('test:', clenPseudo, cleanTel);
+    console.log('test:', cleanPseudo, cleanTel);
     // Cherche par pseudo OU telephone
     const user = await Client.findOne({
       $or: [
