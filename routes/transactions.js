@@ -9,7 +9,7 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 // ✅ Routes spécifiques AVANT les routes avec params
 
 // ✅ Routes spécifiques AVANT les routes avec params
-router.get('/searchClient', authUser, async (req, res) => {
+router.get('/searchClient', async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
