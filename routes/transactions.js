@@ -216,7 +216,7 @@ router.get('/data', async (req, res) => {
   }
 });
 // GET /api/transactions/stats - Stats dashboard
-router.get('/stats', verifyAdmin, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const jours = parseInt(req.query.jours) || 30;
     const dateDebut = new Date();
@@ -705,7 +705,7 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
-router.get('/', async (req, res) => {
+router.get('/aa', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
