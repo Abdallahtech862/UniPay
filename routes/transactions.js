@@ -705,7 +705,7 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
-router.get('/aa', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
