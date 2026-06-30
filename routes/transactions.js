@@ -6,28 +6,27 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 
 // ==================== ROUTES API JSON ====================
 // rechercher un seul client pour un transfert par QRCode
-// ✅ Routes spécifiques AVANT les routes avec params
-
-// ✅ Routes spécifiques AVANT les routes avec params
-router.get('/searchClient', async (req, res) => {
+router.get('/search', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
+    
     const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
-    const cleanTel = telephone && telephone !== 'undefined' ? telephone.replace('@', '') : null;
-
+    const cleanTel = telephone && telephone !== 'undefined' ? telephone : null;
+    
     if (!cleanPseudo && !cleanTel) {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
     }
-    console.log('test1', cleanPseudo, cleanTel);
-    let query = {};
-    if (cleanPseudo) query.pseudo = new RegExp(`^${cleanPseudo}$`, 'i'); 
-    if (cleanTel) query.telephone = cleanTel;
-    console.log('test2', cleanPseudo, cleanTel);
 
-    const user = await Client.findOne(cleanTel)
-      .select('_id nom prenom pseudo telephone photoProfil')
-      .lean();
-    console.log('test3',user,query, cleanPseudo, cleanTel);
+    // Cherche par pseudo OU telephone
+    const user = await Client.findOne({
+      $or: [
+        ...(cleanPseudo ? [{ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') }] : []),
+        ...(cleanTel ? [{ telephone: cleanTel }] : [])
+      ]
+    })
+    .select('_id nom prenom pseudo telephone photoProfil')
+    .lean();
+    
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
