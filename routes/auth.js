@@ -66,6 +66,42 @@ router.get('/login-test', (req, res) => {
 </body>
 </html>`);
 });
+
+router.post('/login', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+
+    // ✅ Cherche par email OU telephone
+    const user = await Client.findOne({
+      $or: [
+        { email: identifier },
+        { telephone: identifier }
+      ]
+    });
+
+    if (!user) return res.status(401).json({ error: 'Identifiants incorrects' });
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) return res.status(401).json({ error: 'Identifiants incorrects' });
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: user.role === 'admin'? '24h' : '7d' }
+    );
+    
+    res.json({ 
+      message: 'Connexion réussie', 
+      token, 
+      user,
+      role: user.role
+    });
+  } catch (err) {
+    console.error('Erreur login:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 //fin des test
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
@@ -346,34 +382,4 @@ router.post('/login-phonee', async (req, res) => {
   }
 });
 
-
-// POST /api/auth/login
-
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await Client.findOne({ email });
-    if (!user) return res.status(401).json({ error: 'Identifiants incorrects' });
-
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) return res.status(401).json({ error: 'Identifiants incorrects' });
-
-    const token = jwt.sign(
-      { id: user._id, role: user.role || 'user' }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: user.role === 'admin'? '24h' : '7d' }
-    );
-    
-    res.json({ 
-      message: 'Connexion réussie', 
-      token, 
-      user,
-      role: user.role 
-    });
-  } catch (err) {
-    console.error('Erreur login:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 module.exports = router;
