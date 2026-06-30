@@ -14,7 +14,7 @@ const transactionSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: ['envoi', 'reception', 'retrait', 'recharge'],
-    required: true
+    required: false//true
   },
   montant: { type: Number, required: true, min: 1 },
   frais: { type: Number, default: 0 },
