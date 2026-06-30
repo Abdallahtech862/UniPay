@@ -6,26 +6,40 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 
 // ==================== ROUTES API JSON ====================
 // rechercher un seul client pour un transfert par QRCode
-router.get('/searchClient', async (req, res) => {
+router.get('/searchClient', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     
     const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
-    const cleanTel = telephone && telephone !== 'undefined' ? telephone : null;
+    let cleanTel = telephone && telephone !== 'undefined' ? String(telephone) : null;
     
     if (!cleanPseudo && !cleanTel) {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
     }
 
-    // Cherche par pseudo OU telephone
-    const user = await Client.findOne({
-      $or: [
-        ...(cleanPseudo ? [{ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') }] : []),
-        ...(cleanTel ? [{ telephone: cleanTel }] : [])
-      ]
-    })
-    .select('_id nom prenom pseudo telephone photoProfil')
-    .lean();
+    // ✅ Normalise le numéro : retire +226, 00226, espaces, tirets
+    const normalizePhone = (num) => {
+      if (!num) return null;
+      return num.replace(/^\+?226|^00226|[\s-]/g, '');
+    };
+
+    const normalizedTel = normalizePhone(cleanTel);
+
+    let query = {};
+    if (cleanPseudo) {
+      query.$or = [{ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') }];
+    }
+    
+    if (normalizedTel) {
+      // Cherche avec ou sans +226 en BDD
+      const telRegex = new RegExp(`^(\\+?226|00226)?${normalizedTel}$`);
+      query.$or = query.$or || [];
+      query.$or.push({ telephone: telRegex });
+    }
+
+    const user = await Client.findOne(query)
+      .select('_id nom prenom pseudo telephone photoProfil')
+      .lean();
     
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
