@@ -24,7 +24,7 @@ router.get('/searchClient', async (req, res) => {
     if (cleanTel) query.telephone = cleanTel;
     console.log('test2', cleanPseudo, cleanTel);
 
-    const users = await Client.find({
+    const user = await Client.find({
       $or: [
         { pseudo: regex },
         { telephone: regex },
