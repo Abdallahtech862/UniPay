@@ -24,23 +24,10 @@ router.get('/searchClient', async (req, res) => {
     if (cleanTel) query.telephone = cleanTel;
     console.log('test2', cleanPseudo, cleanTel);
 
-    const user = await Client.find({
-      $or: [
-        { pseudo: regex },
-        { telephone: regex },
-        { nom: regex },
-        { prenom: regex }
-      ],
-      _id: { $ne: req.user.id } // Exclure soi-même
-    })
-    .select('nom prenom pseudo telephone photoProfil')
-    .limit(1)
-    .lean();
-
-    const users = await Client.findOne(query)
+    const user = await Client.findOne(query)
       .select('_id nom prenom pseudo telephone photoProfil')
       .lean();
-    console.log('test3',user, cleanPseudo, cleanTel);
+    console.log('test3',query, cleanPseudo, cleanTel);
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
