@@ -7,7 +7,7 @@ const Client = require('./models/Client');
 const setupAdmin = async () => {
   try {
     // ✅ Utilise DATABASE_URL ou MONGODB_URI selon Railway
-    const mongoUri = mongodb://mongo:WWWpSIAoHXfouCvtZUxcNiMBtzaHfqjP@mongodb.railway.internal:27017;
+    const mongoUri = 'mongodb://mongo:WWWpSIAoHXfouCvtZUxcNiMBtzaHfqjP@mongodb.railway.internal:27017';
     
     if (!mongoUri) {
       throw new Error('Aucune URI Mongo trouvée. Check DATABASE_URL ou MONGODB_URI');
