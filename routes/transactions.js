@@ -13,7 +13,7 @@ router.get('/searchClient', async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
-    const cleanTel = telephone && telephone !== 'undefined' ? telephone : null;
+    const cleanTel = telephone && telephone !== 'undefined' ? telephone.replace('@', '') : null;
 
     if (!cleanPseudo && !cleanTel) {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
