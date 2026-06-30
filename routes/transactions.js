@@ -7,7 +7,7 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 // ==================== ROUTES API JSON ====================
 // rechercher un seul client pour un transfert par QRCode
 // ✅ Routes spécifiques AVANT les routes avec params
-router.get('/searchClmient', async (req, res) => {
+router.get('/searchClient', async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     
