@@ -23,7 +23,21 @@ router.get('/searchClient', async (req, res) => {
     if (cleanPseudo) query.pseudo = new RegExp(`^${cleanPseudo}$`, 'i'); 
     if (cleanTel) query.telephone = cleanTel;
     console.log('test2', cleanPseudo, cleanTel);
-    const user = await Client.findOne(query)
+
+    const users = await Client.find({
+      $or: [
+        { pseudo: regex },
+        { telephone: regex },
+        { nom: regex },
+        { prenom: regex }
+      ],
+      _id: { $ne: req.user.id } // Exclure soi-même
+    })
+    .select('nom prenom pseudo telephone photoProfil')
+    .limit(1)
+    .lean();
+
+    const users = await Client.findOne(query)
       .select('_id nom prenom pseudo telephone photoProfil')
       .lean();
     console.log('test3',user, cleanPseudo, cleanTel);
@@ -333,7 +347,7 @@ router.get('/search', authUser, async (req, res) => {
       _id: { $ne: req.user.id } // Exclure soi-même
     })
     .select('nom prenom pseudo telephone photoProfil')
-    .limit(10)
+    .limit(50)
     .lean();
 
     res.json({ users });
