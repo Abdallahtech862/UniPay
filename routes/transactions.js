@@ -56,7 +56,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
   try {
     const { montant, operateur, numero } = req.body;
     const userId = req.user.id;
-    //console.log('req:', req.body);
+
     if (!montant || montant <= 0 ||!operateur ||!numero) {
       return res.status(400).json({ error: 'Données manquantes' });
     }
@@ -66,9 +66,8 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
-    // Calcule frais selon opérateur
     const FRAIS = {
-      'MTN Money': 0.01, // 1%
+      'MTN Money': 0.01,
       'Orange Money': 0.01,
       'Moov Money': 0.015,
       'SankMoney': 0.005,
@@ -86,19 +85,20 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
     }
 
-    // Crée transaction en attente
     const transaction = await Transaction.create({
       expediteur: userId,
-      type: 'retrait',
+      // destinataire: null, // ✅ Pas de destinataire pour retrait
+      type: 'retrait', // ✅ Type retrait
       montant,
       frais,
       operateur,
       numeroDestination: numero,
       status: 'en_attente',
-      soldeExpediteurAvant: user.solde
+      soldeExpediteurAvant: user.solde,
+      motif: `Retrait ${operateur}`
     });
 
-    const aa =res.json({
+    res.json({
       transactionId: transaction._id,
       montant,
       frais,
@@ -106,17 +106,15 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       operateur,
       numero
     });
-    console.log('res:', aa);
+
   } catch (err) {
     res.status(500).json({ error: err.message });
-    console.log('req0:',err.message);
   }
 });
-
 // POST /api/transactions/withdraw/confirm confirme la transaction de recuperation
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
-    const { transactionId, pin } = req.body; // pin vient de la page d'auth
+    const { transactionId, pin } = req.body;
     const userId = req.user.id;
 
     const user = await Client.findById(userId);
@@ -130,7 +128,6 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Transaction déjà traitée' });
     }
 
-    // Vérifie PIN
     const pinValid = await bcrypt.compare(pin, user.pin);
     if (!pinValid) {
       return res.status(401).json({ error: 'Code PIN incorrect' });
@@ -141,7 +138,6 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
-    // Débite + valide
     user.solde -= total;
     transaction.status = 'validee';
     transaction.soldeExpediteurApres = user.solde;
@@ -149,8 +145,6 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     await user.save();
     await transaction.save();
-
-    // TODO: Appel API opérateur Mobile Money ici
 
     res.json({
       success: true,
@@ -162,7 +156,6 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // GET /api/transactions/data - Données pour le tableau avec recherche historique de toute les transactions
 router.get('/data', async (req, res) => {
   try {
