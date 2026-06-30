@@ -18,15 +18,15 @@ router.get('/searchClient', async (req, res) => {
     if (!cleanPseudo && !cleanTel) {
       return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
     }
-    console.log('test1', clenPseudo, cleanTel);
+    console.log('test1', cleanPseudo, cleanTel);
     let query = {};
     if (cleanPseudo) query.pseudo = new RegExp(`^${cleanPseudo}$`, 'i'); 
     if (cleanTel) query.telephone = cleanTel;
-    console.log('test2', clenPseudo, cleanTel);
+    console.log('test2', cleanPseudo, cleanTel);
     const user = await Client.findOne(query)
       .select('_id nom prenom pseudo telephone photoProfil')
       .lean();
-    console.log('test',user, clenPseudo, cleanTel);
+    console.log('test3',user, cleanPseudo, cleanTel);
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
