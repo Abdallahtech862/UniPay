@@ -3,23 +3,19 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const Client = require('./models/Client');
-
 const setupAdmin = async () => {
   try {
-    // ✅ Utilise DATABASE_URL ou MONGODB_URI selon Railway
     const mongoUri = 'mongodb://mongo:WWWpSIAoHXfouCvtZUxcNiMBtzaHfqjP@mongodb.railway.internal:27017';
-    
-    if (!mongoUri) {
-      throw new Error('Aucune URI Mongo trouvée. Check DATABASE_URL ou MONGODB_URI');
-    }
-
-    console.log('Connexion à Mongo...');
     await mongoose.connect(mongoUri);
-    console.log('MongoDB connecté');
+    
+    console.log('=== IDENTIFIANTS ADMIN ===');
+    console.log('Email:', process.env.ADMIN_EMAIL);
+    console.log('Password:', process.env.ADMIN_PASSWORD);
+    console.log('=========================');
 
     const existingAdmin = await Client.findOne({ email: process.env.ADMIN_EMAIL });
     if (existingAdmin) {
-      console.log('Admin existe déjà');
+      console.log('Admin existe déjà en DB');
       process.exit(0);
     }
 
@@ -36,7 +32,6 @@ const setupAdmin = async () => {
     });
     
     console.log('✅ Admin créé avec succès');
-    console.log('Email:', process.env.ADMIN_EMAIL);
     process.exit(0);
   } catch (err) {
     console.error('Erreur:', err.message);
@@ -44,4 +39,4 @@ const setupAdmin = async () => {
   }
 };
 
-setupAdmin();
+
