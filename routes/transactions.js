@@ -99,7 +99,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       montant,
       frais,
       operateur,
-      numeroDestination: numero,
+      destination: numero,
       status: 'en_attente',
       soldeExpediteurAvant: user.solde,
       motif: `Retrait ${operateur}`
@@ -109,6 +109,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       transactionId: transaction._id,
       montant,
       frais,
+      destination,
       total,
       operateur,
       numero
