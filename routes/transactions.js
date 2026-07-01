@@ -727,6 +727,7 @@ router.get('/', async (req, res) => {
     tr.annulee { opacity: 0.5; background: #ffe6e6; }
     tr.partielle { background: #fff3cd; }
    .montant { color: #28a745; font-weight: bold; }
+   .solde-apres { color: #6c757d; font-size: 12px; }
    .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     select, input, button { padding: 8px; }
    .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
@@ -807,13 +808,13 @@ router.get('/', async (req, res) => {
         return;
       }
       
-      let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Tél Exp.</th><th>Destinataire</th><th>Tél Dest.</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
+      let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Tél Exp.</th><th>Solde Exp.</th><th>Destinataire</th><th>Tél Dest.</th><th>Solde Dest.</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
       
       transactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
         
-        const date = new Date(t.createdAt).toLocaleString('fr-FR'); // ✅ createdAt
-        const peutAnnuler = !t.annulee && t.status === 'validee'; // ✅ Plus de limite 24h
+        const date = new Date(t.createdAt).toLocaleString('fr-FR');
+        const peutAnnuler = !t.annulee && t.status === 'validee';
         
         let statut = '<span class="badge-ok">VALIDÉE</span>';
         let rowClass = '';
@@ -832,8 +833,10 @@ router.get('/', async (req, res) => {
         html += '<td>' + date + '</td>';
         html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
         html += '<td>' + t.expediteur.telephone + '</td>';
+        html += '<td class="solde-apres">' + (t.soldeExpediteurApres?.toLocaleString() || '0') + ' FCFA</td>';
         html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
         html += '<td>' + t.destinataire.telephone + '</td>';
+        html += '<td class="solde-apres">' + (t.soldeDestinataireApres?.toLocaleString() || '0') + ' FCFA</td>';
         html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA';
         if (t.annulee && t.montantAnnule < t.montant) {
           html += '<br><small>Annulé: ' + t.montantAnnule.toLocaleString() + ' FCFA</small>';
@@ -862,13 +865,13 @@ router.get('/', async (req, res) => {
     
     function exportCSV() {
       if (!currentTransactions.length) { alert('Aucune donnée'); return; }
-      let csv = 'Date,Expéditeur,Tél Exp,Destinataire,Tél Dest,Montant,Montant Annulé,Motif,Statut\\n';
+      let csv = 'Date,Expéditeur,Tél Exp,Solde Exp Après,Destinataire,Tél Dest,Solde Dest Après,Montant,Montant Annulé,Motif,Statut\\n';
       currentTransactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
-        const date = new Date(t.createdAt).toLocaleString('fr-FR'); // ✅ createdAt
+        const date = new Date(t.createdAt).toLocaleString('fr-FR');
         let statut = 'Validée';
         if (t.annulee) statut = t.montantAnnule < t.montant ? 'Annulée partielle' : 'Annulée';
-        csv += '"' + date + '","' + t.expediteur.prenom + ' ' + t.expediteur.nom + '","' + t.expediteur.telephone + '","' + t.destinataire.prenom + ' ' + t.destinataire.nom + '","' + t.destinataire.telephone + '",' + t.montant + ',' + (t.montantAnnule || 0) + ',"' + (t.motif || '') + '","' + statut + '"\\n';
+        csv += '"' + date + '","' + t.expediteur.prenom + ' ' + t.expediteur.nom + '","' + t.expediteur.telephone + '",' + (t.soldeExpediteurApres || 0) + ',"' + t.destinataire.prenom + ' ' + t.destinataire.nom + '","' + t.destinataire.telephone + '",' + (t.soldeDestinataireApres || 0) + ',' + t.montant + ',' + (t.montantAnnule || 0) + ',"' + (t.motif || '') + '","' + statut + '"\\n';
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       const link = document.createElement('a');
@@ -884,20 +887,22 @@ router.get('/', async (req, res) => {
       doc.setFontSize(16);
       doc.text('Historique Transactions UniPay', 14, 15);
       const tableData = currentTransactions.filter(t => t.expediteur && t.destinataire).map(t => [
-        new Date(t.createdAt).toLocaleString('fr-FR'), // ✅ createdAt
+        new Date(t.createdAt).toLocaleString('fr-FR'),
         t.expediteur.prenom + ' ' + t.expediteur.nom,
         t.expediteur.telephone,
+        (t.soldeExpediteurApres || 0).toLocaleString() + ' FCFA',
         t.destinataire.prenom + ' ' + t.destinataire.nom,
         t.destinataire.telephone,
+        (t.soldeDestinataireApres || 0).toLocaleString() + ' FCFA',
         t.montant.toLocaleString() + ' FCFA',
         t.motif || '-',
         t.annulee ? (t.montantAnnule < t.montant ? 'Annulée partielle' : 'Annulée') : 'Validée'
       ]);
       doc.autoTable({
-        head: [['Date', 'Expéditeur', 'Tél Exp', 'Destinataire', 'Tél Dest', 'Montant', 'Motif', 'Statut']],
+        head: [['Date', 'Expéditeur', 'Tél Exp', 'Solde Exp', 'Destinataire', 'Tél Dest', 'Solde Dest', 'Montant', 'Motif', 'Statut']],
         body: tableData,
         startY: 25,
-        styles: { fontSize: 7 }
+        styles: { fontSize: 6 }
       });
       doc.save('transactions.pdf');
     }
