@@ -23,6 +23,11 @@ const transactionSchema = new mongoose.Schema({
   soldeExpediteurApres: Number,
   soldeDestinataireApres: Number,
   // Champs spécifiques retrait
+   expediteurSupprime: { type: Boolean, default: false }, // ✅ Nouveau
+  destinataireSupprime: { type: Boolean, default: false }, // ✅ Nouveau
+  expediteurNom: String, // ✅ Garde le nom après suppression
+  destinataireNom: String, // ✅ Garde le nom après suppression
+
   operateur: String, // MTN Money, Wave, etc
   numeroDestination: String, // numéro mobile money ou carte
   annulee: { type: Boolean, default: false },
