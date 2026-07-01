@@ -109,7 +109,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       transactionId: transaction._id,
       montant,
       frais,
-      numeroDestination,
+      //numeroDestination,
       total,
       operateur,
       numero
