@@ -28,8 +28,37 @@ router.get('/cloudinary-test', async (req, res) => {
     res.status(500).json({ error: err.message, details: err });
   }
 });
-// test login transfert
-// test login transfert
+
+const uploadToCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    console.log('Cloudinary upload start. Cloud:', process.env.CLOUDINARY_CLOUD_NAME);
+    
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+      return reject(new Error('Variables Cloudinary manquantes'));
+    }
+
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'unipay_clients',
+        resource_type: 'image',
+        timeout: 60000
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Cloudinary ERROR complet:', JSON.stringify(error, null, 2));
+          reject(new Error(`Cloudinary: ${error.message || error}`));
+        } else {
+          console.log('Cloudinary SUCCESS:', result.secure_url);
+          resolve(result);
+        }
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+};
+
+
+// test login admin
 router.get('/login-test', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html>
@@ -108,16 +137,12 @@ router.get('/login-test', (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { identifier, password } = req.body;
-
-    // ✅ Cherche par email OU telephone
     const user = await Client.findOne({
-      $or: [
-        { email: identifier },
-        { telephone: identifier }
-      ]
+      $or: [{ email: identifier }, { telephone: identifier }]
     });
 
     if (!user) return res.status(401).json({ error: 'Identifiants incorrects' });
+    if (user.bloque) return res.status(403).json({ error: 'Compte bloqué. Contactez le support.' }); // ✅
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(401).json({ error: 'Identifiants incorrects' });
@@ -128,46 +153,12 @@ router.post('/login', async (req, res) => {
       { expiresIn: user.role === 'admin'? '24h' : '7d' }
     );
     
-    res.json({ 
-      message: 'Connexion réussie', 
-      token, 
-      user,
-      role: user.role
-    });
+    res.json({ message: 'Connexion réussie', token, user, role: user.role });
   } catch (err) {
-    console.error('Erreur login:', err);
     res.status(500).json({ error: err.message });
   }
 });
-
 //fin des test
-const uploadToCloudinary = (buffer) => {
-  return new Promise((resolve, reject) => {
-    console.log('Cloudinary upload start. Cloud:', process.env.CLOUDINARY_CLOUD_NAME);
-    
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
-      return reject(new Error('Variables Cloudinary manquantes'));
-    }
-
-    const stream = cloudinary.uploader.upload_stream(
-      { 
-        folder: 'unipay_clients',
-        resource_type: 'image',
-        timeout: 60000
-      },
-      (error, result) => {
-        if (error) {
-          console.error('Cloudinary ERROR complet:', JSON.stringify(error, null, 2));
-          reject(new Error(`Cloudinary: ${error.message || error}`));
-        } else {
-          console.log('Cloudinary SUCCESS:', result.secure_url);
-          resolve(result);
-        }
-      }
-    );
-    streamifier.createReadStream(buffer).pipe(stream);
-  });
-};
 
 // test register
 
