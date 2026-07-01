@@ -324,10 +324,10 @@ router.get('/admin', async (req, res) => {
         function voirCNI(client) {
           let html = '<p><b>' + client.prenom + ' ' + client.nom + '</b></p>';
           if (client.cniRecto) {
-            html += '<p>Recto:</p><img src="' + client.cniRecto + '">';
+            html += '<p>Recto:</p><img src="' + client.cartRecto + '">';
           }
           if (client.cniVerso) {
-            html += '<p>Verso:</p><img src="' + client.cniVerso + '">';
+            html += '<p>Verso:</p><img src="' + client.cartVerso + '">';
           }
           if (!client.cniRecto && !client.cniVerso) {
             html += '<p style="color:#999">Aucune pièce d\\'identité uploadée</p>';
