@@ -134,7 +134,7 @@ router.get('/login', (req, res) => {
 </html>`);
 });
 
-router.post('/loginn', async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { identifier, password } = req.body;
     const user = await Client.findOne({
@@ -158,10 +158,8 @@ router.post('/loginn', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-//fin des test
 
-// test register
-
+/// route pour creer des nouveaus utilisateurs
 router.post('/register', upload.fields([
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
@@ -349,47 +347,6 @@ router.post('/login-phone', async (req, res) => {
 });
 
 
-router.post('/loginnn', async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-
-    // Cherche par tel OU email
-    const user = await Client.findOne({
-      $or: [{ telephone: identifier }, { email: identifier }]
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Identifiants incorrects' });
-    }
-
-    // Compare le password avec le hash bcrypt
-    const isMatch = await bcrypt.compare(password, user.password);
-    
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Identifiants incorrects' });
-    }
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({
-      message: 'Connexion réussie',
-      token,
-      user: {
-        id: user._id,
-        nom: user.nom,
-        prenom: user.prenom,
-        pseudo: user.pseudo,
-        telephone: user.telephone,
-        email: user.email,
-        solde: user.solde
-      }
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 
 // POST /api/auth/check-phone
 router.post('/check-phone', async (req, res) => {
@@ -399,21 +356,6 @@ router.post('/check-phone', async (req, res) => {
     res.json({ exists:!!client });
   } catch (err) {
     console.error('Erreur check-phone:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/auth/login-phone
-router.post('/login-phonee', async (req, res) => {
-  try {
-    const { telephone } = req.body;
-    const client = await Client.findOne({ telephone }).select('-password');
-    if (!client) return res.status(404).json({ error: 'Compte introuvable' });
-
-    const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion réussie', token, user: client });
-  } catch (err) {
-    console.error('Erreur login-phone:', err);
     res.status(500).json({ error: err.message });
   }
 });
