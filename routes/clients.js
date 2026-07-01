@@ -472,7 +472,21 @@ router.post('/', upload.fields([
     res.status(400).json({ error: err.message });
   }
 });
-
+// PUT /api/clients/:id/block - Bloquer/Débloquer
+router.put('/:id/block', async (req, res) => {
+  try {
+    const { bloque } = req.body;
+    const client = await Client.findByIdAndUpdate(
+      req.params.id,
+      { bloque },
+      { new: true }
+    );
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
+    res.json({ success: true, client });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // GET un client - DOIT ÊTRE EN DERNIER
 router.put('/:id', async (req, res) => {
   try {
