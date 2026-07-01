@@ -450,8 +450,8 @@ router.get('/pending-view', async (req, res) => {
 
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 
-// GET /api/transactions/data - Données pour le tableau avec recherche historique de toute les transactions
-router.get('/data',verifyAdmin, async (req, res) => {
+// GET /api/transactions/data - Données pour le tableau avec recherche historique
+router.get('/data', verifyAdmin, async (req, res) => {
   try {
     const { client, debut, fin, q, montantMin, montantMax } = req.query;
     let query = {};
@@ -461,11 +461,11 @@ router.get('/data',verifyAdmin, async (req, res) => {
       query = { $or: [{ expediteur: client }, { destinataire: client }] };
     }
     
-    // Filtre par date
+    // Filtre par date - utilise createdAt, pas date
     if (debut || fin) {
-      query.date = {};
-      if (debut) query.date.$gte = new Date(debut);
-      if (fin) query.date.$lte = new Date(fin + 'T23:59:59');
+      query.createdAt = {}; // ✅ createdAt au lieu de date
+      if (debut) query.createdAt.$gte = new Date(debut);
+      if (fin) query.createdAt.$lte = new Date(fin + 'T23:59:59');
     }
     
     // Filtre par montant
@@ -477,28 +477,36 @@ router.get('/data',verifyAdmin, async (req, res) => {
     
     let transactions = await Transaction.find(query)
      .populate('expediteur', 'nom prenom telephone')
-     .populate('destinataire', 'nom prenom telephone')
-     .sort({ date: -1 })
+     .populate('destinataire', 'nom prenom telephone') // Ne crash pas si null
+     .sort({ createdAt: -1 }) // ✅ createdAt au lieu de date
      .lean();
     
-    // Filtrer transactions avec clients supprimés
-    transactions = transactions.filter(t => t.expediteur && t.destinataire);
+    // ❌ SUPPRIME CETTE LIGNE - elle vire les retraits
+    // transactions = transactions.filter(t => t.expediteur && t.destinataire);
     
-    // Recherche texte : nom ou téléphone
+    // ✅ Garde seulement les tx où expediteur existe
+    transactions = transactions.filter(t => t.expediteur);
+    
+    // Recherche texte : nom, téléphone, opérateur, numéro destination
     if (q && q.trim() !== '') {
       const search = q.toLowerCase();
       transactions = transactions.filter(t => {
-        const expNom = `${t.expediteur.prenom} ${t.expediteur.nom}`.toLowerCase();
-        const destNom = `${t.destinataire.prenom} ${t.destinataire.nom}`.toLowerCase();
-        const expTel = t.expediteur.telephone || '';
-        const destTel = t.destinataire.telephone || '';
+        const expNom = `${t.expediteur?.prenom || ''} ${t.expediteur?.nom || ''}`.toLowerCase();
+        const destNom = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''}`.toLowerCase();
+        const expTel = t.expediteur?.telephone || '';
+        const destTel = t.destinataire?.telephone || '';
+        const operateur = t.operateur || '';
+        const numDest = t.numeroDestination || '';
+        
         return expNom.includes(search) || destNom.includes(search) || 
-               expTel.includes(search) || destTel.includes(search);
+               expTel.includes(search) || destTel.includes(search) ||
+               operateur.toLowerCase().includes(search) || // ✅ Cherche opérateur
+               numDest.includes(search); // ✅ Cherche numéro retrait
       });
     }
     
     const volumeTotal = transactions
-      .filter(t => !t.annulee)
+      .filter(t => t.status !== 'annulee') // ✅ utilise status au lieu de annulee
       .reduce((sum, t) => sum + t.montant, 0);
     
     res.json({ 
@@ -506,10 +514,10 @@ router.get('/data',verifyAdmin, async (req, res) => {
       stats: { total: transactions.length, volumeTotal } 
     });
   } catch (error) {
+    console.error('Erreur /data:', error);
     res.status(500).json({ error: error.message });
   }
 });
-
 
 // GET /api/transactions/stats - Stats dashboard
 router.get('/stats',verifyAdmin, async (req, res) => {
@@ -1105,6 +1113,8 @@ router.get('/', async (req, res) => {
 });
 
 // ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
+
+
 router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
