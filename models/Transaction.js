@@ -26,8 +26,10 @@ const transactionSchema = new mongoose.Schema({
   operateur: String, // MTN Money, Wave, etc
   numeroDestination: String, // numéro mobile money ou carte
   annulee: { type: Boolean, default: false },
+   montantAnnule: { type: Number, default: 0 }, // ✅ Nouveau
   dateAnnulation: Date,
   dateValidation: Date
 }, { timestamps: true });
+//
 
 module.exports = mongoose.model('Transaction', transactionSchema);
