@@ -342,7 +342,7 @@ router.get('/admin', async (req, res) => {
 
         async function supprimerClient(id) {
           if (!confirm('Supprimer ce client?')) return;
-          const res = await fetch('/api/clients/' + id, {
+          const res = await fetch('/api/clients/' + id + '/delete', {
             method: 'DELETE',
             headers: { 'Authorization': 'Bearer ' + token }
           });
@@ -393,7 +393,64 @@ router.get('/admin', async (req, res) => {
   `);
 });
 // ==================== ROUTES API ====================
+// DELETE /api/clients/:id - Supprimer un client
+router.delete('/:id/delete', async (req, res) => {
+  try {
+    const clientId = req.params.id;
+    
+    // 1. Vérifie que le client existe
+    const client = await Client.findById(clientId);
+    if (!client) {
+      return res.status(404).json({ error: 'Client introuvable' });
+    }
 
+    // 2. Empêche la suppression d'un admin
+    if (client.role === 'admin') {
+      return res.status(403).json({ error: 'Impossible de supprimer un administrateur' });
+    }
+
+    // 3. Vérifie qu'il n'a pas de solde
+    if (client.solde > 0) {
+      return res.status(400).json({ 
+        error: `Impossible de supprimer: solde de ${client.solde.toLocaleString()} FCFA restant` 
+      });
+    }
+
+    // 4. Vérifie qu'il n'a pas de transactions en attente
+    const txEnAttente = await Transaction.findOne({ 
+      $or: [{ expediteur: clientId }, { destinataire: clientId }],
+      status: 'en_attente'
+    });
+    
+    if (txEnAttente) {
+      return res.status(400).json({ 
+        error: 'Impossible de supprimer: transactions en attente' 
+      });
+    }
+
+    // 5. Supprime le client
+    await Client.findByIdAndDelete(clientId);
+
+    // 6. Optionnel: anonymiser les transactions passées au lieu de les supprimer
+    await Transaction.updateMany(
+      { expediteur: clientId },
+      { $set: { expediteurSupprime: true, expediteurNom: client.prenom + ' ' + client.nom } }
+    );
+    await Transaction.updateMany(
+      { destinataire: clientId },
+      { $set: { destinataireSupprime: true, destinataireNom: client.prenom + ' ' + client.nom } }
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Client supprimé avec succès' 
+    });
+
+  } catch (err) {
+    console.error('Erreur suppression client:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // GET tous les clients
 router.get('/', async (req, res) => {
   try {
