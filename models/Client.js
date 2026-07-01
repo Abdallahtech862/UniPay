@@ -10,7 +10,10 @@ const clientSchema = new mongoose.Schema({
   role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
   pseudo: { type: String, unique: true, sparse: true },
   photoProfil: { type: String, default: null },
-
+  //cniRecto: String, // ✅ URL image CNI recto
+  //cniVerso: String, // ✅ URL image CNI verso
+  bloque: { type: Boolean, default: false }, // ✅ Nouveau
+  //
   carteRecto: { type: String, default: null },
   carteVerso: { type: String, default: null },
   limiteJournaliere: { type: Number, default: 500000 },
