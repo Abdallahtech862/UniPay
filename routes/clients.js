@@ -129,11 +129,27 @@ router.get('/admin', async (req, res) => {
         table { border-collapse: collapse; width: 100%; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #f2f2f2; }
-        button { padding: 5px 10px; margin: 2px; cursor: pointer; }
-     .delete { background: #ff4444; color: white; border: none; }
-     .edit { background: #44bb44; color: white; border: none; }
+        button { padding: 5px 10px; margin: 2px; cursor: pointer; border: none; border-radius: 3px; }
+        .delete { background: #ff4444; color: white; }
+        .edit { background: #44bb44; color: white; }
+        .block { background: #f59e0b; color: white; }
+        .unblock { background: #10b981; color: white; }
+        .view { background: #3b82f6; color: white; }
+        .limit { background: #8b5cf6; color: white; }
         #logout { float: right; }
         img.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .search-bar { margin: 15px 0; display: flex; gap: 10px; }
+        .search-bar input { padding: 8px; flex: 1; max-width: 300px; }
+        .badge-bloque { background: #ef4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .badge-actif { background: #10b981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
+        .modal-content { margin: 5% auto; padding: 20px; background: white; width: 80%; max-width: 600px; border-radius: 8px; }
+        .modal-content img { width: 100%; max-height: 400px; object-fit: contain; margin: 10px 0; }
+        .close { float: right; font-size: 28px; cursor: pointer; }
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input { width: 100%; padding: 8px; box-sizing: border-box; }
+        .btn-primary { background: #007bff; color: white; padding: 10px 20px; width: 100%; margin-top: 10px; }
       </style>
     </head>
     <body>
@@ -144,11 +160,46 @@ router.get('/admin', async (req, res) => {
       <a href="/api/transactions/dashboard"><button>Dashboard</button></a>
       <a href="/api/clients/add"><button>+ Ajouter un client</button></a>
 
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Rechercher par pseudo ou téléphone..." onkeyup="filterClients()">
+        <button onclick="loadClients()">Actualiser</button>
+      </div>
+
       <div id="content">Chargement...</div>
+
+      <!-- Modal CNI -->
+      <div id="cniModal" class="modal">
+        <div class="modal-content">
+          <span class="close" onclick="closeModal('cniModal')">&times;</span>
+          <h3>Pièces d'identité</h3>
+          <div id="cniContent"></div>
+        </div>
+      </div>
+
+      <!-- Modal Limites -->
+      <div id="limitModal" class="modal">
+        <div class="modal-content">
+          <span class="close" onclick="closeModal('limitModal')">&times;</span>
+          <h3>Modifier les limites</h3>
+          <div id="limitContent">
+            <div class="form-group">
+              <label>Limite Journalière (FCFA)</label>
+              <input type="number" id="limitJour" placeholder="Ex: 100000">
+            </div>
+            <div class="form-group">
+              <label>Limite Mensuelle (FCFA)</label>
+              <input type="number" id="limitMois" placeholder="Ex: 1000000">
+            </div>
+            <button class="btn-primary" onclick="saveLimites()">Enregistrer</button>
+          </div>
+        </div>
+      </div>
 
       <script>
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/api/auth/login';
+        let allClients = [];
+        let currentClientId = null;
 
         async function loadClients() {
           const res = await fetch('/api/clients', {
@@ -161,15 +212,31 @@ router.get('/admin', async (req, res) => {
             return;
           }
 
-          const clients = await res.json();
-          renderTable(clients);
+          allClients = await res.json();
+          renderTable(allClients);
+        }
+
+        function filterClients() {
+          const search = document.getElementById('searchInput').value.toLowerCase();
+          const filtered = allClients.filter(c => 
+            c.pseudo?.toLowerCase().includes(search) || 
+            c.telephone?.includes(search) ||
+            c.nom?.toLowerCase().includes(search) ||
+            c.prenom?.toLowerCase().includes(search)
+          );
+          renderTable(filtered);
         }
 
         function renderTable(clients) {
-          let html = '<table><tr><th>Photo</th><th>Pseudo</th><th>Nom</th><th>Téléphone</th><th>Solde</th><th>Limite J/M</th><th>Actions</th></tr>';
+          let html = '<table><tr><th>Photo</th><th>Pseudo</th><th>Nom</th><th>Téléphone</th><th>Solde</th><th>Limite J/M</th><th>Statut</th><th>Actions</th></tr>';
 
           clients.forEach(c => {
             const photo = c.photoProfil? '<img src="' + c.photoProfil + '" class="avatar">' : '-';
+            const statut = c.bloque ? '<span class="badge-bloque">BLOQUÉ</span>' : '<span class="badge-actif">ACTIF</span>';
+            const btnBlock = c.bloque 
+              ? '<button class="unblock" onclick="toggleBlock(\\'' + c._id + '\\', false)">Débloquer</button>'
+              : '<button class="block" onclick="toggleBlock(\\'' + c._id + '\\', true)">Bloquer</button>';
+            
             html += \`
               <tr id="row-\${c._id}">
                 <td>\${photo}</td>
@@ -178,8 +245,12 @@ router.get('/admin', async (req, res) => {
                 <td>\${c.telephone}</td>
                 <td>\${c.solde.toLocaleString()} FCFA</td>
                 <td>\${(c.limiteJournaliere||0).toLocaleString()}/\${(c.limiteMensuelle||0).toLocaleString()}</td>
+                <td>\${statut}</td>
                 <td>
-                  <button class="edit" onclick="modifierClient('\${c._id}', '\${c.nom}', \${c.solde})">Solde</button>
+                  <button class="edit" onclick="modifierSolde('\${c._id}', '\${c.nom}', \${c.solde})">Solde</button>
+                  <button class="limit" onclick="modifierLimites('\${c._id}', \${c.limiteJournaliere||0}, \${c.limiteMensuelle||0})">Limites</button>
+                  <button class="view" onclick='voirCNI(\${JSON.stringify(c)})'>CNI</button>
+                  \${btnBlock}
                   <button class="delete" onclick="supprimerClient('\${c._id}')">Supprimer</button>
                 </td>
               </tr>
@@ -188,6 +259,85 @@ router.get('/admin', async (req, res) => {
 
           html += '</table>';
           document.getElementById('content').innerHTML = html;
+        }
+
+        function modifierLimites(id, limitJour, limitMois) {
+          currentClientId = id;
+          document.getElementById('limitJour').value = limitJour;
+          document.getElementById('limitMois').value = limitMois;
+          document.getElementById('limitModal').style.display = 'block';
+        }
+
+        async function saveLimites() {
+          const limitJour = Number(document.getElementById('limitJour').value);
+          const limitMois = Number(document.getElementById('limitMois').value);
+          
+          if (!limitJour || !limitMois) {
+            alert('Veuillez remplir les deux limites');
+            return;
+          }
+
+          const res = await fetch('/api/clients/' + currentClientId, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ 
+              limiteJournaliere: limitJour,
+              limiteMensuelle: limitMois 
+            })
+          });
+          
+          if (res.ok) {
+            alert('Limites modifiées avec succès');
+            closeModal('limitModal');
+            loadClients();
+          } else {
+            const data = await res.json();
+            alert('Erreur: ' + data.error);
+          }
+        }
+
+        async function toggleBlock(id, bloquer) {
+          const action = bloquer ? 'bloquer' : 'débloquer';
+          if (!confirm('Voulez-vous ' + action + ' ce client ?')) return;
+          
+          const res = await fetch('/api/clients/' + id + '/block', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ bloque: bloquer })
+          });
+          
+          if (res.ok) {
+            alert('Client ' + action + ' avec succès');
+            loadClients();
+          } else {
+            const data = await res.json();
+            alert('Erreur: ' + data.error);
+          }
+        }
+
+        function voirCNI(client) {
+          let html = '<p><b>' + client.prenom + ' ' + client.nom + '</b></p>';
+          if (client.cniRecto) {
+            html += '<p>Recto:</p><img src="' + client.cniRecto + '">';
+          }
+          if (client.cniVerso) {
+            html += '<p>Verso:</p><img src="' + client.cniVerso + '">';
+          }
+          if (!client.cniRecto && !client.cniVerso) {
+            html += '<p style="color:#999">Aucune pièce d\\'identité uploadée</p>';
+          }
+          document.getElementById('cniContent').innerHTML = html;
+          document.getElementById('cniModal').style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+          document.getElementById(modalId).style.display = 'none';
         }
 
         async function supprimerClient(id) {
@@ -205,7 +355,7 @@ router.get('/admin', async (req, res) => {
           }
         }
 
-        async function modifierClient(id, nom, soldeActuel) {
+        async function modifierSolde(id, nom, soldeActuel) {
           const nouveauSolde = prompt('Nouveau solde pour ' + nom + ':', soldeActuel);
           if (nouveauSolde === null) return;
           const res = await fetch('/api/clients/' + id, {
@@ -230,13 +380,18 @@ router.get('/admin', async (req, res) => {
           window.location.href = '/api/auth/login';
         }
 
+        window.onclick = function(event) {
+          if (event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+          }
+        }
+
         loadClients();
       </script>
     </body>
     </html>
   `);
 });
-
 // ==================== ROUTES API ====================
 
 // GET tous les clients
@@ -319,35 +474,25 @@ router.post('/', upload.fields([
 });
 
 // GET un client - DOIT ÊTRE EN DERNIER
-router.get('/:id', async (req, res) => {
-  try {
-    const client = await Client.findById(req.params.id).select('-password');
-    if (!client) return res.status(404).json({ error: 'Client introuvable' });
-    res.json(client);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// PUT modifier client
 router.put('/:id', async (req, res) => {
   try {
-    const client = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
+    const { solde, limiteJournaliere, limiteMensuelle } = req.body;
+    const update = {};
+    
+    if (solde !== undefined) update.solde = solde;
+    if (limiteJournaliere !== undefined) update.limiteJournaliere = limiteJournaliere;
+    if (limiteMensuelle !== undefined) update.limiteMensuelle = limiteMensuelle;
+    
+    const client = await Client.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { new: true }
+    );
+    
     if (!client) return res.status(404).json({ error: 'Client introuvable' });
-    res.json({ message: 'Client modifié', client });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// DELETE supprimer client
-router.delete('/:id', async (req, res) => {
-  try {
-    const client = await Client.findByIdAndDelete(req.params.id);
-    if (!client) return res.status(404).json({ error: 'Client introuvable' });
-    res.json({ message: 'Client supprimé' });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.json({ success: true, client });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
