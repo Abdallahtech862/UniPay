@@ -62,6 +62,14 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
     }
 
     const user = await Client.findById(userId);
+
+    // ✅ Check si client bloqué
+    if (user.bloque) {
+      return res.status(403).json({
+        error: 'Compte suspendu. Impossible d’effectuer un retrait.'
+      });
+    }
+
     if (user.solde < montant) {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
@@ -87,8 +95,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
 
     const transaction = await Transaction.create({
       expediteur: userId,
-      // destinataire: null, // ✅ Pas de destinataire pour retrait
-      type: 'retrait', // ✅ Type retrait
+      type: 'retrait',
       montant,
       frais,
       operateur,
@@ -114,42 +121,44 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
 // POST /api/transactions/withdraw/confirm confirme la transaction de recuperation
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
-    const { transactionId, pin } = req.body;
+    const { transactionId } = req.body;
     const userId = req.user.id;
 
     const user = await Client.findById(userId);
-    const transaction = await Transaction.findById(transactionId);
 
-    if (!transaction || transaction.expediteur.toString()!== userId) {
-      return res.status(404).json({ error: 'Transaction introuvable' });
+    // ✅ Check blocage avant de confirmer
+    if (user.bloque) {
+      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
     }
 
-    if (transaction.status!== 'en_attente') {
-      return res.status(400).json({ error: 'Transaction déjà traitée' });
-    }
+    const tx = await Transaction.findOne({
+      _id: transactionId,
+      expediteur: userId,
+      status: 'en_attente'
+    });
 
-    const pinValid = await bcrypt.compare(pin, user.pin);
-    if (!pinValid) {
-      return res.status(401).json({ error: 'Code PIN incorrect' });
-    }
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
 
-    const total = transaction.montant + transaction.frais;
+    const total = tx.montant + tx.frais;
     if (user.solde < total) {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
-    user.solde -= total;
-    transaction.status = 'validee';
-    transaction.soldeExpediteurApres = user.solde;
-    transaction.dateValidation = new Date();
+    const nouveauSolde = user.solde - total;
 
-    await user.save();
-    await transaction.save();
+    await Promise.all([
+      Client.findByIdAndUpdate(userId, { solde: nouveauSolde }),
+      Transaction.findByIdAndUpdate(transactionId, {
+        status: 'validee',
+        soldeExpediteurApres: nouveauSolde
+      })
+    ]);
 
     res.json({
-      success: true,
-      nouveauSolde: user.solde,
-      transaction
+      message: 'Retrait confirmé',
+      nouveauSolde,
+      montantRetire: tx.montant,
+      frais: tx.frais
     });
 
   } catch (err) {
@@ -214,6 +223,227 @@ router.get('/data', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// GET /api/transactions/pending - Admin voit les retraits/transferts en attente
+router.get('/pending', async (req, res) => {
+  try {
+    // Optionnel: vérif si admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
+
+    const transactions = await Transaction.find({ 
+      status: 'en_attente' 
+    })
+    .populate('expediteur', 'nom prenom telephone solde bloque')
+    .populate('destinataire', 'nom prenom telephone')
+    .sort({ createdAt: -1 })
+    .lean();
+
+    res.json({ 
+      total: transactions.length,
+      transactions 
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/transactions/:id/validate - Valider un retrait/transfert
+router.post('/:id/validate', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
+
+    const tx = await Transaction.findById(req.params.id)
+      .populate('expediteur');
+
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaction introuvable' });
+    }
+
+    if (tx.status !== 'en_attente') {
+      return res.status(400).json({ error: 'Transaction déjà traitée' });
+    }
+
+    // Vérif solde encore suffisant
+    const total = tx.montant + (tx.frais || 0);
+    if (tx.expediteur.solde < total) {
+      await Transaction.findByIdAndUpdate(req.params.id, { 
+        status: 'annulee',
+        motifAnnulation: 'Solde insuffisant au moment de la validation'
+      });
+      return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
+    }
+
+    // Vérif client pas bloqué entre-temps
+    if (tx.expediteur.bloque) {
+      await Transaction.findByIdAndUpdate(req.params.id, { 
+        status: 'annulee',
+        motifAnnulation: 'Client suspendu'
+      });
+      return res.status(403).json({ error: 'Client suspendu. Transaction annulée.' });
+    }
+
+    const nouveauSolde = tx.expediteur.solde - total;
+
+    // Met à jour transaction + débite le client
+    await Promise.all([
+      Transaction.findByIdAndUpdate(req.params.id, {
+        status: 'validee',
+        soldeExpediteurApres: nouveauSolde,
+        dateValidation: new Date()
+      }),
+      Client.findByIdAndUpdate(tx.expediteur._id, { solde: nouveauSolde })
+    ]);
+
+    res.json({ 
+      success: true, 
+      message: 'Transaction validée',
+      nouveauSolde
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// POST /api/transactions/:id/reject - Refuser une transaction
+router.post('/:id/reject', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
+
+    const { motif } = req.body;
+
+    const tx = await Transaction.findByIdAndUpdate(
+      req.params.id,
+      { 
+        status: 'annulee',
+        motifAnnulation: motif || 'Refusé par admin',
+        dateAnnulation: new Date()
+      },
+      { new: true }
+    );
+
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+
+    res.json({ 
+      success: true, 
+      message: 'Transaction refusée',
+      transaction: tx
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.get('/pending-view', async (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Transactions en attente</title>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #f59e0b; color: white; }
+        button { padding: 8px 15px; margin: 2px; cursor: pointer; border: none; border-radius: 4px; }
+        .validate { background: #10b981; color: white; }
+        .reject { background: #ef4444; color: white; }
+        .badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; }
+        .badge-wait { background: #f59e0b; color: white; }
+      </style>
+    </head>
+    <body>
+      <h2>Transactions en attente de validation</h2>
+      <a href="/api/clients/admin">← Admin</a>
+      <button onclick="loadPending()">Actualiser</button>
+      <div id="content">Chargement...</div>
+
+      <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/api/auth/login';
+
+        async function loadPending() {
+          const res = await fetch('/api/transactions/pending', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          const data = await res.json();
+          renderTable(data.transactions);
+        }
+
+        function renderTable(tx) {
+          if (!tx.length) {
+            document.getElementById('content').innerHTML = '<p>Aucune transaction en attente</p>';
+            return;
+          }
+
+          let html = '<table><tr><th>Date</th><th>Type</th><th>Client</th><th>Montant</th><th>Frais</th><th>Destinataire</th><th>Actions</th></tr>';
+          
+          tx.forEach(t => {
+            const date = new Date(t.createdAt).toLocaleString('fr-FR');
+            const type = t.type === 'retrait' ? 'Retrait ' + t.operateur : 'Transfert';
+            const client = t.expediteur.prenom + ' ' + t.expediteur.nom + ' (' + t.expediteur.telephone + ')';
+            const dest = t.type === 'retrait' ? t.numeroDestination : (t.destinataire ? t.destinataire.prenom + ' ' + t.destinataire.nom : '-');
+            
+            html += \`
+              <tr id="row-\${t._id}">
+                <td>\${date}</td>
+                <td><span class="badge badge-wait">\${type}</span></td>
+                <td>\${client}<br><small>Solde: \${t.expediteur.solde.toLocaleString()} FCFA</small></td>
+                <td><b>\${t.montant.toLocaleString()} FCFA</b></td>
+                <td>\${(t.frais||0).toLocaleString()} FCFA</td>
+                <td>\${dest}</td>
+                <td>
+                  <button class="validate" onclick="validateTx('\${t._id}')">Valider</button>
+                  <button class="reject" onclick="rejectTx('\${t._id}')">Refuser</button>
+                </td>
+              </tr>
+            \`;
+          });
+          
+          html += '</table>';
+          document.getElementById('content').innerHTML = html;
+        }
+
+        async function validateTx(id) {
+          if (!confirm('Valider cette transaction ?')) return;
+          const res = await fetch('/api/transactions/' + id + '/validate', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          const data = await res.json();
+          alert(data.message || data.error);
+          loadPending();
+        }
+
+        async function rejectTx(id) {
+          const motif = prompt('Motif du refus:');
+          if (!motif) return;
+          const res = await fetch('/api/transactions/' + id + '/reject', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token 
+            },
+            body: JSON.stringify({ motif })
+          });
+          const data = await res.json();
+          alert(data.message || data.error);
+          loadPending();
+        }
+
+        loadPending();
+      </script>
+    </body>
+    </html>
+  `);
 });
 // GET /api/transactions/stats - Stats dashboard
 router.get('/stats', async (req, res) => {
@@ -941,75 +1171,6 @@ router.post('/f', authUser, async (req, res) => {
     if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
 
     const frais = Math.round(montant * 0.01);
-
-    // Créer transaction
-    const tx = new Transaction({
-      expediteur: exp._id, // ✅ passe l'ID, pas l'objet complet
-      destinataire: dest._id,
-      montant: Number(montant),
-      motif,
-      frais,
-      status: 'validee'
-    });
-
-    await tx.save(); // ✅ MANQUAIT CETTE LIGNE
-
-    // Update soldes
-    await Client.findByIdAndUpdate(
-      expediteur, 
-      { $inc: { solde: -(montant + frais) } }
-    );
-
-    await Client.findByIdAndUpdate(
-      destinataire, 
-      { $inc: { solde: montant } }
-    );
-
-    const updatedExp = await Client.findById(expediteur).select('solde');
-
-    const transactions = await Transaction.find({
-      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
-    })
-    .sort({ createdAt: -1 })
-    .limit(20)
-    .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
-    .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
-
-    res.json({
-      message: 'Transfert effectué',
-      nouveauSolde: updatedExp.solde,
-      historique: transactions.map(t => ({
-        id: t._id,
-        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
-        montant: t.montant,
-        frais: t.frais || 0,
-        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
-        motif: t.motif || '',
-        status: t.status,
-        date: t.createdAt
-      }))
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-// route nouvelle
-router.post('/', authUser, async (req, res) => {
-  try {
-    const { expediteur, destinataire, montant, motif } = req.body;
-    
-    if (req.user.id !== expediteur) {
-      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
-    }
-
-    const exp = await Client.findById(expediteur);
-    const dest = await Client.findById(destinataire);
-
-    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
-    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
-
-    const frais = Math.round(montant * 0.01);
     const nouveauSoldeExp = exp.solde - montant - frais;
     const nouveauSoldeDest = dest.solde + montant;
     
@@ -1072,7 +1233,88 @@ router.post('/', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router.post('/', authUser, async (req, res) => {
+  try {
+    const { expediteur, destinataire, montant, motif } = req.body;
+    
+    if (req.user.id !== expediteur) {
+      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
+    }
 
+    const exp = await Client.findById(expediteur);
+    const dest = await Client.findById(destinataire);
+
+    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
+    
+    // ✅ Check si expéditeur bloqué
+    if (exp.bloque) {
+      return res.status(403).json({ error: 'Compte suspendu. Impossible d’effectuer un transfert.' });
+    }
+
+    // ✅ Check si destinataire bloqué aussi
+    if (dest.bloque) {
+      return res.status(403).json({ error: 'Le destinataire a un compte suspendu.' });
+    }
+
+    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
+
+    const frais = Math.round(montant * 0.01);
+    const nouveauSoldeExp = exp.solde - montant - frais;
+    const nouveauSoldeDest = dest.solde + montant;
+    
+    const tx = await Transaction.create({
+      expediteur: exp._id,
+      destinataire: dest._id,
+      montant: Number(montant),
+      motif,
+      frais,
+      status: 'validee',
+      soldeExpediteurApres: nouveauSoldeExp,
+      soldeDestinataireApres: nouveauSoldeDest
+    });
+
+    // Tu fais 2 fois la mise à jour, supprime le premier bloc
+    const [updatedExp, updatedDest] = await Promise.all([
+      Client.findByIdAndUpdate(
+        expediteur, 
+        { solde: nouveauSoldeExp },
+        { new: true, select: 'solde nom prenom' }
+      ),
+      Client.findByIdAndUpdate(
+        destinataire, 
+        { solde: nouveauSoldeDest },
+        { new: true, select: 'solde nom prenom' }
+      )
+    ]);
+
+    const transactions = await Transaction.find({
+      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
+    })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
+    .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
+
+    res.json({
+      message: 'Transfert effectué',
+      nouveauSolde: updatedExp.solde,
+      nouveauSoldeDestinataire: updatedDest.solde,
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // ==================== ROUTES AVEC :id EN DERNIER ====================
 
 // DELETE /api/transactions/:id - Annuler transaction
