@@ -725,6 +725,7 @@ router.get('/', async (req, res) => {
     th { background: #007bff; color: white; }
     tr:nth-child(even) { background: #f2f2f2; }
     tr.annulee { opacity: 0.5; background: #ffe6e6; }
+    tr.partielle { background: #fff3cd; }
    .montant { color: #28a745; font-weight: bold; }
    .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     select, input, button { padding: 8px; }
@@ -733,6 +734,7 @@ router.get('/', async (req, res) => {
    .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
    .badge-ok { color: #28a745; font-weight: bold; }
    .badge-ko { color: #dc3545; font-weight: bold; }
+   .badge-partiel { color: #f59e0b; font-weight: bold; }
     @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
   </style>
 </head>
@@ -810,25 +812,33 @@ router.get('/', async (req, res) => {
       transactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
         
-        const date = new Date(t.date).toLocaleString('fr-FR');
-        const diffMinutes = (Date.now() - new Date(t.date)) / 60000;
-        const peutAnnuler = diffMinutes <= 1440 && !t.annulee;
-        const statut = t.annulee ? '<span class="badge-ko">ANNULÉE</span>' : '<span class="badge-ok">VALIDÉE</span>';
+        const date = new Date(t.createdAt).toLocaleString('fr-FR'); // ✅ createdAt
+        const peutAnnuler = !t.annulee && t.status === 'validee'; // ✅ Plus de limite 24h
         
-        let bouton = '<span style="color:#999">Expiré</span>';
+        let statut = '<span class="badge-ok">VALIDÉE</span>';
+        let rowClass = '';
+        
         if (t.annulee) {
-          bouton = '-';
-        } else if (peutAnnuler) {
+          statut = t.montantAnnule < t.montant ? '<span class="badge-partiel">ANNULÉE PARTIELLE</span>' : '<span class="badge-ko">ANNULÉE</span>';
+          rowClass = t.montantAnnule < t.montant ? ' class="partielle"' : ' class="annulee"';
+        }
+        
+        let bouton = '-';
+        if (peutAnnuler) {
           bouton = '<button class="btn-annuler" onclick="annulerTx(\\'' + t._id + '\\')">Annuler</button>';
         }
         
-        html += '<tr' + (t.annulee ? ' class="annulee"' : '') + '>';
+        html += '<tr' + rowClass + '>';
         html += '<td>' + date + '</td>';
         html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
         html += '<td>' + t.expediteur.telephone + '</td>';
         html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
         html += '<td>' + t.destinataire.telephone + '</td>';
-        html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
+        html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA';
+        if (t.annulee && t.montantAnnule < t.montant) {
+          html += '<br><small>Annulé: ' + t.montantAnnule.toLocaleString() + ' FCFA</small>';
+        }
+        html += '</td>';
         html += '<td>' + (t.motif || '-') + '</td>';
         html += '<td>' + statut + '</td>';
         html += '<td>' + bouton + '</td>';
@@ -840,9 +850,9 @@ router.get('/', async (req, res) => {
     }
     
     async function annulerTx(id) {
-      if (!confirm('Confirmer l\\'annulation ?')) return;
-      const res = await fetch('/api/transactions/' + id, {
-        method: 'DELETE',
+      if (!confirm('Confirmer l\\'annulation ? Si le solde est insuffisant, le solde disponible sera annulé.')) return;
+      const res = await fetch('/api/transactions/' + id + '/cancel', {
+        method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token }
       });
       const data = await res.json();
@@ -852,12 +862,13 @@ router.get('/', async (req, res) => {
     
     function exportCSV() {
       if (!currentTransactions.length) { alert('Aucune donnée'); return; }
-      let csv = 'Date,Expéditeur,Tél Exp,Destinataire,Tél Dest,Montant,Motif,Statut\\n';
+      let csv = 'Date,Expéditeur,Tél Exp,Destinataire,Tél Dest,Montant,Montant Annulé,Motif,Statut\\n';
       currentTransactions.forEach(t => {
         if (!t.expediteur || !t.destinataire) return;
-        const date = new Date(t.date).toLocaleString('fr-FR');
-        const statut = t.annulee ? 'Annulée' : 'Validée';
-        csv += '"' + date + '","' + t.expediteur.prenom + ' ' + t.expediteur.nom + '","' + t.expediteur.telephone + '","' + t.destinataire.prenom + ' ' + t.destinataire.nom + '","' + t.destinataire.telephone + '",' + t.montant + ',"' + (t.motif || '') + '","' + statut + '"\\n';
+        const date = new Date(t.createdAt).toLocaleString('fr-FR'); // ✅ createdAt
+        let statut = 'Validée';
+        if (t.annulee) statut = t.montantAnnule < t.montant ? 'Annulée partielle' : 'Annulée';
+        csv += '"' + date + '","' + t.expediteur.prenom + ' ' + t.expediteur.nom + '","' + t.expediteur.telephone + '","' + t.destinataire.prenom + ' ' + t.destinataire.nom + '","' + t.destinataire.telephone + '",' + t.montant + ',' + (t.montantAnnule || 0) + ',"' + (t.motif || '') + '","' + statut + '"\\n';
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       const link = document.createElement('a');
@@ -873,14 +884,14 @@ router.get('/', async (req, res) => {
       doc.setFontSize(16);
       doc.text('Historique Transactions UniPay', 14, 15);
       const tableData = currentTransactions.filter(t => t.expediteur && t.destinataire).map(t => [
-        new Date(t.date).toLocaleString('fr-FR'),
+        new Date(t.createdAt).toLocaleString('fr-FR'), // ✅ createdAt
         t.expediteur.prenom + ' ' + t.expediteur.nom,
         t.expediteur.telephone,
         t.destinataire.prenom + ' ' + t.destinataire.nom,
         t.destinataire.telephone,
         t.montant.toLocaleString() + ' FCFA',
         t.motif || '-',
-        t.annulee ? 'Annulée' : 'Validée'
+        t.annulee ? (t.montantAnnule < t.montant ? 'Annulée partielle' : 'Annulée') : 'Validée'
       ]);
       doc.autoTable({
         head: [['Date', 'Expéditeur', 'Tél Exp', 'Destinataire', 'Tél Dest', 'Montant', 'Motif', 'Statut']],
@@ -908,7 +919,6 @@ router.get('/', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-
 // ==================== ROUTES ACTION ====================
 
 router.post('/f', authUser, async (req, res) => {
@@ -1061,39 +1071,46 @@ router.post('/', authUser, async (req, res) => {
 // ==================== ROUTES AVEC :id EN DERNIER ====================
 
 // DELETE /api/transactions/:id - Annuler transaction
-router.delete('/:id', verifyAdmin, async (req, res) => {
+// POST /api/transactions/:id/cancel
+router.post('/:id/cancel', async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id)
-     .populate('expediteur')
-     .populate('destinataire');
+    const tx = await Transaction.findById(req.params.id);
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+    if (tx.annulee) return res.status(400).json({ error: 'Déjà annulée' });
+    if (tx.status !== 'validee') return res.status(400).json({ error: 'Transaction non validée' });
 
-    if (!transaction) return res.status(404).json({ error: 'Transaction introuvable' });
+    const destinataire = await Client.findById(tx.destinataire);
+    if (!destinataire) return res.status(404).json({ error: 'Destinataire introuvable' });
 
-    const diffHeures = (Date.now() - transaction.date) / (1000 * 60 * 60);
-    if (diffHeures > 24) return res.status(400).json({ error: 'Annulation possible que pendant 24h' });
-    if (transaction.annulee) return res.status(400).json({ error: 'Transaction déjà annulée' });
-    if (!transaction.expediteur || !transaction.destinataire) return res.status(404).json({ error: 'Client introuvable' });
-
-    const clientExp = await Client.findById(transaction.expediteur._id);
-    const clientDest = await Client.findById(transaction.destinataire._id);
-
-    if (!clientExp || !clientDest) return res.status(404).json({ error: 'Client introuvable' });
-    if (clientDest.solde < transaction.montant) {
-      return res.status(400).json({ error: 'Impossible d\'annuler : solde destinataire insuffisant (' + clientDest.solde + ' FCFA)' });
+    // ✅ Si solde < montant, on annule tout le solde disponible
+    const montantAAnnuler = Math.min(tx.montant, destinataire.solde);
+    
+    if (montantAAnnuler <= 0) {
+      return res.status(400).json({ error: 'Solde du destinataire à 0, impossible d’annuler' });
     }
 
-    clientExp.solde += Number(transaction.montant);
-    clientDest.solde -= Number(transaction.montant);
-    await clientExp.save();
-    await clientDest.save();
+    // Débite le destinataire
+    destinataire.solde -= montantAAnnuler;
+    await destinataire.save();
 
-    transaction.annulee = true;
-    transaction.dateAnnulation = new Date();
-    await transaction.save();
+    // Crédite l’expéditeur
+    const expediteur = await Client.findById(tx.expediteur);
+    expediteur.solde += montantAAnnuler;
+    await expediteur.save();
 
-    res.json({ message: 'Transaction annulée. ' + transaction.montant + ' FCFA remboursé à ' + clientExp.prenom + ' ' + clientExp.nom });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Marque la transaction
+    tx.annulee = true;
+    tx.montantAnnule = montantAAnnuler; // ✅ Nouveau champ
+    tx.dateAnnulation = new Date();
+    await tx.save();
+
+    const message = montantAAnnuler < tx.montant 
+      ? `Annulation partielle: ${montantAAnnuler.toLocaleString()} FCFA remboursés sur ${tx.montant.toLocaleString()} FCFA`
+      : `Transaction annulée intégralement`;
+
+    res.json({ success: true, message, montantAnnule: montantAAnnuler });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
