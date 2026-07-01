@@ -139,6 +139,7 @@ router.get('/admin', async (req, res) => {
         .unblock { background: #10b981; color: white; }
         .view { background: #3b82f6; color: white; }
         .limit { background: #8b5cf6; color: white; }
+        .reset { background: #ec4899; color: white; }
         #logout { float: right; }
         img.avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
         .search-bar { margin: 15px 0; display: flex; gap: 10px; }
@@ -252,6 +253,7 @@ router.get('/admin', async (req, res) => {
                 <td>
                   <button class="edit" onclick="modifierSolde('\${c._id}', '\${c.nom}', \${c.solde})">Solde</button>
                   <button class="limit" onclick="modifierLimites('\${c._id}', \${c.limiteJournaliere||0}, \${c.limiteMensuelle||0})">Limites</button>
+                  <button class="reset" onclick="resetPassword('\${c._id}', '\${c.pseudo || c.prenom}')">Reset Pass</button>
                   <button class="view" onclick='voirCNI(\${JSON.stringify(c)})'>CNI</button>
                   \${btnBlock}
                   <button class="delete" onclick="supprimerClient('\${c._id}')">Supprimer</button>
@@ -262,6 +264,26 @@ router.get('/admin', async (req, res) => {
 
           html += '</table>';
           document.getElementById('content').innerHTML = html;
+        }
+
+        async function resetPassword(id, nom) {
+          if (!confirm('Réinitialiser le mot de passe de ' + nom + ' à "1234" ?')) return;
+          
+          const res = await fetch('/api/clients/' + id + '/reset-password', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ password: '1234' })
+          });
+          
+          if (res.ok) {
+            alert('Mot de passe réinitialisé à 1234 pour ' + nom);
+          } else {
+            const data = await res.json();
+            alert('Erreur: ' + data.error);
+          }
         }
 
         function modifierLimites(id, limitJour, limitMois) {
@@ -326,13 +348,13 @@ router.get('/admin', async (req, res) => {
 
         function voirCNI(client) {
           let html = '<p><b>' + client.prenom + ' ' + client.nom + '</b></p>';
-          if (client.carteRecto) {
-            html += '<p>Recto:</p><img src="' + client.carteRecto + '">';
+          if (client.cniRecto) {
+            html += '<p>Recto:</p><img src="' + client.cniRecto + '">';
           }
-          if (client.carteVerso) {
-            html += '<p>Verso:</p><img src="' + client.carteVerso + '">';
+          if (client.cniVerso) {
+            html += '<p>Verso:</p><img src="' + client.cniVerso + '">';
           }
-          if (!client.carteRecto && !client.carteVerso) {
+          if (!client.cniRecto && !client.cniVerso) {
             html += '<p style="color:#999">Aucune pièce d\\'identité uploadée</p>';
           }
           document.getElementById('cniContent').innerHTML = html;
@@ -345,7 +367,7 @@ router.get('/admin', async (req, res) => {
 
         async function supprimerClient(id) {
           if (!confirm('Supprimer ce client?')) return;
-          const res = await fetch('/api/clients/' + id', {
+          const res = await fetch('/api/clients/' + id, {
             method: 'DELETE',
             headers: { 'Authorization': 'Bearer ' + token }
           });
@@ -454,6 +476,30 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// PUT /api/clients/:id/reset-password - Reset mot de passe à 1234
+router.put('/:id/reset-password', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash('1234', 10);
+    
+    const client = await Client.findByIdAndUpdate(
+      req.params.id,
+      { password: hash },
+      { new: true }
+    );
+    
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
+    
+    res.json({ 
+      success: true, 
+      message: 'Mot de passe réinitialisé à 1234' 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET tous les clients
 router.get('/', async (req, res) => {
   try {
