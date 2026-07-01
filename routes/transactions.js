@@ -971,7 +971,7 @@ router.get('/', async (req, res) => {
 </head>
 <body>
   <h2>Historique des transactions</h2>
-  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a>
+  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a>| <a href="/api/transactions/pending-view">Transactions en attente</a>
   
   <div class="filtres">
     <select id="filterClient">${optionsClients}</select>
