@@ -342,7 +342,7 @@ router.get('/admin', async (req, res) => {
 
         async function supprimerClient(id) {
           if (!confirm('Supprimer ce client?')) return;
-          const res = await fetch('/api/clients/' + id + '/delete', {
+          const res = await fetch('/api/clients/' + id', {
             method: 'DELETE',
             headers: { 'Authorization': 'Bearer ' + token }
           });
@@ -394,10 +394,10 @@ router.get('/admin', async (req, res) => {
 });
 // ==================== ROUTES API ====================
 // DELETE /api/clients/:id - Supprimer un client
-router.delete('/:id/delete', async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const clientId = req.params.id;
-    
+    console.log('ok');
     // 1. Vérifie que le client existe
     const client = await Client.findById(clientId);
     if (!client) {
