@@ -59,7 +59,7 @@ const uploadToCloudinary = (buffer) => {
 
 
 // test login admin
-router.get('/login-test', (req, res) => {
+router.get('/login', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html>
 <head>
@@ -134,7 +134,7 @@ router.get('/login-test', (req, res) => {
 </html>`);
 });
 
-router.post('/login', async (req, res) => {
+router.post('/loginn', async (req, res) => {
   try {
     const { identifier, password } = req.body;
     const user = await Client.findOne({
@@ -242,11 +242,18 @@ router.post('/login-password', async (req, res) => {
     const isMatch = await user.comparePassword(password);
     if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
 
+    // ✅ Vérif si client bloqué
+    if (user.bloque) {
+      return res.status(403).json({ 
+        error: 'Votre compte a été suspendu. Contactez le support UniPay.' 
+      });
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
     user.otpCode = otp;
     user.otpExpires = Date.now() + 5 * 60 * 1000; // 5min
-    await user.save(); // ← CRUCIAL
+    await user.save();
 
     console.log(`OTP pour ${identifier}: ${otp}, expire: ${new Date(user.otpExpires)}`);
     res.json({ message: 'OTP envoyé', otp }); // Retire otp en prod
@@ -342,7 +349,7 @@ router.post('/login-phone', async (req, res) => {
 });
 
 
-router.post('/loginn', async (req, res) => {
+router.post('/loginnn', async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
