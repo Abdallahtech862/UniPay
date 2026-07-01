@@ -7,6 +7,9 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Client = require('../models/Client');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
+const Transaction = require('../models/Transaction'); // ✅ Ajoute cette ligne
+
+
 // Config Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
