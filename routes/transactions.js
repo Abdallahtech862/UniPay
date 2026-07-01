@@ -4,7 +4,36 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
-// ==================== ROUTES API JSON ====================
+// ==================== ROUTES pour rechercher un contact pour des transferts B2B ====================
+//rechercher des client par numero ou par pseudo pour faire un transfert
+router.get('/search', authUser, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) {
+      return res.status(400).json({ error: 'Recherche trop courte' });
+    }
+    
+    const regex = new RegExp(q, 'i'); // case insensitive
+    
+    const users = await Client.find({
+      $or: [
+        { pseudo: regex },
+        { telephone: regex },
+        { nom: regex },
+        { prenom: regex }
+      ],
+      _id: { $ne: req.user.id } // Exclure soi-même
+    })
+    .select('nom prenom pseudo telephone photoProfil')
+    .limit(50)
+    .lean();
+
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // rechercher un seul client pour un transfert par QRCode
 router.get('/searchClient', authUser, async (req, res) => {
   try {
@@ -50,6 +79,9 @@ router.get('/searchClient', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+// ==================== ROUTES des transfert unipay a mobil money ====================
 
 // POST /api/transactions/withdraw/preview vrifie les frais lors de la recuperation
 router.post('/withdraw/preview', authUser, async (req, res) => {
@@ -166,65 +198,6 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/transactions/data - Données pour le tableau avec recherche historique de toute les transactions
-router.get('/data', async (req, res) => {
-  try {
-    const { client, debut, fin, q, montantMin, montantMax } = req.query;
-    let query = {};
-    
-    // Filtre par client depuis select
-    if (client) {
-      query = { $or: [{ expediteur: client }, { destinataire: client }] };
-    }
-    
-    // Filtre par date
-    if (debut || fin) {
-      query.date = {};
-      if (debut) query.date.$gte = new Date(debut);
-      if (fin) query.date.$lte = new Date(fin + 'T23:59:59');
-    }
-    
-    // Filtre par montant
-    if (montantMin || montantMax) {
-      query.montant = {};
-      if (montantMin) query.montant.$gte = Number(montantMin);
-      if (montantMax) query.montant.$lte = Number(montantMax);
-    }
-    
-    let transactions = await Transaction.find(query)
-     .populate('expediteur', 'nom prenom telephone')
-     .populate('destinataire', 'nom prenom telephone')
-     .sort({ date: -1 })
-     .lean();
-    
-    // Filtrer transactions avec clients supprimés
-    transactions = transactions.filter(t => t.expediteur && t.destinataire);
-    
-    // Recherche texte : nom ou téléphone
-    if (q && q.trim() !== '') {
-      const search = q.toLowerCase();
-      transactions = transactions.filter(t => {
-        const expNom = `${t.expediteur.prenom} ${t.expediteur.nom}`.toLowerCase();
-        const destNom = `${t.destinataire.prenom} ${t.destinataire.nom}`.toLowerCase();
-        const expTel = t.expediteur.telephone || '';
-        const destTel = t.destinataire.telephone || '';
-        return expNom.includes(search) || destNom.includes(search) || 
-               expTel.includes(search) || destTel.includes(search);
-      });
-    }
-    
-    const volumeTotal = transactions
-      .filter(t => !t.annulee)
-      .reduce((sum, t) => sum + t.montant, 0);
-    
-    res.json({ 
-      transactions, 
-      stats: { total: transactions.length, volumeTotal } 
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // GET /api/transactions/pending - Admin voit les retraits/transferts en attente
 router.get('/pending', authUser, async (req, res) => {
@@ -253,7 +226,6 @@ router.get('/pending', authUser, async (req, res) => {
   }
 });
 
-// POST /api/transactions/:id/validate - Valider un retrait/transfert
 // POST /api/transactions/:id/validate - Valider un retrait/transfert
 router.post('/:id/validate', authUser, async (req, res) => { // ← authUser obligatoire
   try {
@@ -475,8 +447,72 @@ router.get('/pending-view', async (req, res) => {
     </html>
   `);
 });
+
+// ==================== ROUTES HTML pour voir toutes les transaction====================
+
+// GET /api/transactions/data - Données pour le tableau avec recherche historique de toute les transactions
+router.get('/data',verifyAdmin, async (req, res) => {
+  try {
+    const { client, debut, fin, q, montantMin, montantMax } = req.query;
+    let query = {};
+    
+    // Filtre par client depuis select
+    if (client) {
+      query = { $or: [{ expediteur: client }, { destinataire: client }] };
+    }
+    
+    // Filtre par date
+    if (debut || fin) {
+      query.date = {};
+      if (debut) query.date.$gte = new Date(debut);
+      if (fin) query.date.$lte = new Date(fin + 'T23:59:59');
+    }
+    
+    // Filtre par montant
+    if (montantMin || montantMax) {
+      query.montant = {};
+      if (montantMin) query.montant.$gte = Number(montantMin);
+      if (montantMax) query.montant.$lte = Number(montantMax);
+    }
+    
+    let transactions = await Transaction.find(query)
+     .populate('expediteur', 'nom prenom telephone')
+     .populate('destinataire', 'nom prenom telephone')
+     .sort({ date: -1 })
+     .lean();
+    
+    // Filtrer transactions avec clients supprimés
+    transactions = transactions.filter(t => t.expediteur && t.destinataire);
+    
+    // Recherche texte : nom ou téléphone
+    if (q && q.trim() !== '') {
+      const search = q.toLowerCase();
+      transactions = transactions.filter(t => {
+        const expNom = `${t.expediteur.prenom} ${t.expediteur.nom}`.toLowerCase();
+        const destNom = `${t.destinataire.prenom} ${t.destinataire.nom}`.toLowerCase();
+        const expTel = t.expediteur.telephone || '';
+        const destTel = t.destinataire.telephone || '';
+        return expNom.includes(search) || destNom.includes(search) || 
+               expTel.includes(search) || destTel.includes(search);
+      });
+    }
+    
+    const volumeTotal = transactions
+      .filter(t => !t.annulee)
+      .reduce((sum, t) => sum + t.montant, 0);
+    
+    res.json({ 
+      transactions, 
+      stats: { total: transactions.length, volumeTotal } 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // GET /api/transactions/stats - Stats dashboard
-router.get('/stats', async (req, res) => {
+router.get('/stats',verifyAdmin, async (req, res) => {
   try {
     const jours = parseInt(req.query.jours) || 30;
     const dateDebut = new Date();
@@ -524,6 +560,8 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ==================== ROUTES HTML pour tableau de bor de ladministrateur====================
 
 // GET /api/transactions/top-clients - Top expéditeurs/destinataires
 router.get('/top-clients', verifyAdmin, async (req, res) => {
@@ -647,7 +685,7 @@ router.post('/send', async (req, res) => {
 });
 
 //trouve lhistorique dun seul client
-// GET /api/transactions/my - Historique du client connecté
+// GET /api/transactions/me - Historique du client connecté
 router.get('/me', authUser, async (req, res) => {
   try {
     const user = await Client.findById(req.user.id).select('solde');
@@ -679,128 +717,8 @@ router.get('/me', authUser, async (req, res) => {
         res.status(500).json({ error: err.message });
       }
     });
-// GET /api/transactions/my - Historique du client connecté
-router.get('/my', async (req, res) => {
-  const transactions = await Transaction.find({
-    $or: [{ expediteur: req.client._id }, { destinataire: req.client._id }]
-  })
- .populate('expediteur', 'nom prenom telephone photoProfil')
- .populate('destinataire', 'nom prenom telephone photoProfil')
- .sort({ date: -1 })
- .lean();
-
-  res.json(transactions);
-});
 
 
-//rechercher un client par numero ou par pseudo
-router.get('/search', authUser, async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q || q.length < 2) {
-      return res.status(400).json({ error: 'Recherche trop courte' });
-    }
-    
-    const regex = new RegExp(q, 'i'); // case insensitive
-    
-    const users = await Client.find({
-      $or: [
-        { pseudo: regex },
-        { telephone: regex },
-        { nom: regex },
-        { prenom: regex }
-      ],
-      _id: { $ne: req.user.id } // Exclure soi-même
-    })
-    .select('nom prenom pseudo telephone photoProfil')
-    .limit(50)
-    .lean();
-
-    res.json({ users });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==================== ROUTES HTML ====================
-
-// GET /api/transactions/add - Formulaire transfert
-router.get('/add', async (req, res) => {
-  try {
-    const clients = await Client.find().select('nom prenom telephone solde').lean();
-    let options = '';
-    clients.forEach(c => {
-      options += `<option value="${c._id}">${c.prenom} ${c.nom} - ${c.telephone} - ${c.solde} FCFA</option>`;
-    });
-
-    res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Transfert UniPay</title>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: Arial; padding: 20px; max-width: 500px; margin: auto; }
-    input, select { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }
-    button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
-    #msg { margin-top: 15px; padding: 10px; }
-    .success { background: #d4edda; color: #155724; }
-    .error { background: #f8d7da; color: #721c24; }
-  </style>
-</head>
-<body>
-  <h2>Effectuer un transfert</h2>
-  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions">Historique</a> | <a href="/api/transactions/dashboard">Dashboard</a> | <a href="#" onclick="logout()">Déconnexion</a><br><br>
-  <form id="transferForm">
-    <label>Expéditeur:</label><select name="expediteur" required><option value="">Choisir...</option>${options}</select>
-    <label>Destinataire:</label><select name="destinataire" required><option value="">Choisir...</option>${options}</select>
-    <label>Montant (FCFA):</label><input name="montant" type="number" min="1" required>
-    <label>Motif:</label><input name="motif" placeholder="Ex: Remboursement">
-    <button type="submit">Envoyer</button>
-  </form>
-  <div id="msg"></div>
-  <script>
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Token manquant. Connecte-toi d\\'abord.');
-      window.location.href = '/api/auth/login-test';
-    }
-    
-    function logout() {
-      localStorage.removeItem('token');
-      window.location.href = '/api/auth/login-test';
-    }
-    
-    transferForm.onsubmit = async e => {
-      e.preventDefault();
-      const body = Object.fromEntries(new FormData(e.target));
-      if (body.expediteur === body.destinataire) {
-        msg.className = 'error'; msg.innerText = 'Même compte'; return;
-      }
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if (res.ok) {
-        msg.className = 'success';
-        msg.innerHTML = data.message + '<br><a href="/api/transactions">Voir historique</a>';
-        e.target.reset();
-      } else {
-        msg.className = 'error'; 
-        msg.innerText = 'Erreur: ' + data.error;
-        if (res.status === 401) {
-          setTimeout(() => window.location.href = '/api/auth/login-test', 2000);
-        }
-      }
-    };
-  </script>
-</body>
-</html>`);
-  } catch (error) {
-    res.status(500).send('Erreur: ' + error.message);
-  }
-});
 // GET /api/transactions/dashboard - Dashboard avec top clients
 router.get('/dashboard', async (req, res) => {
   res.send(`<!DOCTYPE html>
@@ -965,6 +883,7 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
+
 router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
@@ -1184,85 +1103,8 @@ router.get('/', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-// ==================== ROUTES ACTION ====================
 
-router.post('/f', authUser, async (req, res) => {
-  try {
-    const { expediteur, destinataire, montant, motif } = req.body;
-    
-    if (req.user.id !== expediteur) {
-      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
-    }
-
-    const exp = await Client.findById(expediteur);
-    const dest = await Client.findById(destinataire);
-
-    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
-    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
-
-    const frais = Math.round(montant * 0.01);
-    const nouveauSoldeExp = exp.solde - montant - frais;
-    const nouveauSoldeDest = dest.solde + montant;
-    
-    const tx = await Transaction.create({
-      expediteur: exp._id,
-      destinataire: dest._id,
-      montant: Number(montant),
-      motif,
-      frais,
-      status: 'validee',
-      soldeExpediteurApres: nouveauSoldeExp, // ✅ stocke le solde
-      soldeDestinataireApres: nouveauSoldeDest // ✅ stocke le solde
-    });
-    await tx.save(); // ✅ MANQUAIT CETTE LIGNE
-    await Promise.all([
-      Client.findByIdAndUpdate(expediteur, { solde: nouveauSoldeExp }),
-      Client.findByIdAndUpdate(destinataire, { solde: nouveauSoldeDest })
-    ]);
-
-    // 2. Mettre à jour les soldes des 2 comptes
-    const [updatedExp, updatedDest] = await Promise.all([
-      Client.findByIdAndUpdate(
-        expediteur, 
-        { solde: nouveauSoldeExp },
-        { new: true, select: 'solde nom prenom' }
-      ),
-      Client.findByIdAndUpdate(
-        destinataire, 
-        { solde: nouveauSoldeDest },
-        { new: true, select: 'solde nom prenom' }
-      )
-    ]);
-
-    // 3. Récupère l'historique
-    const transactions = await Transaction.find({
-      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
-    })
-    .sort({ createdAt: -1 })
-    .limit(20)
-    .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
-    .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
-
-    res.json({
-      message: 'Transfert effectué',
-      nouveauSolde: updatedExp.solde,
-      nouveauSoldeDestinataire: updatedDest.solde, // ✅ tu peux renvoyer les 2
-      historique: transactions.map(t => ({
-        id: t._id,
-        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
-        montant: t.montant,
-        frais: t.frais || 0,
-        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
-        motif: t.motif || '',
-        status: t.status,
-        date: t.createdAt
-      }))
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
 router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
@@ -1345,9 +1187,10 @@ router.post('/', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ==================== ROUTES AVEC :id EN DERNIER ====================
 
-// DELETE /api/transactions/:id - Annuler transaction
+
 // POST /api/transactions/:id/cancel
 router.post('/:id/cancel', async (req, res) => {
   try {
