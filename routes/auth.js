@@ -119,7 +119,7 @@ router.get('/login', (req, res) => {
           msg.style.background = '#d4edda';
           msg.innerHTML = 'Connecté en tant que <b>' + data.role + '</b><br>' +
                           'Nom: ' + data.user.nom + ' ' + data.user.prenom + '<br>' +
-                          '<a href="/api/transactions/add">Aller au transfert</a>';
+                          '<a href="/api/transactions">Aller au transfert</a>';
         } else {
           msg.style.background = '#f8d7da';
           msg.innerText = 'Erreur: ' + data.error;
