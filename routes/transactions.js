@@ -226,26 +226,12 @@ router.get('/data', async (req, res) => {
 });
 
 // GET /api/transactions/pending - Admin voit les retraits/transferts en attente
-router.get('/pending', async (req, res) => {
+router.get('/pending', authUser, async (req, res) => {
   try {
-    // Optionnel: vérif si admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
-
-    const transactions = await Transaction.find({ 
-      status: 'en_attente' 
-    })
-    .populate('expediteur', 'nom prenom telephone solde bloque')
-    .populate('destinataire', 'nom prenom telephone')
-    .sort({ createdAt: -1 })
-    .lean();
-
-    res.json({ 
-      total: transactions.length,
-      transactions 
-    });
-
+    // ... reste du code
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -341,6 +327,7 @@ router.post('/:id/reject', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// le code pour voir les transactions en attent
 router.get('/pending-view', async (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -358,6 +345,7 @@ router.get('/pending-view', async (req, res) => {
         .reject { background: #ef4444; color: white; }
         .badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; }
         .badge-wait { background: #f59e0b; color: white; }
+        .error { color: #ef4444; padding: 20px; background: #fee; border-radius: 4px; }
       </style>
     </head>
     <body>
@@ -371,15 +359,39 @@ router.get('/pending-view', async (req, res) => {
         if (!token) window.location.href = '/api/auth/login';
 
         async function loadPending() {
-          const res = await fetch('/api/transactions/pending', {
-            headers: { 'Authorization': 'Bearer ' + token }
-          });
-          const data = await res.json();
-          renderTable(data.transactions);
+          try {
+            console.log('Chargement des transactions...');
+            const res = await fetch('/api/transactions/pending', {
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            
+            console.log('Status:', res.status);
+            
+            if (res.status === 401 || res.status === 403) {
+              document.getElementById('content').innerHTML = 
+                '<div class="error">Accès refusé. Connecte-toi en tant qu\\'admin.</div>';
+              localStorage.removeItem('token');
+              setTimeout(() => window.location.href = '/api/auth/login', 2000);
+              return;
+            }
+
+            if (!res.ok) {
+              throw new Error('Erreur serveur: ' + res.status);
+            }
+            
+            const data = await res.json();
+            console.log('Data reçue:', data);
+            renderTable(data.transactions || []);
+            
+          } catch (err) {
+            console.error('Erreur:', err);
+            document.getElementById('content').innerHTML = 
+              '<div class="error">Erreur: ' + err.message + '<br>Vérifie la console F12</div>';
+          }
         }
 
         function renderTable(tx) {
-          if (!tx.length) {
+          if (!tx || tx.length === 0) {
             document.getElementById('content').innerHTML = '<p>Aucune transaction en attente</p>';
             return;
           }
@@ -388,15 +400,15 @@ router.get('/pending-view', async (req, res) => {
           
           tx.forEach(t => {
             const date = new Date(t.createdAt).toLocaleString('fr-FR');
-            const type = t.type === 'retrait' ? 'Retrait ' + t.operateur : 'Transfert';
-            const client = t.expediteur.prenom + ' ' + t.expediteur.nom + ' (' + t.expediteur.telephone + ')';
-            const dest = t.type === 'retrait' ? t.numeroDestination : (t.destinataire ? t.destinataire.prenom + ' ' + t.destinataire.nom : '-');
+            const type = t.type === 'retrait' ? 'Retrait ' + (t.operateur || '') : 'Transfert';
+            const client = t.expediteur ? (t.expediteur.prenom + ' ' + t.expediteur.nom + ' (' + t.expediteur.telephone + ')') : 'Inconnu';
+            const dest = t.type === 'retrait' ? (t.numeroDestination || '-') : (t.destinataire ? t.destinataire.prenom + ' ' + t.destinataire.nom : '-');
             
             html += \`
               <tr id="row-\${t._id}">
                 <td>\${date}</td>
                 <td><span class="badge badge-wait">\${type}</span></td>
-                <td>\${client}<br><small>Solde: \${t.expediteur.solde.toLocaleString()} FCFA</small></td>
+                <td>\${client}<br><small>Solde: \${t.expediteur?.solde?.toLocaleString() || 0} FCFA</small></td>
                 <td><b>\${t.montant.toLocaleString()} FCFA</b></td>
                 <td>\${(t.frais||0).toLocaleString()} FCFA</td>
                 <td>\${dest}</td>
