@@ -253,9 +253,11 @@ router.get('/pending', authUser, async (req, res) => {
 });
 
 // POST /api/transactions/:id/validate - Valider un retrait/transfert
-router.post('/:id/validate', async (req, res) => {
+// POST /api/transactions/:id/validate - Valider un retrait/transfert
+router.post('/:id/validate', authUser, async (req, res) => { // ← authUser obligatoire
   try {
-    if (req.user.role !== 'admin') {
+    // Check admin
+    if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
@@ -291,7 +293,6 @@ router.post('/:id/validate', async (req, res) => {
 
     const nouveauSolde = tx.expediteur.solde - total;
 
-    // Met à jour transaction + débite le client
     await Promise.all([
       Transaction.findByIdAndUpdate(req.params.id, {
         status: 'validee',
@@ -308,13 +309,14 @@ router.post('/:id/validate', async (req, res) => {
     });
 
   } catch (err) {
+    console.error('Erreur /validate:', err);
     res.status(500).json({ error: err.message });
   }
 });
 // POST /api/transactions/:id/reject - Refuser une transaction
-router.post('/:id/reject', async (req, res) => {
+router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici aussi
   try {
-    if (req.user.role !== 'admin') {
+    if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
