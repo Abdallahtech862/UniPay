@@ -228,12 +228,27 @@ router.get('/data', async (req, res) => {
 // GET /api/transactions/pending - Admin voit les retraits/transferts en attente
 router.get('/pending', authUser, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
-    // ... reste du code
+
+    const transactions = await Transaction.find({ status: 'en_attente' })
+      .populate({
+        path: 'expediteur',
+        select: 'nom prenom telephone solde bloque'
+      })
+      .populate({
+        path: 'destinataire',
+        select: 'nom prenom telephone'
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ total: transactions.length, transactions });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erreur /pending:', err.message, err.stack);
+    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
 
