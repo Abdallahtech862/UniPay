@@ -451,7 +451,7 @@ router.get('/pending-view', async (req, res) => {
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data', verifyAdmin, async (req, res) => {
+router.get('/data', async (req, res) => {
   try {
     const { client, debut, fin, q, montantMin, montantMax } = req.query;
     let query = {};
