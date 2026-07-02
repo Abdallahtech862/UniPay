@@ -189,9 +189,11 @@ router.post('/register', upload.fields([
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    //const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     const client = new Client({
       nom: nom.trim(),
       prenom: prenom.trim(),
+      //token,
       telephone,
       email: email || `${telephone.replace('+226', '')}@unipay.local`,
       password: hashedPassword, // Déjà hashé
