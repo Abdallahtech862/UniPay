@@ -722,6 +722,7 @@ router.get('/me', authUser, async (req, res) => {
         motif: t.motif || '',
         status: t.status,
         soldeExpediteurApres: t.soldeExpediteurApres || 0,
+        soldeDestinataireApres: t.soldeDestinataireApres || 0,
         date: t.createdAt
       }))
     });
