@@ -12,7 +12,7 @@ const User = require('../models/Client');
 // Page HTML servie par le backend
 router.get('/recharge-page', async (req, res) => {
   const { token } = req.query;
-  
+  console.log('token', token)
   // Vérifie le token pour sécu
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
