@@ -83,7 +83,8 @@ router.get('/searchClient', authUser, async (req, res) => {
 
 // ==================== ROUTES des transfert unipay a mobil money ====================
 
-// POST /api/transactions/withdraw/preview vrifie les frais lors de la recuperation
+
+// POST /api/transactions/withdraw/preview - Calcule les frais seulement
 router.post('/withdraw/preview', authUser, async (req, res) => {
   try {
     const { montant, operateur, numero } = req.body;
@@ -95,7 +96,6 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
 
     const user = await Client.findById(userId);
 
-    // ✅ Check si client bloqué
     if (user.bloque) {
       return res.status(403).json({
         error: 'Compte suspendu. Impossible d’effectuer un retrait.'
@@ -125,6 +125,55 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
     }
 
+    // ✅ Ne crée rien, retourne juste les données
+    res.json({
+      montant,
+      frais,
+      total,
+      operateur,
+      numero,
+      soldeRestant: user.solde - total
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/transactions/withdraw/confirm - Crée et débite après auth
+router.post('/withdraw/confirm', authUser, async (req, res) => {
+  try {
+    const { montant, operateur, numero } = req.body; // ← Reçoit les params, pas transactionId
+    const userId = req.user.id;
+
+    const user = await Client.findById(userId);
+
+    if (user.bloque) {
+      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
+    }
+
+    const FRAIS = {
+      'MTN Money': 0.01,
+      'Orange Money': 0.01,
+      'Moov Money': 0.015,
+      'SankMoney': 0.005,
+      'Coris Money': 0.01,
+      'Wave': 0.01,
+      'XpresCash': 0.02,
+      'Carte Visa': 0.025
+    };
+
+    const tauxFrais = FRAIS[operateur] || 0.01;
+    const frais = Math.ceil(montant * tauxFrais);
+    const total = montant + frais;
+
+    if (user.solde < total) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    const nouveauSolde = user.solde - total;
+
+    // ✅ Crée la transaction et débite en même temps
     const transaction = await Transaction.create({
       expediteur: userId,
       type: 'retrait',
@@ -132,73 +181,28 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       frais,
       operateur,
       numeroDestination: numero,
-      status: 'en_attente',
+      status: 'validee', // ✅ Direct validée car auth OK
       soldeExpediteurAvant: user.solde,
-      motif: `Retrait ${operateur}`
+      soldeExpediteurApres: nouveauSolde,
+      motif: `Retrait ${operateur}`,
+      dateValidation: new Date()
     });
+
+    await Client.findByIdAndUpdate(userId, { solde: nouveauSolde });
 
     res.json({
-      transactionId: transaction._id,
-      montant,
-      frais,
-      //numeroDestination,
-      total,
-      operateur,
-      numero
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-// POST /api/transactions/withdraw/confirm confirme la transaction de recuperation
-router.post('/withdraw/confirm', authUser, async (req, res) => {
-  try {
-    const { transactionId } = req.body;
-    const userId = req.user.id;
-
-    const user = await Client.findById(userId);
-
-    // ✅ Check blocage avant de confirmer
-    if (user.bloque) {
-      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
-    }
-
-    const tx = await Transaction.findOne({
-      _id: transactionId,
-      expediteur: userId,
-      status: 'en_attente'
-    });
-
-    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-
-    const total = tx.montant + tx.frais;
-    if (user.solde < total) {
-      return res.status(400).json({ error: 'Solde insuffisant' });
-    }
-
-    const nouveauSolde = user.solde - total;
-
-    await Promise.all([
-      Client.findByIdAndUpdate(userId, { solde: nouveauSolde }),
-      Transaction.findByIdAndUpdate(transactionId, {
-        status: 'validee',
-        soldeExpediteurApres: nouveauSolde
-      })
-    ]);
-
-    res.json({
+      success: true,
       message: 'Retrait confirmé',
+      transactionId: transaction._id,
       nouveauSolde,
-      montantRetire: tx.montant,
-      frais: tx.frais
+      montantRetire: montant,
+      frais
     });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // GET /api/transactions/pending - Admin voit les retraits/transferts en attente
 router.get('/pending', authUser, async (req, res) => {
   try {
