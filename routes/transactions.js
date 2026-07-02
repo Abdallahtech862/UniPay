@@ -698,34 +698,33 @@ router.get('/me', authUser, async (req, res) => {
   try {
     const user = await Client.findById(req.user.id).select('solde');
     const transactions = await Transaction.find({
-      $or: [{expediteur: req.user._id }, { destinataire: req.user._id }]
+      $or: [{ expediteur: req.user.id }, { destinataire: req.user.id }]
     })
     .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
     .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
-    .sort({ createdAt: -1 }) // ← createdAt, pas date si tu utilises timestamps
+    .sort({ createdAt: -1 })
     .lean();
 
-    
-
     res.json({
-          solde: user?.solde || 0, // ✅ Fallback à 0
-          transactions: transactions.map(t => ({
-            id: t._id,
-            type: t.expediteur._id.equals(req.user.id)? 'envoi' : 'reception',
-            montant: t.montant,
-            frais: t.frais || 0,
-            contact: t.expediteur._id.equals(req.user.id)? t.destinataire : t.expediteur,
-            motif: t.motif || '',
-            status: t.status,
-            soldeExpediteurApres: t.soldeExpediteurApres || 0,
-            date: t.createdAt
-          }))
-        });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
+      solde: user?.solde || 0,
+      transactions: transactions.map(t => ({
+        id: t._id,
+        type: t.type || (t.expediteur._id.equals(req.user.id) ? 'envoi' : 'reception'), // ✅ Prend le type du schema
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.expediteur._id.equals(req.user.id) ? t.destinataire : t.expediteur,
+        operateur: t.operateur || null, // ✅ Ajouté
+        numeroDestination: t.numeroDestination || null, // ✅ Ajouté
+        motif: t.motif || '',
+        status: t.status,
+        soldeExpediteurApres: t.soldeExpediteurApres || 0,
+        date: t.createdAt
+      }))
     });
-
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/transactions/dashboard - Dashboard avec top clients
 router.get('/dashboard', async (req, res) => {
