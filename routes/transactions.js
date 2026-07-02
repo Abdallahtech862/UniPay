@@ -171,7 +171,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
-    const nouveauSolde = user.solde - total;
+    const nouveauSolde = user.solde;// - total;
 
     // ✅ Crée la transaction et débite en même temps
     const transaction = await Transaction.create({
