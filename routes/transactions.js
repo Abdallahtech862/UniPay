@@ -142,12 +142,64 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
 
 // POST /api/transactions/withdraw/confirm - Crée et débite après auth
 router.post('/withdraw/confirm', authUser, async (req, res) => {
-  console.log('User ID:', req.user.id); // ← Vérifie si tu reçois l'user
-  console.log('Headers:', req.headers.authorization); // ← Vérifie le token
   try {
-    // ... reste du code
+    const { montant, operateur, numero } = req.body; // ← Reçoit les params, pas transactionId
+    const userId = req.user.id;
+
+    const user = await Client.findById(userId);
+
+    if (user.bloque) {
+      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
+    }
+
+    const FRAIS = {
+      'MTN Money': 0.01,
+      'Orange Money': 0.01,
+      'Moov Money': 0.015,
+      'SankMoney': 0.005,
+      'Coris Money': 0.01,
+      'Wave': 0.01,
+      'XpresCash': 0.02,
+      'Carte Visa': 0.025
+    };
+
+    const tauxFrais = FRAIS[operateur] || 0.01;
+    const frais = Math.ceil(montant * tauxFrais);
+    const total = montant + frais;
+
+    if (user.solde < total) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    const nouveauSolde = user.solde - total;
+
+    // ✅ Crée la transaction et débite en même temps
+    const transaction = await Transaction.create({
+      expediteur: userId,
+      type: 'retrait',
+      montant,
+      frais,
+      operateur,
+      numeroDestination: numero,
+      status: 'validee', // ✅ Direct validée car auth OK
+      soldeExpediteurAvant: user.solde,
+      soldeExpediteurApres: nouveauSolde,
+      motif: `Retrait ${operateur}`,
+      dateValidation: new Date()
+    });
+
+    await Client.findByIdAndUpdate(userId, { solde: nouveauSolde });
+
+    res.json({
+      success: true,
+      message: 'Retrait confirmé',
+      transactionId: transaction._id,
+      nouveauSolde,
+      montantRetire: montant,
+      frais
+    });
+
   } catch (err) {
-    console.error('Erreur confirm:', err);
     res.status(500).json({ error: err.message });
   }
 });
