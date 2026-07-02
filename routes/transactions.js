@@ -130,7 +130,7 @@ router.get('/recharge-page', async (req, res) => {
             }
 
             try {
-              const res = await fetch('/api/recharge/init', {
+              const res = await fetch('/api/transactions/recharge/init', {
                 method: 'POST',
                 headers: { 
                   'Content-Type': 'application/json',
