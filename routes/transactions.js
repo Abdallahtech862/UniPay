@@ -181,7 +181,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       frais,
       operateur,
       numeroDestination: numero,
-      status: 'validee', // ✅ Direct validée car auth OK
+      status: 'en_attente', // ✅ Direct validée car auth OK
       soldeExpediteurAvant: user.solde,
       soldeExpediteurApres: nouveauSolde,
       motif: `Retrait ${operateur}`,
