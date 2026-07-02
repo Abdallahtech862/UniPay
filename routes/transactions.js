@@ -4,6 +4,205 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
+
+const jwt = require('jsonwebtoken');
+const User = require('../models/Client');
+//const Transaction = require('../models/Transaction');
+
+// Page HTML servie par le backend
+router.get('/recharge-page', async (req, res) => {
+  const { token } = req.query;
+  
+  // Vérifie le token pour sécu
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(401).send('Unauthorized');
+    
+    // Renvoie la page HTML
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Recharger Wallet</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a; color: #fff; padding: 20px;
+          }
+          .container { max-width: 400px; margin: 0 auto; }
+          h1 { font-size: 24px; margin-bottom: 20px; color: #E8D19A; }
+          .service { 
+            background: #2a2a2a; border-radius: 12px; padding: 16px; 
+            margin-bottom: 12px; display: flex; align-items: center;
+            cursor: pointer; border: 2px solid transparent;
+          }
+          .service:hover { border-color: #E8D19A; }
+          .service img { width: 48px; height: 48px; border-radius: 8px; margin-right: 12px; }
+          .service-name { font-size: 16px; font-weight: 600; }
+          .service-desc { font-size: 13px; color: #999; }
+          .input-group { margin: 20px 0; }
+          label { display: block; margin-bottom: 8px; font-size: 14px; color: #ccc; }
+          input { 
+            width: 100%; padding: 14px; border-radius: 10px; 
+            border: 1px solid #444; background: #2a2a2a; 
+            color: #fff; font-size: 16px;
+          }
+          button {
+            width: 100%; padding: 16px; border-radius: 12px;
+            background: #E8D19A; color: #1a1a1a; font-size: 16px;
+            font-weight: 600; border: none; cursor: pointer;
+          }
+          button:disabled { opacity: 0.5; }
+          .hidden { display: none; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Recharger mon wallet</h1>
+          
+          <div id="services">
+            <div class="service" onclick="selectService('orange')">
+              <img src="https://logo.clearbit.com/orange.bf" alt="Orange">
+              <div>
+                <div class="service-name">Orange Money</div>
+                <div class="service-desc">Frais 1% - Instantané</div>
+              </div>
+            </div>
+            
+            <div class="service" onclick="selectService('moov')">
+              <img src="https://logo.clearbit.com/moov.bf" alt="Moov">
+              <div>
+                <div class="service-name">Moov Money</div>
+                <div class="service-desc">Frais 1% - Instantané</div>
+              </div>
+            </div>
+
+            <div class="service" onclick="selectService('wave')">
+              <img src="https://logo.clearbit.com/wave.com" alt="Wave">
+              <div>
+                <div class="service-name">Wave</div>
+                <div class="service-desc">Frais 0% - Instantané</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="form" class="hidden">
+            <div class="input-group">
+              <label>Montant à recharger</label>
+              <input type="number" id="montant" placeholder="5000 FCFA" />
+            </div>
+            <div class="input-group">
+              <label>Numéro Mobile Money</label>
+              <input type="tel" id="numero" placeholder="70 XX XX XX" />
+            </div>
+            <button onclick="submitRecharge()">Confirmer le paiement</button>
+            <button onclick="back()" style="background:#444;margin-top:10px">Retour</button>
+          </div>
+        </div>
+
+        <script>
+          const USER_ID = '${decoded.id}';
+          const TOKEN = '${token}';
+          let selectedService = null;
+
+          function selectService(service) {
+            selectedService = service;
+            document.getElementById('services').classList.add('hidden');
+            document.getElementById('form').classList.remove('hidden');
+          }
+
+          function back() {
+            document.getElementById('form').classList.add('hidden');
+            document.getElementById('services').classList.remove('hidden');
+          }
+
+          async function submitRecharge() {
+            const montant = document.getElementById('montant').value;
+            const numero = document.getElementById('numero').value;
+            
+            if (!montant || !numero) {
+              alert('Remplis tous les champs');
+              return;
+            }
+
+            try {
+              const res = await fetch('/api/recharge/init', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + TOKEN
+                },
+                body: JSON.stringify({
+                  userId: USER_ID,
+                  montant: parseInt(montant),
+                  numero,
+                  operateur: selectedService
+                })
+              });
+
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error);
+
+              // Notifie l'app React Native
+              window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'RECHARGE_SUCCESS',
+                montant: data.montant,
+                nouveauSolde: data.nouveauSolde
+              }));
+            } catch (err) {
+              alert(err.message);
+            }
+          }
+        </script>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    res.status(401).send('Token invalide');
+  }
+});
+
+// API pour initier la recharge
+router.post('/recharge/init', authUser, async (req, res) => {
+  try {
+    const { montant, numero, operateur } = req.body;
+    const userId = req.user.id;
+
+    // Ici tu appelles l'API Orange/Moov/Wave
+    // Exemple: const result = await orangeMoneyApi.debit(numero, montant);
+    
+    // Pour test, on simule
+    const user = await User.findById(userId);
+    user.solde += montant;
+    await user.save();
+
+    const tx = new Transaction({
+      type: 'recharge',
+      expediteur: userId,
+      montant,
+      operateur,
+      numeroSource: numero,
+      status: 'validee',
+      soldeExpediteurApres: user.solde
+    });
+    await tx.save();
+
+    res.json({ 
+      montant, 
+      nouveauSolde: user.solde,
+      message: 'Recharge effectuée' 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
+
 // ==================== ROUTES pour rechercher un contact pour des transferts B2B ====================
 //rechercher des client par numero ou par pseudo pour faire un transfert
 router.get('/search', authUser, async (req, res) => {
