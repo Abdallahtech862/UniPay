@@ -716,7 +716,7 @@ router.get('/me', authUser, async (req, res) => {
         type: t.type || (t.expediteur._id.equals(req.user.id) ? 'envoi' : 'reception'), // ✅ Prend le type du schema
         montant: t.montant,
         frais: t.frais || 0,
-        expediteur:expediteur._id
+        expediteur:expediteur._id,
         contact: t.expediteur._id.equals(req.user.id) ? t.destinataire : t.expediteur,
         operateur: t.operateur || null, // ✅ Ajouté
         numeroDestination: t.numeroDestination || null, // ✅ Ajouté
