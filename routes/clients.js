@@ -9,7 +9,6 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 
 const Transaction = require('../models/Transaction'); // ✅ Ajoute cette ligne
 
-
 // Config Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -26,9 +25,6 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage });
-
-
-
 const uploade = multer({ dest: 'uploads/' });
 
 router.put('/update-profile', authUser, uploade.fields([
@@ -39,7 +35,6 @@ router.put('/update-profile', authUser, uploade.fields([
   try {
     const { nom, prenom } = req.body;
     const userId = req.user.id;
-    console.log('userId:',userId);
     const updateData: any = { nom, prenom };
 
     if (req.files?.photoProfil) {
