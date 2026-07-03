@@ -25,6 +25,38 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage });
+
+//changer le mot de passe
+router.put('/change-password', authUser, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: 'Champs manquants' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Mot de passe trop court' });
+    }
+
+    const client = await Client.findById(userId);
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
+
+    const isMatch = await bcrypt.compare(oldPassword, client.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Ancien mot de passe incorrect' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    client.password = hashed;
+    await client.save();
+
+    res.json({ message: 'Mot de passe modifié' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 //gerer le profile
 
 //const multer = require('multer');
