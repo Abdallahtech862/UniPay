@@ -34,6 +34,7 @@ app.use('/api/wallet', require('./routes/wallet'));
 //app.use('/api/transfer', require('./routes/transfer'));
 app.use('/api/cards', require('./routes/cards'));
 app.use('/api/clients', require('./routes/clients'));
+app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
 
 
 const PORT = process.env.PORT;
