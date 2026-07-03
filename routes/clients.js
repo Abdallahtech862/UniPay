@@ -28,9 +28,9 @@ const upload = multer({ storage });
 //gerer le profile
 
 //const multer = require('multer');
-const uploads = multer({ dest: 'uploads/' });
+const uploade = multer({ dest: 'uploads/' });
 
-router.put('/update-profile', authUser, uploads.fields([
+router.put('/update-profile', authUser, uploade.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
