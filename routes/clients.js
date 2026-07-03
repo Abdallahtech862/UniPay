@@ -50,7 +50,7 @@ router.put('/update-profile', authUser, uploads.fields([
     if (req.files?.carteVerso) {
       updateData.carteVerso = req.files.carteVerso[0].path;
     }
-
+    console.log('updateData:',updateData);
     const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
     console.log('client:',client);
     res.json({ message: 'Profil mis à jour', client });
