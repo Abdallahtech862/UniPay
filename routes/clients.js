@@ -28,37 +28,36 @@ const storage = new CloudinaryStorage({
 const upload = multer({ storage });
 
 
-router.put('/update-profile', authUser, async (req, res) => {
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
+
+router.put('/update-profile', authUser, upload.fields([
+  { name: 'photoProfil', maxCount: 1 },
+  { name: 'carteRecto', maxCount: 1 },
+  { name: 'carteVerso', maxCount: 1 }
+]), async (req, res) => {
   try {
-    const { nom, prenom, phone, email } = req.body;
+    const { nom, prenom } = req.body;
     const userId = req.user.id;
 
-    if (!nom || !prenom || !phone) {
-      return res.status(400).json({ error: 'Nom, prénom et téléphone requis' });
+    const updateData: any = { nom, prenom };
+
+    if (req.files?.photoProfil) {
+      updateData.photoProfil = req.files.photoProfil[0].path;
+    }
+    if (req.files?.carteRecto) {
+      updateData.carteRecto = req.files.carteRecto[0].path;
+    }
+    if (req.files?.carteVerso) {
+      updateData.carteVerso = req.files.carteVerso[0].path;
     }
 
-    const client = await Client.findByIdAndUpdate(
-      userId,
-      { nom, prenom, telephone: phone, email },
-      { new: true }
-    );
-
-    if (!client) return res.status(404).json({ error: 'Client introuvable' });
-
-    res.json({ 
-      message: 'Profil mis à jour',
-      client: {
-        nom: client.nom,
-        prenom: client.prenom,
-        phone: client.telephone,
-        email: client.email
-      }
-    });
+    const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
+    res.json({ message: 'Profil mis à jour', client });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // ==================== ROUTES HTML ====================
 
