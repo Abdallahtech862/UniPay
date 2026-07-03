@@ -28,6 +28,38 @@ const storage = new CloudinaryStorage({
 const upload = multer({ storage });
 
 
+router.put('/update-profile', authUser, async (req, res) => {
+  try {
+    const { nom, prenom, phone, email } = req.body;
+    const userId = req.user.id;
+
+    if (!nom || !prenom || !phone) {
+      return res.status(400).json({ error: 'Nom, prénom et téléphone requis' });
+    }
+
+    const client = await Client.findByIdAndUpdate(
+      userId,
+      { nom, prenom, telephone: phone, email },
+      { new: true }
+    );
+
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
+
+    res.json({ 
+      message: 'Profil mis à jour',
+      client: {
+        nom: client.nom,
+        prenom: client.prenom,
+        phone: client.telephone,
+        email: client.email
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // ==================== ROUTES HTML ====================
 
 // GET /api/clients/add - Formulaire
