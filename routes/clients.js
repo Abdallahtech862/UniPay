@@ -25,36 +25,6 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage });
-//const uploade = multer({ dest: 'uploads/' });
-
-router.put('/update-profile', authUser, upload.fields([
-  { name: 'photoProfil', maxCount: 1 },
-  { name: 'carteRecto', maxCount: 1 },
-  { name: 'carteVerso', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    const { nom, prenom } = req.body;
-    const userId = req.user.id;
-    const updateData: any = { nom, prenom };
-
-    if (req.files?.photoProfil) {
-      updateData.photoProfil = req.files.photoProfil[0].path;
-    }
-    if (req.files?.carteRecto) {
-      updateData.carteRecto = req.files.carteRecto[0].path;
-    }
-    if (req.files?.carteVerso) {
-      updateData.carteVerso = req.files.carteVerso[0].path;
-    }
-    //console.log('req.files.carteVerso[0].path:',req.files.carteVerso[0].path);
-    const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
-    
-    console.log('client:',client);
-    res.json({ message: 'Profil mis à jour', client });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ==================== ROUTES HTML ====================
 
