@@ -28,9 +28,9 @@ const upload = multer({ storage });
 //gerer le profile
 
 //const multer = require('multer');
-//const upload = multer({ dest: 'uploads/' });
+const uploads = multer({ dest: 'uploads/' });
 
-router.put('/update-profile', authUser, upload.fields([
+router.put('/update-profile', authUser, uploads.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
@@ -39,7 +39,7 @@ router.put('/update-profile', authUser, upload.fields([
     const { nom, prenom } = req.body;
     const userId = req.user.id;
 
-    const updateData: any = { nom, prenom };
+    const updateData = { nom, prenom }; // ← Pas de : any
 
     if (req.files?.photoProfil) {
       updateData.photoProfil = req.files.photoProfil[0].path;
@@ -52,6 +52,7 @@ router.put('/update-profile', authUser, upload.fields([
     }
 
     const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
+    console.log('client:;client);
     res.json({ message: 'Profil mis à jour', client });
   } catch (err) {
     res.status(500).json({ error: err.message });
