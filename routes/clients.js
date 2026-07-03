@@ -39,7 +39,7 @@ router.put('/update-profile', authUser, uploade.fields([
   try {
     const { nom, prenom } = req.body;
     const userId = req.user.id;
-
+    console.log('userId:',userId);
     const updateData: any = { nom, prenom };
 
     if (req.files?.photoProfil) {
@@ -51,8 +51,9 @@ router.put('/update-profile', authUser, uploade.fields([
     if (req.files?.carteVerso) {
       updateData.carteVerso = req.files.carteVerso[0].path;
     }
-
+    console.log('req.files.carteVerso[0].path:',req.files.carteVerso[0].path);
     const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
+    console.log('client:',client);
     res.json({ message: 'Profil mis à jour', client });
   } catch (err) {
     res.status(500).json({ error: err.message });
