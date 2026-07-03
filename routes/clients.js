@@ -28,10 +28,10 @@ const storage = new CloudinaryStorage({
 const upload = multer({ storage });
 
 
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' });
 
-router.put('/update-profile', authUser, upload.fields([
+const uploade = multer({ dest: 'uploads/' });
+
+router.put('/update-profile', authUser, uploade.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
