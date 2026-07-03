@@ -52,7 +52,7 @@ router.put('/update-profile', authUser, uploads.fields([
     }
 
     const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
-    console.log('client:;client);
+    console.log('client:',client);
     res.json({ message: 'Profil mis à jour', client });
   } catch (err) {
     res.status(500).json({ error: err.message });
