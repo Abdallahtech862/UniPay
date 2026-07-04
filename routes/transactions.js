@@ -1198,10 +1198,10 @@ router.post('/', authUser, async (req, res) => {
     }
 
     // Notif destinataire
-    const destinataire = await Client.findById(destinataireId);
-    if (destinataire.expoPushToken) {
+    const destinataires = await Client.findById(destinataireId);
+    if (destinataires.expoPushToken) {
       await sendPushNotification(
-        destinataire.expoPushToken,
+        destinataires.expoPushToken,
         'Argent reçu',
         `Tu as reçu ${t.montant} FCFA de ${sender.prenom}`,
         { type: 'reception', transactionId: newTx._id }
