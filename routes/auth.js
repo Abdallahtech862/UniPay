@@ -240,6 +240,7 @@ router.post('/login-password', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
 
     const isMatch = await user.comparePassword(password);
+    console.log('Test compare:', password, user.password, isMatch);
     if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
 
     // ✅ Vérif si client bloqué
