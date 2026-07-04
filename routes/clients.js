@@ -81,7 +81,8 @@ router.put('/change-password', authUser, async (req, res) => {
     }
 
     // Ne hash pas ici si t’as un pre('save')
-    client.password = newPassword; // ← Laisse le hook hasher
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    client.password = hashedPassword; // ← Laisse le hook hasher
     await client.save();
 
     res.json({ message: 'Mot de passe modifié' });
