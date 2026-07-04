@@ -228,9 +228,82 @@ router.post('/check-user', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+//
+const { sendSMSOrange } = require('../utils/sendSMS');
 
 // 2. Login avec password + envoi OTP
 router.post('/login-password', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
+
+    if (user.bloque) {
+      return res.status(403).json({ 
+        error: 'Votre compte a été suspendu. Contactez le support UniPay.' 
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000;
+    await user.save();
+
+    // ← Envoi SMS réel ici
+    const message = `Votre code UniPay: ${otp}. Valide 5 min. Ne le partagez jamais.`;
+    const smsSent = await sendSMSOrange(user.telephone, message);
+    
+    if (!smsSent) {
+      return res.status(500).json({ error: 'Échec envoi SMS' });
+    }
+
+    res.json({ message: 'OTP envoyé par SMS' }); // ← Plus de otp dans la réponse
+    
+  } catch (err) {
+    console.error('Erreur login-password:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ajoute une route pour nouveau user aussi
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { identifier } = req.body;
+    const exists = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+    
+    if (exists) return res.status(400).json({ error: 'Compte déjà existant' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Stockage temporaire en DB ou Redis. Ici on crée un user temp
+    await Client.create({
+      telephone: identifier.includes('@') ? null : identifier,
+      email: identifier.includes('@') ? identifier : null,
+      otpCode: otp,
+      otpExpires: Date.now() + 5 * 60 * 1000,
+      isVerified: false
+    });
+
+    const message = `Votre code UniPay: ${otp}. Valide 5 min.`;
+    await sendSMSOrange(identifier, message);
+
+    res.json({ message: 'OTP envoyé' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Login avec password + envoi OTP
+router.post('/login-passwordd', async (req, res) => {
   try {
     const { identifier, password } = req.body;
     const user = await Client.findOne({
@@ -267,7 +340,7 @@ router.post('/login-password', async (req, res) => {
 
 // 3. Vérifier OTP et connecter
 const Transaction = require('../models/Transaction'); // Assure-toi que le chemin est bon
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otpp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
 
