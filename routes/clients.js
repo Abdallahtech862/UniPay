@@ -453,13 +453,13 @@ router.get('/admin', async (req, res) => {
 
         function voirCNI(client) {
           let html = '<p><b>' + client.prenom + ' ' + client.nom + '</b></p>';
-          if (client.cniRecto) {
-            html += '<p>Recto:</p><img src="' + client.cniRecto + '">';
+          if (client.carteRecto) {
+            html += '<p>Recto:</p><img src="' + client.carteRecto + '">';
           }
-          if (client.cniVerso) {
-            html += '<p>Verso:</p><img src="' + client.cniVerso + '">';
+          if (client.carteVerso) {
+            html += '<p>Verso:</p><img src="' + client.carteVerso + '">';
           }
-          if (!client.cniRecto && !client.cniVerso) {
+          if (!client.carteRecto && !client.carteVerso) {
             html += '<p style="color:#999">Aucune pièce d\\'identité uploadée</p>';
           }
           document.getElementById('cniContent').innerHTML = html;
