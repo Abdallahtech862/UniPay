@@ -20,10 +20,10 @@ async function sendSMSOrange(phoneNumber, message) {
   try {
     const token = await getOrangeToken();
     
-    // Format numéro : +226XXXXXXXX ou tel:+226XXXXXXXX
+    // Orange veut tel:+226XXXXXXXX
     const formattedNumber = phoneNumber.startsWith('+226') 
       ? `tel:${phoneNumber}` 
-      : `tel:+226${phoneNumber}`;
+      : `tel:+226${phoneNumber.slice(-8)}`;
 
     await axios.post(
       `https://api.orange.com/smsmessaging/v1/outbound/${process.env.ORANGE_SENDER_ADDRESS}/requests`,
@@ -31,10 +31,8 @@ async function sendSMSOrange(phoneNumber, message) {
         outboundSMSMessageRequest: {
           address: formattedNumber,
           senderAddress: process.env.ORANGE_SENDER_ADDRESS,
-          senderName: process.env.ORANGE_SENDER_NAME, // Ex: "UniPay"
-          outboundSMSTextMessage: {
-            message: message
-          }
+          senderName: process.env.ORANGE_SENDER_NAME,
+          outboundSMSTextMessage: { message }
         }
       },
       {
@@ -44,11 +42,9 @@ async function sendSMSOrange(phoneNumber, message) {
         }
       }
     );
-    
-    console.log(`SMS envoyé à ${phoneNumber}`);
     return true;
   } catch (err) {
-    console.error('Erreur SMS Orange:', err.response?.data || err.message);
+    console.error('SMS Orange error:', err.response?.data || err.message);
     return false;
   }
 }
