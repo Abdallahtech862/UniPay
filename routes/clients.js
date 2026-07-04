@@ -36,7 +36,7 @@ router.put('/change-password', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Champs manquants' });
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 4) {
       return res.status(400).json({ error: 'Mot de passe trop court' });
     }
 
