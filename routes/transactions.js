@@ -3,6 +3,8 @@ const router = express.Router();
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
+const { sendPushNotification } = require('../utils/sendPushNotification');
+
 
 
 
@@ -1183,6 +1185,28 @@ router.post('/', authUser, async (req, res) => {
     .limit(20)
     .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
     .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
+    
+    // Notif expéditeur
+    const sender = await Client.findById(req.user.id);
+    if (sender.expoPushToken) {
+      await sendPushNotification(
+        sender.expoPushToken,
+        'Transfert envoyé',
+        `Tu as envoyé ${t.montant} FCFA à ${destinataire.prenom}`,
+        { type: 'transfert', transactionId: newTx._id }
+      );
+    }
+
+    // Notif destinataire
+    const destinataire = await Client.findById(destinataireId);
+    if (destinataire.expoPushToken) {
+      await sendPushNotification(
+        destinataire.expoPushToken,
+        'Argent reçu',
+        `Tu as reçu ${t.montant} FCFA de ${sender.prenom}`,
+        { type: 'reception', transactionId: newTx._id }
+      );
+    }
 
     res.json({
       message: 'Transfert effectué',
