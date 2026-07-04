@@ -80,15 +80,17 @@ router.put('/change-password', authUser, async (req, res) => {
       return res.status(401).json({ error: 'Ancien mot de passe incorrect' });
     }
 
-    const hashed = await bcrypt.hash(newPassword, 10);
-    client.password = hashed;
+    // Ne hash pas ici si t’as un pre('save')
+    client.password = newPassword; // ← Laisse le hook hasher
     await client.save();
 
     res.json({ message: 'Mot de passe modifié' });
   } catch (err) {
+    console.error('Erreur change-password:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 //gerer le profile
 
 
