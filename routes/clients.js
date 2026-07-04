@@ -6,9 +6,6 @@ const { v2: cloudinary } = require('cloudinary');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Client = require('../models/Client');
 const { verifyAdmin, authUser } = require('../middleware/auth');
-
-//const { uploadToCloudinary } = require('../services/cloudinary');
-//const multer = require('multer');
 const streamifier = require('streamifier');
 const upload = multer({ storage: multer.memoryStorage() }); // ← mémoire, pas dest: 'uploads/'
 
@@ -57,17 +54,45 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 //const upload = multer({ storage });
-
-// les notifications push
-router.post('/save-push-token', authUser, async (req, res) => {
+// GET profil avec notifsEnabled
+router.get('/me', authUser, async (req, res) => {
   try {
-    const { pushToken } = req.body;
-    await Client.findByIdAndUpdate(req.user.id, { expoPushToken: pushToken });
-    res.json({ message: 'Token saved' });
+    const client = await Client.findById(req.user.id).select('-password');
+    res.json(client);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Sauvegarder le token push
+router.post('/save-push-token', authUser, async (req, res) => {
+  try {
+    const { pushToken } = req.body;
+    await Client.findByIdAndUpdate(req.user.id, { expoPushToken: pushToken });
+    res.json({ message: 'Token push enregistré' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Activer/désactiver notifs
+router.put('/toggle-notifications', authUser, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const client = await Client.findByIdAndUpdate(
+      req.user.id,
+      { notificationsEnabled: enabled },
+      { new: true }
+    ).select('-password');
+    res.json({ 
+      message: `Notifications ${enabled ? 'activées' : 'désactivées'}`,
+      notificationsEnabled: client.notificationsEnabled 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 //changer le mot de passe
 router.put('/change-password', authUser, async (req, res) => {
