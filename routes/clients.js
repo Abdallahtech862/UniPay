@@ -58,6 +58,17 @@ const uploadToCloudinary = (buffer) => {
 };
 //const upload = multer({ storage });
 
+// les notifications push
+router.post('/save-push-token', authUser, async (req, res) => {
+  try {
+    const { pushToken } = req.body;
+    await Client.findByIdAndUpdate(req.user.id, { expoPushToken: pushToken });
+    res.json({ message: 'Token saved' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 //changer le mot de passe
 router.put('/change-password', authUser, async (req, res) => {
   try {
