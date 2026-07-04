@@ -20,7 +20,8 @@ const clientSchema = new mongoose.Schema({
   otpCode: { type: String, default: null },
   otpExpires: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
-  expoPushToken: { type: String, default: null }
+  expoPushToken: { type: String, default: null },
+  notificationsEnabled: { type: Boolean, default: true }
 });
 
 // Pas de pre('save') : tu hash déjà dans la route register
