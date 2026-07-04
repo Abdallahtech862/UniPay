@@ -109,7 +109,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
     }
 
     const FRAIS = {
-      'MTN Money': 0.01,
+      'Telecel Money': 0.01,
       'Orange Money': 0.01,
       'Moov Money': 0.015,
       'SankMoney': 0.005,
