@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const clientSchema = new mongoose.Schema({
   nom: { type: String, required: true, trim: true },
@@ -10,43 +11,20 @@ const clientSchema = new mongoose.Schema({
   role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
   pseudo: { type: String, unique: true, sparse: true },
   photoProfil: { type: String, default: null },
-  //cniRecto: String, // ✅ URL image CNI recto
-  //cniVerso: String, // ✅ URL image CNI verso
-  bloque: { type: Boolean, default: false }, // ✅ Nouveau
-  //
-  carteRecto: { type: String, default: null },
-  carteVerso: { type: String, default: null },
+  bloque: { type: Boolean, default: false },
+  carteRecto: { type: String, default: null }, // ← URL Cloudinary complète
+  carteVerso: { type: String, default: null }, // ← URL Cloudinary complète
   limiteJournaliere: { type: Number, default: 500000 },
   limiteMensuelle: { type: Number, default: 5000000 },
   isVerified: { type: Boolean, default: false },
-  
-  // AJOUTE CES 2 LIGNES
   otpCode: { type: String, default: null },
   otpExpires: { type: Date, default: null },
-  
   createdAt: { type: Date, default: Date.now }
 });
 
-clientSchema.methods.comparePassword = async function(candidatePassword) {
-  const bcrypt = require('bcryptjs');
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-//module.exports = mongoose.model('Client', clientSchema);
+// Pas de pre('save') : tu hash déjà dans la route register
 
 clientSchema.methods.comparePassword = async function(candidatePassword) {
-  const bcrypt = require('bcryptjs');
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-module.exports = mongoose.model('Client', clientSchema);
-
-// SUPPRIME LE PRE SAVE - tu hash déjà dans la route
-// clientSchema.pre('save', async function(next) { ... });
-
-// Garde juste la méthode compare
-clientSchema.methods.comparePassword = async function(candidatePassword) {
-  const bcrypt = require('bcryptjs');
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
