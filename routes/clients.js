@@ -9,6 +9,7 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 
 //const { uploadToCloudinary } = require('../services/cloudinary');
 //const multer = require('multer');
+const streamifier = require('streamifier');
 const upload = multer({ storage: multer.memoryStorage() }); // ← mémoire, pas dest: 'uploads/'
 
 const Transaction = require('../models/Transaction'); // ✅ Ajoute cette ligne
