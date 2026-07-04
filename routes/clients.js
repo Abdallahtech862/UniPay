@@ -7,7 +7,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Client = require('../models/Client');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
-const { uploadToCloudinary } = require('../services/cloudinary');
+//const { uploadToCloudinary } = require('../services/cloudinary');
 //const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() }); // ← mémoire, pas dest: 'uploads/'
 
@@ -28,6 +28,33 @@ const storage = new CloudinaryStorage({
   }
 });
 
+const uploadToCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    console.log('Cloudinary upload start. Cloud:', process.env.CLOUDINARY_CLOUD_NAME);
+    
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+      return reject(new Error('Variables Cloudinary manquantes'));
+    }
+
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'unipay_clients',
+        resource_type: 'image',
+        timeout: 60000
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Cloudinary ERROR complet:', JSON.stringify(error, null, 2));
+          reject(new Error(`Cloudinary: ${error.message || error}`));
+        } else {
+          console.log('Cloudinary SUCCESS:', result.secure_url);
+          resolve(result);
+        }
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+};
 //const upload = multer({ storage });
 
 //changer le mot de passe
