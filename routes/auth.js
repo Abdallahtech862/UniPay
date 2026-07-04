@@ -259,7 +259,7 @@ router.post('/login-password', async (req, res) => {
     // ← Envoi SMS réel ici
     const message = `Votre code UniPay: ${otp}. Valide 5 min. Ne le partagez jamais.`;
     const smsSent = await sendSMSOrange(user.telephone, message);
-    console.loge(user.telephone, message);
+    console.log(user.telephone, message);
     if (!smsSent) {
       return res.status(500).json({ error: 'Échec envoi SMS' });
     }
