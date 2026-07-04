@@ -1198,7 +1198,7 @@ router.post('/', authUser, async (req, res) => {
     }
 
     // Notif destinataire
-    const destinataires = await Client.findById(destinataireId);
+    const destinataires = await Client.findById(destinataire);
     if (destinataires.expoPushToken) {
       await sendPushNotification(
         destinataires.expoPushToken,
