@@ -7,6 +7,10 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const Client = require('../models/Client');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
+const { uploadToCloudinary } = require('../services/cloudinary');
+//const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() }); // ← mémoire, pas dest: 'uploads/'
+
 const Transaction = require('../models/Transaction'); // ✅ Ajoute cette ligne
 
 // Config Cloudinary
@@ -24,7 +28,7 @@ const storage = new CloudinaryStorage({
   }
 });
 
-const upload = multer({ storage });
+//const upload = multer({ storage });
 
 //changer le mot de passe
 router.put('/change-password', authUser, async (req, res) => {
@@ -59,10 +63,9 @@ router.put('/change-password', authUser, async (req, res) => {
 });
 //gerer le profile
 
-//const multer = require('multer');
-const uploade = multer({ dest: 'uploads/' });
 
-router.put('/update-profile', authUser, uploade.fields([
+// modife les informations du client
+router.put('/update-profile', authUser, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
@@ -71,20 +74,29 @@ router.put('/update-profile', authUser, uploade.fields([
     const { nom, prenom } = req.body;
     const userId = req.user.id;
 
-    const updateData = { nom, prenom }; // ← Pas de : any
+    const updateData = { nom, prenom };
 
-    if (req.files?.photoProfil) {
-      updateData.photoProfil = req.files.photoProfil[0].path;
+    // Upload photoProfil sur Cloudinary
+    if (req.files?.photoProfil?.[0]) {
+      const result = await uploadToCloudinary(req.files.photoProfil[0].buffer);
+      updateData.photoProfil = result.secure_url; // ← URL complète https://res.cloudinary.com/...
     }
-    if (req.files?.carteRecto) {
-      updateData.carteRecto = req.files.carteRecto[0].path;
+
+    // Upload carteRecto sur Cloudinary
+    if (req.files?.carteRecto?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteRecto[0].buffer);
+      updateData.carteRecto = result.secure_url;
     }
-    if (req.files?.carteVerso) {
-      updateData.carteVerso = req.files.carteVerso[0].path;
+
+    // Upload carteVerso sur Cloudinary
+    if (req.files?.carteVerso?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteVerso[0].buffer);
+      updateData.carteVerso = result.secure_url;
     }
-    console.log('updateData:',updateData);
+
+    console.log('updateData:', updateData);
     const client = await Client.findByIdAndUpdate(userId, updateData, { new: true });
-    console.log('client:',client);
+    console.log('client:', client);
     res.json({ message: 'Profil mis à jour', client });
   } catch (err) {
     res.status(500).json({ error: err.message });
