@@ -218,7 +218,7 @@ router.post('/register', upload.fields([
 });
 
 // 1. Check si tel/email existe
-router.post('/check-user', async (req, res) => {
+router.post('/check-userr', async (req, res) => {
   try {
     const { identifier } = req.body; // +22670879425 ou email
     const user = await Client.findOne({
@@ -247,6 +247,55 @@ router.post('/check-user', async (req, res) => {
   });
 //
 
+router.post('/check-user', async (req, res) => {
+  try {
+    let { identifier } = req.body;
+
+    const user = await Client.findOne({
+      $or: [
+        { telephone: identifier },
+        { email: identifier }
+      ]
+    });
+
+    // L'utilisateur existe
+    if (user) {
+      return res.json({
+        exists: true
+      });
+    }
+
+    // Si c'est un numéro, ajouter +226 s'il n'est pas présent
+    if (!identifier.includes('@') && !identifier.startsWith('+226')) {
+      identifier = '+226' + identifier;
+    }
+
+    // Générer un OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // TODO : Stocker l'OTP (Redis, collection OTP, etc.)
+
+    const message = `Votre code UniPay : ${otp}. Valide 5 min. Ne le partagez jamais.`;
+
+    const smsSent = await sendSMSOrange(identifier, message);
+
+    if (!smsSent) {
+      return res.status(500).json({
+        error: "Échec de l'envoi du SMS"
+      });
+    }
+
+    return res.json({
+      exists: false,
+      message: "OTP envoyé"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: err.message
+    });
+  }
+});
 // 2. Login avec password + envoi OTP
 router.post('/login-password', async (req, res) => {
   try {
