@@ -1,5 +1,10 @@
 const axios = require('axios');
 
+const ORANGE_CLIENT_ID='BHjCgo6HVZDWuJfAf7CwgLTd6wKXlDpg'
+const ORANGE_CLIENT_SECRET='Basic QkhqQ2dvNkhWWkRXdUpmQWY3Q3dnTFRkNndLWGxEcGc6OEFsRDRzNU0zd25haEtUMkpYTUVnWUE0aVB6TEU5a21rQXMxM2ZlY1FqeVQ='
+const ORANGE_SENDER_ADDRESS='tel:+22675322321'  // ton numéro short code ou long
+const ORANGE_SENDER_NAME='821242'
+
 async function getOrangeToken() {
   const auth = Buffer.from(`${process.env.ORANGE_CLIENT_ID}:${process.env.ORANGE_CLIENT_SECRET}`).toString('base64');
   
