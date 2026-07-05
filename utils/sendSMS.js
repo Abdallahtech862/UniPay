@@ -19,7 +19,7 @@ async function getOrangeToken() {
 async function sendSMSOrange(phoneNumber, message) {
   try {
     const token = await getOrangeToken();
-    
+    console.error('token:', token);
     // Orange veut tel:+226XXXXXXXX
     const formattedNumber = phoneNumber.startsWith('+226') 
       ? `tel:${phoneNumber}` 
@@ -42,6 +42,7 @@ async function sendSMSOrange(phoneNumber, message) {
         }
       }
     );
+    console.error('requests:',requests);
     return true;
   } catch (err) {
     console.error('SMS Orange error:', err.response?.data || err.message);
