@@ -20,7 +20,7 @@ async function sendSMSOrange(phoneNumber, message) {
   console.log('ok');
   try {
     const token = await getOrangeToken();
-    console.error('token:', token);
+    //console.error('token:', token);
     // Orange veut tel:+226XXXXXXXX
     const formattedNumber = phoneNumber.startsWith('+226') 
       ? `tel:${phoneNumber}` 
