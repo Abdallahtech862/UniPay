@@ -17,6 +17,7 @@ async function getOrangeToken() {
 }
 
 async function sendSMSOrange(phoneNumber, message) {
+  console.log('ok');
   try {
     const token = await getOrangeToken();
     console.error('token:', token);
