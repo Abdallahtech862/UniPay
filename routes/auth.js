@@ -213,7 +213,7 @@ router.post('/register', upload.fields([
     
   } catch (err) {
     console.error('Erreur register:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, user.id, user.prenom });
   }
 });
 
