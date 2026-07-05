@@ -274,7 +274,7 @@ router.post('/login-password', async (req, res) => {
 });
 
 // Ajoute une route pour nouveau user aussi
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otpp', async (req, res) => {
   try {
     const { identifier } = req.body;
     const exists = await Client.findOne({
@@ -341,7 +341,7 @@ router.post('/login-passwordd', async (req, res) => {
 
 // 3. Vérifier OTP et connecter
 const Transaction = require('../models/Transaction'); // Assure-toi que le chemin est bon
-router.post('/verify-otpp', async (req, res) => {
+router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
 
