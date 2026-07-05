@@ -276,7 +276,7 @@ router.post('/check-user', async (req, res) => {
     // TODO : Stocker l'OTP (Redis, collection OTP, etc.)
 
     const message = `Votre code UniPay : ${otp}. Valide 5 min. Ne le partagez jamais.`;
-
+    
     const smsSent = await sendSMSOrange(identifier, message);
 
     if (!smsSent) {
@@ -287,7 +287,8 @@ router.post('/check-user', async (req, res) => {
 
     return res.json({
       exists: false,
-      message: "OTP envoyé"
+      message: "OTP envoyé",
+      otp:otp
     });
 
   } catch (err) {
