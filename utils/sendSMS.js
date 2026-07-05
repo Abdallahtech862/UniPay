@@ -24,7 +24,7 @@ async function sendSMSOrange(phoneNumber, message) {
     const formattedNumber = phoneNumber.startsWith('+226') 
       ? `tel:${phoneNumber}` 
       : `tel:+226${phoneNumber.slice(-8)}`;
-
+      console.error('SMS Orange error:', token);
     await axios.post(
       `https://api.orange.com/smsmessaging/v1/outbound/${process.env.ORANGE_SENDER_ADDRESS}/requests`,
       {
