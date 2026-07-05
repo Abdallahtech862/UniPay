@@ -6,6 +6,7 @@ const { v2: cloudinary } = require('cloudinary');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Client = require('../models/Client');
+const { sendSMSOrange } = require('../utils/sendSMS');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -229,7 +230,6 @@ router.post('/check-user', async (req, res) => {
   }
 });
 //
-const { sendSMSOrange } = require('../utils/sendSMS');
 
 // 2. Login avec password + envoi OTP
 router.post('/login-password', async (req, res) => {
