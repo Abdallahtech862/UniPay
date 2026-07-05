@@ -261,6 +261,7 @@ router.post('/login-password', async (req, res) => {
     const smsSent = await sendSMSOrange(user.telephone, message);
     console.log(user.telephone, message);
     if (!smsSend.success) {
+      console.log("smsSent =", smsSent);
   return res.status(500).json({ error: 'Échec envoi SMS' });
 }
 
