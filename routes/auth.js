@@ -243,10 +243,8 @@ router.post('/check-user', async (req, res) => {
      }
        }
     res.json({ exists: !!user });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
- 
-});
+  } catch (err) {res.status(500).json({ error: err.message });}
+  });
 //
 
 // 2. Login avec password + envoi OTP
