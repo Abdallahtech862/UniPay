@@ -260,11 +260,11 @@ router.post('/login-password', async (req, res) => {
     const message = `Votre code UniPay: ${otp}. Valide 5 min. Ne le partagez jamais.`;
     const smsSent = await sendSMSOrange(user.telephone, message);
     console.log(user.telephone, message);
-    if (smsSent==true) {
-      console.log("smsSent =", smsSent);
-  return res.status(500).json({ error: 'Échec envoi SMS' });
-}
-
+    if (!smsSent) {
+    return res.status(500).json({
+      error: "Échec envoi SMS"
+    });
+  }
     res.json({ message: 'OTP envoyé par SMS' }); // ← Plus de otp dans la réponse
     
   } catch (err) {
