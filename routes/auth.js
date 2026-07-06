@@ -212,7 +212,7 @@ router.post('/register', upload.fields([
     
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     const user = client.toObject();
-    delete user.password;
+    //delete user.password;
     res.status(201).json({message: 'Compte créé',token,user});   
   } catch (err) {
     console.error('Erreur register:', err);
