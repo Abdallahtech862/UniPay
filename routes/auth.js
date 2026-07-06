@@ -209,7 +209,12 @@ router.post('/register', upload.fields([
     await client.save(); // Plus de pre('save') donc pas de double hash
     
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ message: 'Compte créé', token, user});
+    //res.status(201).json({ message: 'Compte créé', token, user});
+    res.status(201).json({
+  message: 'Compte créé',
+  token,
+  user: client
+});
     
   } catch (err) {
     console.error('Erreur register:', err);
