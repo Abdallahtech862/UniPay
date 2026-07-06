@@ -195,7 +195,7 @@ router.post('/register', upload.fields([
     const client = new Client({
       nom: nom.trim(),
       prenom: prenom.trim(),
-      token,
+      //token,
       pseudo,
       telephone,
       email: email || `${telephone.replace('+226', '')}@unipay.local`,
@@ -211,10 +211,8 @@ router.post('/register', upload.fields([
     await client.save(); // Plus de pre('save') donc pas de double hash
     
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    //res.status(201).json({ message: 'Compte créé', token, user});
     const user = client.toObject();
     delete user.password;
-    //user.pseudo = user.pseudo || `${user.prenom}${user.nom.charAt(0)}`;
     res.status(201).json({message: 'Compte créé',token,user});   
   } catch (err) {
     console.error('Erreur register:', err);
