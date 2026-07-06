@@ -190,7 +190,7 @@ router.post('/register', upload.fields([
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    //const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     const pseudo = `${prenom.trim()}${nom.trim().charAt(0)}`;
     const client = new Client({
       nom: nom.trim(),
@@ -210,7 +210,7 @@ router.post('/register', upload.fields([
     
     await client.save(); // Plus de pre('save') donc pas de double hash
     
-    //const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     //res.status(201).json({ message: 'Compte créé', token, user});
     const user = client.toObject();
     delete user.password;
