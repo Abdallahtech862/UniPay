@@ -212,6 +212,7 @@ router.post('/register', upload.fields([
     //res.status(201).json({ message: 'Compte créé', token, user});
     const user = client.toObject();
     delete user.password;
+    user.pseudo = user.pseudo || `${user.prenom}${user.nom.charAt(0)}`;
     res.status(201).json({message: 'Compte créé',token,user});   
   } catch (err) {
     console.error('Erreur register:', err);
@@ -219,36 +220,7 @@ router.post('/register', upload.fields([
   }
 });
 
-// 1. Check si tel/email existe
-router.post('/check-userr', async (req, res) => {
-  try {
-    const { identifier } = req.body; // +22670879425 ou email
-    const user = await Client.findOne({
-      $or: [{ telephone: identifier }, { email: identifier }]
-    });
-    if (!user) {
-      // Générer un code OTP
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    user.otpCode = otp;
-    user.otpExpires = Date.now() + 5 * 60 * 1000;
-    await user.save();
-
-    // ← Envoi SMS réel ici
-    const message = `Votre code UniPay: ${otp}. Valide 5 min. Ne le partagez jamais.`;
-    const smsSent = await sendSMSOrange(user.telephone, message);
-    console.log(user.telephone, message);
-    if (!smsSent) {
-    return res.status(500).json({
-      error: "Échec envoi SMS"
-    });
-     }
-       }
-    res.json({ exists: !!user });
-  } catch (err) {res.status(500).json({ error: err.message });}
-  });
-//
-
+//verifie si un utilisateur existe
 router.post('/check-user', async (req, res) => {
   try {
     let { identifier } = req.body;
