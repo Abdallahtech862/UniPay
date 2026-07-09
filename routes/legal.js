@@ -46,7 +46,7 @@ router.get('/privacy', (req, res) => {
         <p>Chiffrement AES-256, serveurs sécurisés Burkina Faso. Empreinte stockée localement uniquement.</p>
         
         <h2>5. Vos droits</h2>
-        <p>Accès, rectification, suppression : contact@unipay.bf</p>
+        <p>Accès, rectification, suppression : abdallah.unipay@gmail.com</p>
       </div>
     </body></html>
   `);
