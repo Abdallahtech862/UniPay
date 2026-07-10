@@ -126,8 +126,6 @@ router.get('/pricing', (req, res) => {
     </body></html>
   `);
 });
-const express = require('express');
-//const router = express.Router();
 
 const html = `<!DOCTYPE html>
 <html lang="fr">
