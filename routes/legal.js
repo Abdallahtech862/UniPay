@@ -3,7 +3,7 @@ const router = express.Router();
 
 const baseStyle = `
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght=400;500;600;700&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
       font-family: 'Poppins', sans-serif;
@@ -165,6 +165,9 @@ router.get('/pricing', (req, res) => {
     </body></html>
   `);
 });
+
+
+
 const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -845,7 +848,7 @@ const html = `<!DOCTYPE html>
         Application hébergée sur serveurs sécurisés</p>
         
         <h2>Propriété intellectuelle</h2>
-        <p>L'ensemble du contenu du site et de l'application UniPay (textes, images, logo, code) est la propriété exclusive de Etablissement Sabdou Transfert et Business. Toute reproduction est interdite sans autorisation préalable.</p>
+        <p>L'ensemble du contenu du site et de l'application UniPay (textes, images, logo, code) est la propriété exclusive de Etab lissement Sabdou Transfert et Business. Toute reproduction est interdite sans autorisation préalable.</p>
         
         <h2>Agrément</h2>
         <p>UniPay opère en conformité avec la réglementation de la BCEAO et de l'ARCEP Burkina Faso relative aux services de paiement mobile.</p>
@@ -926,11 +929,9 @@ const html = `<!DOCTYPE html>
 
 </body>
 </html>`;
-
 router.get('/unipay', (req, res) => {
   res.set('Content-Type', 'text/html');
-  res.send(html);
+  res.send(html); 
 });
-
 
 module.exports = router;
