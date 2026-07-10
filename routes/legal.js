@@ -165,7 +165,6 @@ router.get('/pricing', (req, res) => {
     </body></html>
   `);
 });
-
 const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -852,4 +851,86 @@ const html = `<!DOCTYPE html>
         <p>UniPay opère en conformité avec la réglementation de la BCEAO et de l'ARCEP Burkina Faso relative aux services de paiement mobile.</p>
         
         <h2>Réclamations</h2>
-        <p>
+        <p>Pour toute réclamation, contactez-nous :<br>
+        Email : abdallah.unipay@gmail.com<br>
+        WhatsApp : +226 75 32 23 21<br>
+        Délai de réponse : 72h maximum</p>
+        
+        <h2>Litiges</h2>
+        <p>En cas de litige, une solution amiable sera privilégiée. À défaut, les tribunaux de Ouagadougou seront compétents.</p>
+        
+        <h2>Avertissement</h2>
+        <p>UniPay est un outil technique d’interface développé à titre personnel. Nous ne sommes pas une banque ni un établissement de monnaie électronique agréé. Nous ne détenons pas les fonds des utilisateurs. Les services de transfert et dépôt sont fournis par des prestataires partenaires agréés.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="unipay-footer">
+    <div class="unipay-container">
+      <div class="unipay-footer-grid">
+        <div>
+          <h4>UniPay</h4>
+          <p>Carte virtuelle + Wallet Mobile Money. Paye partout au Burkina Faso et en ligne.</p>
+        </div>
+        
+        <div>
+          <h4>Contact</h4>
+          <p>Email : <a href="mailto:abdallah.unipay@gmail.com">abdallah.unipay@gmail.com</a></p>
+          <p>Téléphone : <a href="tel:+22675322321">+226 75 32 23 21</a></p>
+          <p>WhatsApp : <a href="https://wa.me/22675322321">+226 75 32 23 21</a></p>
+        </div>
+        
+        <div>
+          <h4>Entreprise</h4>
+          <p><strong>Etablissement Sabdou Transfert et Business</strong></p>
+          <p>Responsable : Sawadogo Abdoulaye</p>
+          <p>Ouagadougou, Burkina Faso</p>
+          <p>RCCM: BF-OUAGA-01-2023-A10-17269</p>
+        </div>
+        
+        <div>
+          <h4>Légal</h4>
+          <a onclick="showPage('cgu')">Conditions d'utilisation</a>
+          <a onclick="showPage('confidentialite')">Politique de confidentialité</a>
+          <a onclick="showPage('mentions')">Mentions légales</a>
+        </div>
+      </div>
+      
+      <div class="unipay-copyright">
+        <p>© 2026 Etablissement Sabdou Transfert et Business. Tous droits réservés.</p>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+  function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(page => {
+      page.classList.remove('active');
+    });
+    document.getElementById(pageId).classList.add('active');
+    window.scrollTo(0, 0);
+  }
+  
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+</script>
+
+</body>
+</html>`;
+
+router.get('/unipay', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send(html);
+});
+
+
+module.exports = router;
