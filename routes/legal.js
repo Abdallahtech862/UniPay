@@ -3,50 +3,81 @@ const router = express.Router();
 
 const baseStyle = `
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a1a; color: #fff; padding: 20px; line-height: 1.6;
+      font-family: 'Poppins', sans-serif;
+      background: #FDF8EF; 
+      color: #6B4423; 
+      padding: 20px; 
+      line-height: 1.6;
     }
     .container { max-width: 600px; margin: 0 auto; }
-    h1 { font-size: 24px; margin-bottom: 8px; color: #E8D19A; }
-    h2 { font-size: 18px; margin: 24px 0 12px; color: #E8D19A; }
-    p, li { font-size: 15px; color: #ccc; margin-bottom: 12px; }
+    h1 { font-size: 28px; margin-bottom: 8px; color: #6B4423; font-weight: 700; }
+    h2 { font-size: 20px; margin: 32px 0 12px; color: #6B4423; font-weight: 600; }
+    p, li { font-size: 15px; color: #9C7E5C; margin-bottom: 12px; }
     ul { padding-left: 20px; }
     .tarif-card { 
-      background: #2a2a2a; border-radius: 12px; padding: 16px; 
-      margin-bottom: 12px; border: 1px solid #444;
+      background: #FFFFFF; 
+      border-radius: 12px; 
+      padding: 16px; 
+      margin-bottom: 12px; 
+      border: 1px solid #E8D19A;
     }
-    .tarif-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-    .tarif-price { font-size: 14px; color: #E8D19A; }
-    .update { font-size: 13px; color: #888; margin-bottom: 20px; }
+    .tarif-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: #6B4423; }
+    .tarif-price { font-size: 14px; color: #6B4423; font-weight: 500; }
+    .update { font-size: 13px; color: #9C7E5C; margin-bottom: 24px; }
+    .disclaimer { 
+      background: #DDE5D9; 
+      padding: 16px; 
+      border-radius: 12px; 
+      margin-top: 32px;
+      font-size: 14px;
+      color: #6B4423;
+    }
+    a { color: #6B4423; text-decoration: underline; }
   </style>
 `;
 
 router.get('/privacy', (req, res) => {
   res.send(`
-    <!DOCTYPE html><html><head><meta charset="UTF-8">
+    <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Politique de confidentialité</title>${baseStyle}</head>
+    <title>Politique de confidentialité - UniPay</title>${baseStyle}</head>
     <body>
       <div class="container">
         <h1>Politique de confidentialité</h1>
-        <p class="update">Dernière mise à jour : 2 juillet 2026</p>
+        <p class="update">Dernière mise à jour : 10 juillet 2026</p>
         
         <h2>1. Données collectées</h2>
-        <p>UniPay collecte : nom, prénom, téléphone, solde, historique transactions, données biométriques pour authentification.</p>
+        <p>UniPay collecte les données nécessaires au fonctionnement du service : nom, prénom, numéro de téléphone, CNIB, historique des transactions initiées, données techniques de l’appareil.</p>
+        <p>Les données biométriques (empreinte/FaceID) sont utilisées uniquement pour l’authentification locale et ne sont jamais transmises à nos serveurs.</p>
         
-        <h2>2. Utilisation</h2>
-        <p>Vos données servent uniquement à : exécuter transactions, sécurité anti-fraude, support client.</p>
+        <h2>2. Utilisation des données</h2>
+        <p>Vos données sont utilisées exclusivement pour :</p>
+        <ul>
+          <li>Initier et suivre vos opérations de paiement via prestataires agréés</li>
+          <li>Sécuriser l’accès à votre compte et prévenir la fraude</li>
+          <li>Respecter nos obligations légales KYC/LCB-FT</li>
+          <li>Vous fournir un support client</li>
+        </ul>
         
-        <h2>3. Partage</h2>
-        <p>Jamais vendues. Partagées uniquement avec opérateurs Mobile Money pour exécuter paiements, ou autorités si légalement requis.</p>
+        <h2>3. Partage des données</h2>
+        <p>Vos données ne sont jamais vendues. Elles peuvent être transmises uniquement :</p>
+        <ul>
+          <li>Aux opérateurs Mobile Money (Orange, Moov, Wave) pour exécuter vos recharges/retraits</li>
+          <li>Aux autorités compétentes sur demande légale</li>
+        </ul>
         
-        <h2>4. Sécurité</h2>
-        <p>Chiffrement AES-256, serveurs sécurisés Burkina Faso. Empreinte stockée localement uniquement.</p>
+        <h2>4. Sécurité et conservation</h2>
+        <p>Chiffrement AES-256. Données stockées sur serveurs sécurisés. Conservation : 10 ans après clôture du compte conformément à la réglementation.</p>
         
         <h2>5. Vos droits</h2>
-        <p>Accès, rectification, suppression : abdallah.unipay@gmail.com</p>
+        <p>Droit d’accès, rectification, suppression : contactez support@unipay.bf</p>
+
+        <div class="disclaimer">
+          <strong>Avertissement :</strong> UniPay est un outil technique d’interface. Nous ne sommes pas une banque ni un établissement de monnaie électronique. Nous ne détenons pas vos fonds.
+        </div>
       </div>
     </body></html>
   `);
@@ -54,31 +85,35 @@ router.get('/privacy', (req, res) => {
 
 router.get('/terms', (req, res) => {
   res.send(`
-    <!DOCTYPE html><html><head><meta charset="UTF-8">
+    <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conditions d'utilisation</title>${baseStyle}</head>
+    <title>Conditions d'utilisation - UniPay</title>${baseStyle}</head>
     <body>
       <div class="container">
         <h1>Conditions d'utilisation</h1>
-        <p class="update">Dernière mise à jour : 2 juillet 2026</p>
+        <p class="update">Dernière mise à jour : 10 juillet 2026</p>
         
-        <h2>1. Acceptation</h2>
-        <p>En utilisant UniPay, vous acceptez ces conditions. Âge minimum : 18 ans.</p>
+        <h2>1. Objet du service</h2>
+        <p>UniPay est une interface technique permettant d’initier des opérations de paiement mobile. L’exécution des transactions est assurée par des prestataires tiers agréés. UniPay ne détient pas de fonds.</p>
         
-        <h2>2. Compte</h2>
-        <p>Un compte par personne. Informations exactes obligatoires. Vous êtes responsable de votre code PIN.</p>
+        <h2>2. Conditions d’accès</h2>
+        <p>Âge minimum : 18 ans. Résidence : Burkina Faso. Un compte par personne. Vous êtes responsable de la confidentialité de votre code PIN.</p>
         
         <h2>3. Transactions</h2>
-        <p>UniPay exécute ordres instantanément. Irréversibles sauf fraude prouvée. Plafond : 2 000 000 FCFA/jour.</p>
+        <p>Les ordres de paiement sont transmis instantanément aux prestataires. UniPay ne peut garantir l’exécution en cas de panne des opérateurs Mobile Money. Plafond indicatif : 2 000 000 FCFA/jour, susceptible d’ajustement.</p>
         
         <h2>4. Frais</h2>
-        <p>Voir section "Nos tarifs". Frais prélevés automatiquement.</p>
+        <p>Les frais applicables sont détaillés sur la page "Nos tarifs". Ils sont prélevés par les prestataires ou UniPay selon l’opération.</p>
         
         <h2>5. Suspension</h2>
-        <p>UniPay peut suspendre compte pour fraude, blanchiment, ou violation conditions.</p>
+        <p>UniPay peut suspendre l’accès en cas de suspicion de fraude, blanchiment, ou violation des présentes conditions.</p>
         
         <h2>6. Responsabilité</h2>
-        <p>UniPay n'est pas responsable des pannes opérateurs Mobile Money.</p>
+        <p>UniPay fournit un outil d’interface. La responsabilité des transferts de fonds incombe aux prestataires agréés qui exécutent l’opération.</p>
+
+        <div class="disclaimer">
+          <strong>Important :</strong> En utilisant UniPay, vous reconnaissez que nous ne sommes pas un établissement financier. Les fonds transitent via Orange Money, Moov Money, Wave ou autres partenaires régulés.
+        </div>
       </div>
     </body></html>
   `);
@@ -86,47 +121,50 @@ router.get('/terms', (req, res) => {
 
 router.get('/pricing', (req, res) => {
   res.send(`
-    <!DOCTYPE html><html><head><meta charset="UTF-8">
+    <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nos tarifs</title>${baseStyle}</head>
+    <title>Nos tarifs - UniPay</title>${baseStyle}</head>
     <body>
       <div class="container">
         <h1>Nos tarifs</h1>
-        <p class="update">Transparents, sans surprise</p>
+        <p class="update">Transparents, sans surprise. Dernière mise à jour : 10 juillet 2026</p>
         
         <div class="tarif-card">
-          <div class="tarif-title">Transfert UniPay → UniPay</div>
+          <div class="tarif-title">Transfert entre utilisateurs UniPay</div>
           <div class="tarif-price">Gratuit</div>
         </div>
 
         <div class="tarif-card">
-          <div class="tarif-title">Retrait Mobile Money</div>
-          <div class="tarif-price">1% du montant (min 100 FCFA)</div>
+          <div class="tarif-title">Retrait vers Mobile Money</div>
+          <div class="tarif-price">1% du montant (minimum 100 FCFA)</div>
         </div>
 
         <div class="tarif-card">
-          <div class="tarif-title">Recharge wallet</div>
+          <div class="tarif-title">Recharge du wallet</div>
           <div class="tarif-price">Orange/Moov : 1% | Wave : Gratuit</div>
         </div>
 
         <div class="tarif-card">
-          <div class="tarif-title">Paiement QR</div>
+          <div class="tarif-title">Paiement QR chez commerçant</div>
           <div class="tarif-price">Gratuit pour l'acheteur</div>
         </div>
 
         <div class="tarif-card">
-          <div class="tarif-title">Plafond journalier</div>
+          <div class="tarif-title">Plafond journalier indicatif</div>
           <div class="tarif-price">2 000 000 FCFA</div>
         </div>
 
-        <p style="margin-top:24px;font-size:13px;color:#888;">
-          Tarifs susceptibles d'évolution. Notification 30j avant changement.
+        <p style="margin-top:24px;font-size:13px;color:#9C7E5C;">
+          Les tarifs peuvent évoluer. Toute modification sera notifiée 30 jours avant application. Les frais sont prélevés par UniPay ou directement par les opérateurs partenaires selon l’opération.
         </p>
+
+        <div class="disclaimer">
+          <strong>Note :</strong> UniPay facture uniquement l’usage de son interface. Les frais de transfert Mobile Money sont appliqués par Orange, Moov ou Wave selon leurs grilles.
+        </div>
       </div>
     </body></html>
   `);
 });
-
 const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
