@@ -1124,7 +1124,7 @@ router.get('/', async (req, res) => {
 
 // ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
 
-router.post('/', authUser, async (req, res) => {
+router.post('/e', authUser, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -1238,7 +1238,7 @@ router.post('/', authUser, async (req, res) => {
     session.endSession();
   }
 });
-router.post('/e', authUser, async (req, res) => {
+router.post('/', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
