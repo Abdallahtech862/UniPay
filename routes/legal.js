@@ -172,6 +172,7 @@ const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<meta name="google-site-verification" content="2mfDWtoyasYKGt_OibCAVGtLG14oD6DwQzasOL-J8QI" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UniPay - Carte virtuelle + Wallet Mobile Money</title>
 <style>
