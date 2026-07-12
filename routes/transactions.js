@@ -1123,8 +1123,121 @@ router.get('/', async (req, res) => {
 
 // ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
 
-
 router.post('/', authUser, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { expediteur, destinataire, montant, motif } = req.body;
+
+    // 1. VALIDATION DES INPUTS
+    const montantInt = Number(montant);
+
+    if (!Number.isInteger(montantInt) || montantInt <= 0) {
+      throw new Error('Montant invalide. Doit être un entier positif');
+    }
+    if (montantInt > 2000000) {
+      throw new Error('Plafond de 2,000,000 FCFA dépassé');
+    }
+    if (req.user.id!== expediteur) {
+      throw new Error('Tu ne peux transférer que depuis ton compte');
+    }
+    if (expediteur === destinataire) {
+      throw new Error('Impossible de transférer à soi-même');
+    }
+
+    // 2. RÉCUPÉRATION ATOMIQUE AVEC VERROU
+    const exp = await Client.findById(expediteur).session(session);
+    const dest = await Client.findById(destinataire).session(session);
+
+    if (!exp) throw new Error('Compte expéditeur introuvable');
+    if (!dest) throw new Error('Compte destinataire introuvable');
+    if (exp.bloque) throw new Error('Compte suspendu. Impossible d’effectuer un transfert');
+    if (dest.bloque) throw new Error('Le destinataire a un compte suspendu');
+
+    const frais = Math.round(montantInt * 0.01);
+    const totalDebit = montantInt + frais;
+
+    if (exp.solde < totalDebit) {
+      throw new Error('Solde insuffisant');
+    }
+
+    // 3. MISE À JOUR ATOMIQUE DES SOLDES
+    exp.solde -= totalDebit;
+    dest.solde += montantInt;
+
+    await exp.save({ session });
+    await dest.save({ session });
+
+    // 4. CRÉATION TRANSACTION POUR AUDIT
+    const [tx] = await Transaction.create([{
+      expediteur: exp._id,
+      destinataire: dest._id,
+      montant: montantInt,
+      motif: motif || '',
+      frais,
+      status: 'validee',
+      soldeExpediteurApres: exp.solde,
+      soldeDestinataireApres: dest.solde
+    }], { session });
+
+    // 5. COMMIT : tout passe ou rien ne passe
+    await session.commitTransaction();
+
+    // 6. NOTIFICATIONS HORS TRANSACTION - ne bloque pas si Expo down
+    if (exp.expoPushToken) {
+      sendPushNotification(
+        exp.expoPushToken,
+        'Transfert envoyé',
+        `Tu as envoyé ${montantInt} FCFA à ${dest.prenom}`,
+        { type: 'transfert', transactionId: tx._id }
+      ).catch(err => console.error('Erreur notif expéditeur:', err));
+    }
+
+    if (dest.expoPushToken) {
+      sendPushNotification(
+        dest.expoPushToken,
+        'Argent reçu',
+        `Tu as reçu ${montantInt} FCFA de ${exp.prenom}`,
+        { type: 'reception', transactionId: tx._id }
+      ).catch(err => console.error('Erreur notif destinataire:', err));
+    }
+
+    // 7. RÉCUP HISTORIQUE POUR RETOUR
+    const transactions = await Transaction.find({
+      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
+    })
+   .sort({ createdAt: -1 })
+   .limit(20)
+   .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
+   .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
+
+    res.json({
+      message: 'Transfert effectué',
+      nouveauSolde: exp.solde,
+      nouveauSoldeDestinataire: dest.solde,
+      transactionId: tx._id,
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
+  } catch (err) {
+    await session.abortTransaction();
+    console.error('Erreur transfert:', err);
+    res.status(400).json({ error: err.message });
+  } finally {
+    session.endSession();
+  }
+});
+router.post('/e', authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     
