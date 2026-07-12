@@ -6,7 +6,6 @@ const { verifyAdmin, authUser } = require('../middleware/auth');
 const { sendPushNotification } = require('../utils/sendPushNotification');
 
 const mongoose = require('mongoose');
-const Client = require('../models/Client'); // adapte le chemin
 
 
 
