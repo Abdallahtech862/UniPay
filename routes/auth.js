@@ -266,6 +266,7 @@ router.post('/check-user', async (req, res) => {
     });
 
   } catch (err) {
+    console.error('CHECK-USER ERROR:', err); 
     res.status(500).json({
       error: err.message
     });
