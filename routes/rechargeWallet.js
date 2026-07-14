@@ -14,7 +14,7 @@ const PAWAPAY_BASE_URL='https://api.sandbox.pawapay.io';
 
 const PROVIDER_CONFIG = {
   '221': { currency: 'XOF', operators: { orange: 'ORANGE_SEN', free: 'FREE_SEN' } },
-  '226': { currency: 'XOF', operators: { orange: 'ORANGE_BF', moov: 'MOOV_BF' } }, // ← Burkina ajouté
+  '226': { currency: 'XOF', operators: { orange: 'ORANGE_BFA', moov: 'MOOV_BFA' } }, // ← Burkina ajouté
   '233': { currency: 'GHS', operators: { mtn: 'MTN_MOMO_GHA', at: 'AIRTELTIGO_GHA', telecel: 'VODAFONE_GHA' } },
   '254': { currency: 'KES', operators: { safaricom: 'MPESA_KEN' } },
   '250': { currency: 'RWF', operators: { mtn: 'MTN_MOMO_RWA', airtel: 'AIRTEL_RWA' } },
