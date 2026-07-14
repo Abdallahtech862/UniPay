@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 const Transaction = require('../models/Transaction');
-const User = require('../models/User');
+const User = require('../models/Client');
 
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
