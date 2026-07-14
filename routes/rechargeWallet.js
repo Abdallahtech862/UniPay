@@ -26,7 +26,7 @@ router.get('/recharge-page', async (req, res) => { // ← async ajouté
   if (!token) {
     return res.status(401).send('<h2>Non autorisé : token manquant</h2>');
   }
-
+  console.log(PAWAPAY_API_KEY);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const client = await Client.findById(decoded.id);
