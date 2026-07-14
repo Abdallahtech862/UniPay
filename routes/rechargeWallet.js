@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { authUser } = require('../middleware/auth');
+const axios = require('axios');
 //
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
