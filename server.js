@@ -811,6 +811,7 @@ app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/cards', require('./routes/cards'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
+app.use('/api/pawapay', require('./routes/pawapay'));
 
 
 const PORT = process.env.PORT;
