@@ -13,6 +13,7 @@ const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pa
 
 const PROVIDER_CONFIG = {
   '221': { currency: 'XOF', operators: { orange: 'ORANGE_SEN', free: 'FREE_SEN' } },
+  '226': { currency: 'XOF', operators: { orange: 'ORANGE_BF', moov: 'MOOV_BF' } }, // ← Burkina ajouté
   '233': { currency: 'GHS', operators: { mtn: 'MTN_MOMO_GHA', at: 'AIRTELTIGO_GHA', telecel: 'VODAFONE_GHA' } },
   '254': { currency: 'KES', operators: { safaricom: 'MPESA_KEN' } },
   '250': { currency: 'RWF', operators: { mtn: 'MTN_MOMO_RWA', airtel: 'AIRTEL_RWA' } },
@@ -56,18 +57,35 @@ router.get('/recharge-page', async (req, res) => { // ← async ajouté
 
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Opérateur</label>
-        <select id="operateur" required
-          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-          <option value="">Choisir...</option>
+       <select id="operateur" required
+        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+        <option value="">Choisir...</option>
+        <optgroup label="Sénégal">
           <option value="orange">Orange Sénégal</option>
           <option value="free">Free Sénégal</option>
-          <option value="mtn">MTN Ghana / Rwanda / Zambie</option>
+        </optgroup>
+        <optgroup label="Burkina Faso">
+          <option value="orange">Orange Burkina</option>
+          <option value="moov">Moov Burkina</option>
+        </optgroup>
+        <optgroup label="Ghana">
+          <option value="mtn">MTN Ghana</option>
           <option value="at">AirtelTigo Ghana</option>
           <option value="telecel">Telecel Ghana</option>
+        </optgroup>
+        <optgroup label="Kenya">
           <option value="safaricom">Safaricom Kenya</option>
-          <option value="airtel">Airtel Rwanda / Zambie</option>
+        </optgroup>
+        <optgroup label="Rwanda">
+          <option value="mtn">MTN Rwanda</option>
+          <option value="airtel">Airtel Rwanda</option>
+        </optgroup>
+        <optgroup label="Zambie">
+          <option value="mtn">MTN Zambie</option>
+          <option value="airtel">Airtel Zambie</option>
           <option value="zamtel">Zamtel Zambie</option>
-        </select>
+        </optgroup>
+      </select>
       </div>
 
       <div>
