@@ -301,7 +301,9 @@ router.get('/status/:depositId', authUser, async (req, res) => {
 // ─── POST /callback (webhook PawaPay) ────────────────────────────────────────
 router.post('/callback', async (req, res) => {
   try {
-    const { depositId, status } = req.body;
+    console.log('PAWAPAY CALLBACK RAW:', req.body);
+    
+    const { depositId, status, amount } = req.body;
 
     if (!depositId ||!status) {
       return res.status(400).json({ error: 'Données manquantes' });
@@ -309,20 +311,20 @@ router.post('/callback', async (req, res) => {
 
     const newStatus = status === 'COMPLETED'? 'reussie'
                     : status === 'FAILED'? 'echouee'
-                    : null;
+                    : 'en_attente';
 
-    if (newStatus) {
-      const tx = await Transaction.findOneAndUpdate(
-        { depositId },
-        { status: newStatus },
-        { new: true }
-      );
+    const tx = await Transaction.findOneAndUpdate(
+      { depositId },
+      { status: newStatus },
+      { new: true }
+    );
 
-      if (newStatus === 'reussie' && tx) {
-        await Client.findByIdAndUpdate(tx.expediteur, {
-          $inc: { solde: tx.montant }
-        });
-      }
+    // Crédite que si COMPLETED et première fois
+    if (newStatus === 'reussie' && tx && tx.status !== 'reussie') {
+      await Client.findByIdAndUpdate(tx.expediteur, {
+        $inc: { solde: tx.montant }
+      });
+      console.log(`WALLET CREDITÉ: ${tx.montant} XOF pour ${tx.expediteur}`);
     }
 
     res.status(200).json({ received: true });
@@ -331,5 +333,4 @@ router.post('/callback', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
 module.exports = router;
