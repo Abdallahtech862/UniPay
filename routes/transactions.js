@@ -1,11 +1,11 @@
 // routes/rechargeWallet.js
 const express = require('express');
 const axios = require('axios');
-//const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require('uuid'); // ← Décommente ça
 const router = express.Router();
 const Transaction = require('../models/Transaction');
 const User = require('../models/Client');
-const { authUser } = require('../middleware/auth');
+const { authUser } = require('../middleware/auth'); // Vérifie le chemin
 
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
@@ -20,11 +20,10 @@ const PROVIDER_CONFIG = {
 
 // ─── Page HTML ────────────────────────────────────────────────────────────────
 router.get('/recharge-page', (req, res) => {
-  // Token peut venir du query param ou du cookie
   const token = req.query.token || req.cookies?.token;
 
   if (!token) {
-    return res.status(401).send('<p>Non autorisé : token manquant.</p>');
+    return res.status(401).send('<h2>Non autorisé</h2><p>Token manquant. Connectez-vous d’abord.</p>');
   }
 
   res.send(`
@@ -55,7 +54,7 @@ router.get('/recharge-page', (req, res) => {
           <option value="">Choisir...</option>
           <option value="orange">Orange Sénégal</option>
           <option value="free">Free Sénégal</option>
-          <option value="mtn">MTN Ghana / Rwanda</option>
+          <option value="mtn">MTN Ghana / Rwanda / Zambie</option>
           <option value="at">AirtelTigo Ghana</option>
           <option value="telecel">Telecel Ghana</option>
           <option value="safaricom">Safaricom Kenya</option>
@@ -82,8 +81,8 @@ router.get('/recharge-page', (req, res) => {
   </div>
 
   <script>
-    // Token récupéré depuis l'URL et stocké pour les appels API
     const TOKEN = "${token}";
+    console.log('Token reçu:', TOKEN? 'OK' : 'VIDE'); // Debug
 
     const form = document.getElementById('rechargeForm');
     const submitBtn = document.getElementById('submitBtn');
@@ -106,7 +105,7 @@ router.get('/recharge-page', (req, res) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': \`Bearer \${TOKEN}\`  // ← token envoyé dans le header
+            'Authorization': 'Bearer ' + TOKEN
           },
           body: JSON.stringify(payload)
         });
@@ -122,21 +121,21 @@ router.get('/recharge-page', (req, res) => {
           \`;
           form.reset();
 
-          // Polling statut toutes les 5s (max 12 tentatives = 1 min)
           let attempts = 0;
           const poll = setInterval(async () => {
             attempts++;
-            const r = await fetch(\`/api/rechargeWallet/status/\${data.depositId}\`, {
-              headers: { 'Authorization': \`Bearer \${TOKEN}\` }
+            const r = await fetch('/api/rechargeWallet/status/' + data.depositId, {
+              headers: { 'Authorization': 'Bearer ' + TOKEN }
             });
             const s = await r.json();
             if (s.status === 'reussie') {
               clearInterval(poll);
-              result.innerHTML += \`<p class="text-green-700 font-semibold mt-2">✓ Wallet crédité !</p>\`;
+              result.innerHTML += '<p class="text-green-700 font-semibold mt-2">✓ Wallet crédité!</p>';
+              setTimeout(() => window.ReactNativeWebView?.postMessage(JSON.stringify({type: 'RECHARGE_SUCCESS'})), 1000);
             } else if (s.status === 'echouee' || attempts >= 12) {
               clearInterval(poll);
               if (s.status === 'echouee') {
-                result.innerHTML += \`<p class="text-red-600 mt-2">✗ Paiement échoué.</p>\`;
+                result.innerHTML += '<p class="text-red-600 mt-2">✗ Paiement échoué.</p>';
               }
             }
           }, 5000);
@@ -146,7 +145,7 @@ router.get('/recharge-page', (req, res) => {
         }
       } catch (err) {
         result.className = 'mt-4 p-4 bg-red-50 border border-red-200 rounded-lg';
-        result.innerHTML = \`<p class="text-red-800">✗ \${err.message}</p>\`;
+        result.innerHTML = '<p class="text-red-800">✗ ' + err.message + '</p>';
       } finally {
         result.classList.remove('hidden');
         submitBtn.disabled = false;
@@ -165,7 +164,7 @@ router.post('/init', authUser, async (req, res) => {
     const { montant, numero, operateur } = req.body;
     const userId = req.user.id;
 
-    if (!montant || !numero || !operateur) {
+    if (!montant ||!numero ||!operateur) {
       return res.status(400).json({ error: 'Champs manquants' });
     }
 
@@ -182,7 +181,7 @@ router.post('/init', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Opérateur non supporté pour ce pays' });
     }
 
-    const depositId = uuidv4();
+    const depositId = uuidv4(); // Maintenant ça marche
 
     const tx = await Transaction.create({
       type: 'recharge',
@@ -266,12 +265,12 @@ router.post('/callback', async (req, res) => {
   try {
     const { depositId, status } = req.body;
 
-    if (!depositId || !status) {
+    if (!depositId ||!status) {
       return res.status(400).json({ error: 'Données manquantes' });
     }
 
-    const newStatus = status === 'COMPLETED' ? 'reussie'
-                    : status === 'FAILED'    ? 'echouee'
+    const newStatus = status === 'COMPLETED'? 'reussie'
+                    : status === 'FAILED'? 'echouee'
                     : null;
 
     if (newStatus) {
