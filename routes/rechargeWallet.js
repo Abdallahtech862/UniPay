@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require('uuid'); // ← décommenté
 const axios = require('axios');
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
@@ -18,7 +18,7 @@ const PROVIDER_CONFIG = {
   '260': { currency: 'ZMW', operators: { mtn: 'MTN_MOMO_ZMB', airtel: 'AIRTEL_OAPI_ZMB', zamtel: 'ZAMTEL_ZMB' } }
 };
 
-// ─── Page HTML - UNE SEULE ROUTE ────────────────────────────────────────────────
+// ─── Page HTML ────────────────────────────────────────────────────────────────
 router.get('/recharge-page', async (req, res) => { // ← async ajouté
   const { token } = req.query;
 
@@ -43,7 +43,7 @@ router.get('/recharge-page', async (req, res) => { // ← async ajouté
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md">
     <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">Recharger mon wallet</h1>
-    <p class="text-center text-sm text-gray-600 mb-4">Solde actuel: ${client.solde.toLocaleString()} FCFA</p>
+    <p class="text-center text-sm text-gray-600 mb-4">Solde: ${client.solde.toLocaleString()} FCFA</p>
 
     <form id="rechargeForm" class="space-y-4">
       <div>
@@ -165,7 +165,7 @@ router.get('/recharge-page', async (req, res) => { // ← async ajouté
 </html>
   `);
   } catch (err) {
-    console.error('JWT ERROR:', err);
+    console.error('JWT ERROR:', err.message);
     res.status(401).send('<h2>Token invalide ou expiré</h2>');
   }
 });
