@@ -3,7 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
-const User = require('../models/client');
+const User = require('../models/Client');
 const authUser = require('../middlewares/authUser');
 
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
