@@ -4,8 +4,7 @@ const axios = require('axios');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
 const User = require('../models/Client');
-const authUser = require('../middlewares/authUser');
-
+const { verifyAdmin, authUser } = require('../middleware/aut');
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
 const PAWAPAY_BASE_URL = 'https://api.sandbox.pawapay.io'; // Prod: https://api.pawapay.io
 
