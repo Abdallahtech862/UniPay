@@ -242,8 +242,8 @@ router.post('/init', authUser, async (req, res) => {
         payer: {
           type: "MMO",
           accountDetails: {
-            phoneNumber: "22107345678",//cleanNumero,
-            provider: "ORANGE_SEN"
+            phoneNumber: cleanNumero,
+            provider
           }
         },
         customerMessage: "UniPay Recharge"
