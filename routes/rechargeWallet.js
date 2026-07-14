@@ -225,7 +225,13 @@ router.post('/init', authUser, async (req, res) => {
       depositId,
       date: new Date()
     });
-
+    console.log('PAWAPAY REQUEST:', {
+      depositId,
+      amount: String(montant),
+      currency: config.currency,
+      phoneNumber: cleanNumero,
+      provider
+    });
     const { data } = await axios.post(
       `${PAWAPAY_BASE_URL}/v2/deposits`,
       {
