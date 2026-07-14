@@ -19,6 +19,13 @@ const PROVIDER_CONFIG = {
 
 // ─── Page HTML ────────────────────────────────────────────────────────────────
 router.get('/recharge-page', authUser, (req, res) => {
+  const { token } = req.query;
+  console.log('token', token);
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const client = await Client.findById(decoded.id);
+    if (!client) return res.status(401).send('Unauthorized');
   res.send(`
 <!DOCTYPE html>
 <html lang="fr">
