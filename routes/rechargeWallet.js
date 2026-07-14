@@ -1,22 +1,4 @@
-// routes/rechargeWallet.js
-const express = require('express');
-const axios = require('axios');
 
-const jwt = require('jsonwebtoken');
-const router = express.Router();
-const Transaction = require('../models/Transaction');
-const { authUser } = require('../middleware/auth');
-
-const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
-const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
-
-const PROVIDER_CONFIG = {
-  '221': { currency: 'XOF', operators: { orange: 'ORANGE_SEN', free: 'FREE_SEN' } },
-  '233': { currency: 'GHS', operators: { mtn: 'MTN_MOMO_GHA', at: 'AIRTELTIGO_GHA', telecel: 'VODAFONE_GHA' } },
-  '254': { currency: 'KES', operators: { safaricom: 'MPESA_KEN' } },
-  '250': { currency: 'RWF', operators: { mtn: 'MTN_MOMO_RWA', airtel: 'AIRTEL_RWA' } },
-  '260': { currency: 'ZMW', operators: { mtn: 'MTN_MOMO_ZMB', airtel: 'AIRTEL_OAPI_ZMB', zamtel: 'ZAMTEL_ZMB' } }
-};
 
 // ─── Page HTML ────────────────────────────────────────────────────────────────
 
