@@ -1,12 +1,12 @@
-
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { authUser } = require('../middleware/auth');
-const axios = require('axios');
-//
+
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
 
@@ -18,17 +18,20 @@ const PROVIDER_CONFIG = {
   '260': { currency: 'ZMW', operators: { mtn: 'MTN_MOMO_ZMB', airtel: 'AIRTEL_OAPI_ZMB', zamtel: 'ZAMTEL_ZMB' } }
 };
 
-// ─── Page HTML ────────────────────────────────────────────────────────────────
-router.get('/recharge-page', (req, res) => {
+// ─── Page HTML - UNE SEULE ROUTE ────────────────────────────────────────────────
+router.get('/recharge-page', async (req, res) => { // ← async ajouté
   const { token } = req.query;
-  console.log('token', token);
-  
+
+  if (!token) {
+    return res.status(401).send('<h2>Non autorisé : token manquant</h2>');
+  }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const client = await Client.findById(decoded.id);
     if (!client) return res.status(401).send('Unauthorized');
-    
-  res.send(`
+
+    res.send(`
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -40,6 +43,7 @@ router.get('/recharge-page', (req, res) => {
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md">
     <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">Recharger mon wallet</h1>
+    <p class="text-center text-sm text-gray-600 mb-4">Solde actuel: ${client.solde.toLocaleString()} FCFA</p>
 
     <form id="rechargeForm" class="space-y-4">
       <div>
@@ -67,7 +71,7 @@ router.get('/recharge-page', (req, res) => {
 
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Numéro Mobile Money</label>
-        <input type="tel" id="numero" required
+        <input type="tel" id="numero" required value="${client.telephone || ''}"
           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           placeholder="Ex: 221771234567">
         <p class="text-xs text-gray-500 mt-1">Format: code pays + numéro, sans +</p>
@@ -84,7 +88,6 @@ router.get('/recharge-page', (req, res) => {
 
   <script>
     const TOKEN = "${token}";
-    console.log('Token reçu:', TOKEN? 'OK' : 'VIDE'); // Debug
 
     const form = document.getElementById('rechargeForm');
     const submitBtn = document.getElementById('submitBtn');
@@ -133,7 +136,10 @@ router.get('/recharge-page', (req, res) => {
             if (s.status === 'reussie') {
               clearInterval(poll);
               result.innerHTML += '<p class="text-green-700 font-semibold mt-2">✓ Wallet crédité!</p>';
-              setTimeout(() => window.ReactNativeWebView?.postMessage(JSON.stringify({type: 'RECHARGE_SUCCESS'})), 1000);
+              setTimeout(() => window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'RECHARGE_SUCCESS',
+                nouveauSolde: s.montant
+              })), 1000);
             } else if (s.status === 'echouee' || attempts >= 12) {
               clearInterval(poll);
               if (s.status === 'echouee') {
@@ -158,6 +164,10 @@ router.get('/recharge-page', (req, res) => {
 </body>
 </html>
   `);
+  } catch (err) {
+    console.error('JWT ERROR:', err);
+    res.status(401).send('<h2>Token invalide ou expiré</h2>');
+  }
 });
 
 // ─── POST /init ───────────────────────────────────────────────────────────────
@@ -183,7 +193,7 @@ router.post('/init', authUser, async (req, res) => {
       return res.status(400).json({ error: 'Opérateur non supporté pour ce pays' });
     }
 
-    const depositId = uuidv4(); // Maintenant ça marche
+    const depositId = uuidv4();
 
     const tx = await Transaction.create({
       type: 'recharge',
@@ -283,7 +293,7 @@ router.post('/callback', async (req, res) => {
       );
 
       if (newStatus === 'reussie' && tx) {
-        await User.findByIdAndUpdate(tx.expediteur, {
+        await Client.findByIdAndUpdate(tx.expediteur, {
           $inc: { solde: tx.montant }
         });
       }
@@ -295,224 +305,5 @@ router.post('/callback', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
-// Page HTML servie par le backend
-router.get('/recharge-pagee', async (req, res) => {
-  const { token } = req.query;
-  console.log('token', token);
-  
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const client = await Client.findById(decoded.id);
-    if (!client) return res.status(401).send('Unauthorized');
-    
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Recharger Wallet</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #1a1a1a; color: #fff; padding: 20px;
-          }
-          .container { max-width: 400px; margin: 0 auto; }
-          h1 { font-size: 24px; margin-bottom: 8px; color: #E8D19A; }
-          .solde { font-size: 14px; color: #999; margin-bottom: 20px; }
-          .service { 
-            background: #2a2a2a; border-radius: 12px; padding: 16px; 
-            margin-bottom: 12px; display: flex; align-items: center;
-            cursor: pointer; border: 2px solid transparent;
-          }
-          .service:hover { border-color: #E8D19A; }
-          .service img { width: 48px; height: 48px; border-radius: 8px; margin-right: 12px; }
-          .service-name { font-size: 16px; font-weight: 600; }
-          .service-desc { font-size: 13px; color: #999; }
-          .input-group { margin: 20px 0; }
-          label { display: block; margin-bottom: 8px; font-size: 14px; color: #ccc; }
-          input { 
-            width: 100%; padding: 14px; border-radius: 10px; 
-            border: 1px solid #444; background: #2a2a2a; 
-            color: #fff; font-size: 16px;
-          }
-          button {
-            width: 100%; padding: 16px; border-radius: 12px;
-            background: #E8D19A; color: #1a1a1a; font-size: 16px;
-            font-weight: 600; border: none; cursor: pointer;
-          }
-          button:disabled { opacity: 0.5; }
-          .hidden { display: none; }
-          .loading { text-align: center; padding: 20px; color: #999; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Recharger mon wallet</h1>
-          <div class="solde">Solde actuel: ${client.solde.toLocaleString()} FCFA</div>
-          
-          <div id="services">
-            <div class="service" onclick="selectService('orange')">
-              <img src="https://logo.clearbit.com/orange.bf" alt="Orange">
-              <div>
-                <div class="service-name">Orange Money</div>
-                <div class="service-desc">Frais 1% - Instantané</div>
-              </div>
-            </div>
-            
-            <div class="service" onclick="selectService('moov')">
-              <img src="https://logo.clearbit.com/moov.bf" alt="Moov">
-              <div>
-                <div class="service-name">Moov Money</div>
-                <div class="service-desc">Frais 1% - Instantané</div>
-              </div>
-            </div>
-
-            <div class="service" onclick="selectService('wave')">
-              <img src="https://logo.clearbit.com/wave.com" alt="Wave">
-              <div>
-                <div class="service-name">Wave</div>
-                <div class="service-desc">Frais 0% - Instantané</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="form" class="hidden">
-            <div class="input-group">
-              <label>Montant à recharger</label>
-              <input type="number" id="montant" placeholder="5000" min="100" />
-            </div>
-            <div class="input-group">
-              <label>Numéro Mobile Money</label>
-              <input type="tel" id="numero" placeholder="70 XX XX XX" value="${client.telephone || ''}" />
-            </div>
-            <button id="btnSubmit" onclick="submitRecharge()">Confirmer le paiement</button>
-            <button onclick="back()" style="background:#444;margin-top:10px">Retour</button>
-            <div id="loading" class="loading hidden">Traitement en cours...</div>
-          </div>
-        </div>
-
-        <script>
-          const CLIENT_ID = '${decoded.id}';
-          const TOKEN = '${token}';
-          let selectedService = null;
-
-          function selectService(service) {
-            selectedService = service;
-            document.getElementById('services').classList.add('hidden');
-            document.getElementById('form').classList.remove('hidden');
-          }
-
-          function back() {
-            document.getElementById('form').classList.add('hidden');
-            document.getElementById('services').classList.remove('hidden');
-          }
-
-          async function submitRecharge() {
-            const montant = document.getElementById('montant').value;
-            const numero = document.getElementById('numero').value;
-            const btn = document.getElementById('btnSubmit');
-            const loading = document.getElementById('loading');
-            
-            if (!montant || !numero) {
-              alert('Remplis tous les champs');
-              return;
-            }
-
-            if (parseInt(montant) < 100) {
-              alert('Montant minimum: 100 FCFA');
-              return;
-            }
-
-            btn.disabled = true;
-            loading.classList.remove('hidden');
-
-            try {
-              const res = await fetch('/api/recharge/init', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': 'Bearer ' + TOKEN
-                },
-                body: JSON.stringify({
-                  clientId: CLIENT_ID,
-                  montant: parseInt(montant),
-                  numero,
-                  operateur: selectedService
-                })
-              });
-
-              const data = await res.json();
-              if (!res.ok) throw new Error(data.error || 'Erreur serveur');
-
-              window.ReactNativeWebView?.postMessage(JSON.stringify({
-                type: 'RECHARGE_SUCCESS',
-                montant: data.montant,
-                nouveauSolde: data.nouveauSolde
-              }));
-            } catch (err) {
-              alert(err.message);
-              btn.disabled = false;
-              loading.classList.add('hidden');
-            }
-          }
-        </script>
-      </body>
-      </html>
-    `);
-  } catch (err) {
-    console.error(err);
-    res.status(401).send('Token invalide');
-  }
-});
-
-// API pour initier la recharge
-router.post('/init', authUser, async (req, res) => {
-  try {
-    const { montant, numero, operateur, clientId } = req.body;
-    const userId = req.user.id;
-
-    if (!montant || montant < 100) {
-      return res.status(400).json({ error: 'Montant minimum: 100 FCFA' });
-    }
-
-    const client = await Client.findById(userId);
-    if (!client) return res.status(404).json({ error: 'Client introuvable' });
-
-    // TODO: Appeler API Orange/Moov/Wave ici
-    // const result = await orangeMoneyApi.debit(numero, montant);
-    
-    // Pour test, on crédite direct
-    client.solde += montant;
-    await client.save();
-
-    const tx = new Transaction({
-      type: 'recharge',
-      expediteur: userId,
-      destinataire: userId,
-      montant,
-      operateur,
-      numeroSource: numero,
-      status: 'validee',
-      soldeExpediteurApres: client.solde,
-      motif: `Recharge ${operateur}`,
-      date: new Date()
-    });
-    await tx.save();
-
-    res.json({ 
-      montant, 
-      nouveauSolde: client.solde,
-      message: 'Recharge effectuée' 
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
 
 module.exports = router;
