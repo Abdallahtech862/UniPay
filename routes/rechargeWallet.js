@@ -7,7 +7,7 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { authUser } = require('../middleware/auth');
 
-const PAWAPAY_API_KEY = 'Bearer eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjI0NzkwIiwibWF2IjoiMSIsImV4cCI6MjA5OTY2NDE4OSwiaWF0IjoxNzg0MDQ0OTg5LCJwbSI6IkRBRixQQUYiLCJqdGkiOiIzNDNiY2EwNS1jYTZlLTQ3ZmEtOTcwOS02MjM3ZmFhOWJkOWUifQ.ZH6Gi8rKJy0XcaIlSCMRXuLB8wqFiO3GIyNg3_DO9dTchY3-7xtYtzqPjdho2OgGxlvj9cW8O-TgbZOcOjM4gg';
+const PAWAPAY_API_KEY = 'eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjI0NzkwIiwibWF2IjoiMSIsImV4cCI6MjA5OTY2NDE4OSwiaWF0IjoxNzg0MDQ0OTg5LCJwbSI6IkRBRixQQUYiLCJqdGkiOiIzNDNiY2EwNS1jYTZlLTQ3ZmEtOTcwOS02MjM3ZmFhOWJkOWUifQ.ZH6Gi8rKJy0XcaIlSCMRXuLB8wqFiO3GIyNg3_DO9dTchY3-7xtYtzqPjdho2OgGxlvj9cW8O-TgbZOcOjM4gg';
   //process.env.PAWAPAY_API_KEY;
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
 
