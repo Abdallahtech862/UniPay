@@ -204,7 +204,7 @@ router.post('/init', authUser, async (req, res) => {
     if (operateur === 'orange' && otp) payload.payer.accountDetails.otp = otp;
 
     console.log('PAWAPAY REQUEST:', payload);
-
+    console.log(${process.env.PAWAPAY_API_KEY});
     const response = await axios.post(
       PAWAPAY_BASE_URL + '/v2/deposits',
       payload,
