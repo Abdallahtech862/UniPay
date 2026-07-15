@@ -7,7 +7,8 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { authUser } = require('../middleware/auth');
 
-const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
+const PAWAPAY_API_KEY ='eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjI0NzkwIiwibWF2IjoiMSIsImV4cCI6MjA5OTY2Nzc2MywiaWF0IjoxNzg0MDQ4NTYzLCJwbSI6IkRBRixQQUYiLCJqdGkiOiIwMDA3YjEwNy1kNGNjLTQzNjktOGJhZS1kN2U3YzViMGY5NzgifQ.BaUaCKboeg3R7oTHQDiE7Kdeq3_XkoLzY23rprbfSNprvn8OLW-My38Qnyj4BqpAH9mFMDKhL59SjLmtz5OXYA'; 
+  //process.env.PAWAPAY_API_KEY;
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
 
 const PROVIDER_CONFIG = {
