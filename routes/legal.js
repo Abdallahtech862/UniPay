@@ -166,4 +166,83 @@ router.get('/pricing', (req, res) => {
   `);
 });
 
+router.get('/supprime', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suppression de compte et données - UniPay</title>
+<style>
+body{font-family:Inter,Arial;max-width:800px;margin:0 auto;padding:20px;line-height:1.6;color:#222;background:#fdfbf5}
+h1{color:#2b1e12} h2{color:#5a3e1b;margin-top:30px}
+.card{background:white;padding:20px;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,.06);margin:20px 0}
+button{background:#2b1e12;color:#f8e7c0;border:none;padding:12px 20px;border-radius:10px;font-weight:700;cursor:pointer}
+input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin:8px 0}
+a{color:#2b1e12}
+</style>
+</head>
+<body>
+<h1>UniPay - Suppression de compte et de données</h1>
+<p><b>ETABLISSEMENT SABDOU TRANSFERT BUSINESS</b> - Opérateur de la plateforme UniPay<br>
+Dernière mise à jour : 15 Juillet 2025</p>
+
+<div class="card">
+<h2>1. Comment supprimer votre compte UniPay ?</h2>
+<p>Vous pouvez supprimer votre compte directement depuis l'application :</p>
+<ol>
+<li>Ouvrez l'application UniPay</li>
+<li>Allez dans <b>Profil > Paramètres > Supprimer mon compte</b></li>
+<li>Confirmez avec votre mot de passe</li>
+<li>Votre compte sera supprimé immédiatement</li>
+</ol>
+<p>Ou par email : envoyez une demande à <b>abdallah.unipay@gmail.com</b> avec objet <b>"Suppression compte UniPay - [votre téléphone]"</b></p>
+</div>
+
+<div class="card">
+<h2>2. Quelles données sont supprimées ?</h2>
+<ul>
+<li>Nom, prénom, téléphone, email, pseudo</li>
+<li>Photo de profil, photos CNIB (recto/verso) stockées sur Cloudinary</li>
+<li>Solde (doit être à 0 avant suppression)</li>
+<li>Token de notification push (Expo)</li>
+<li>Historique des transactions (anonymisé pour obligations légales LBC/FT BCEAO 5 ans)</li>
+</ul>
+<p><b>Conformément à la réglementation BCEAO et LBC/FT, nous conservons pendant 5 ans :</b> numéro de téléphone, numéro CNIB anonymisé, et logs de transactions pour audit, sans données personnelles identifiables.</p>
+</div>
+
+<div class="card">
+<h2>3. Délai de suppression</h2>
+<p>Suppression immédiate dans l'application. Par email : sous 48h ouvrées. Vous recevrez un email de confirmation.</p>
+</div>
+
+<div class="card">
+<h2>4. Formulaire de demande de suppression (si vous n'avez plus l'app)</h2>
+<form onsubmit="event.preventDefault(); window.location.href='mailto:abdallah.unipay@gmail.com?subject=Suppression compte UniPay - '+encodeURIComponent(document.getElementById('tel').value)+'&body=Bonjour,%0AJe demande la suppression de mon compte UniPay.%0ATelephone: '+encodeURIComponent(document.getElementById('tel').value)+'%0ARaison: '+encodeURIComponent(document.getElementById('raison').value)">
+<label>Votre numéro de téléphone UniPay :</label>
+<input id="tel" type="tel" placeholder="+226 XX XX XX XX" required>
+<label>Raison (optionnel) :</label>
+<textarea id="raison" placeholder="Pourquoi supprimez-vous votre compte ?"></textarea>
+<button type="submit">Envoyer la demande par email</button>
+</form>
+</div>
+
+<div class="card">
+<h2>5. Contact Délégué à la Protection des Données</h2>
+<p>
+ETABLISSEMENT SABDOU TRANSFERT BUSINESS<br>
+Gérant : SAWADOGO Abdoulaye<br>
+Adresse : Kilwin Secteur 15, Ouagadougou, Burkina Faso<br>
+Email : abdallah.unipay@gmail.com<br>
+Téléphone : +226 70 87 94 25<br>
+Merchant PawaPay ID : 24790
+</p>
+</div>
+
+<p><a href="/privacy">Voir Politique de Confidentialité complète</a></p>
+</body>
+</html>
+`);
+});
+
 module.exports = router;
