@@ -138,23 +138,177 @@ router.get('/add', (req, res) => {
 });
 
 router.get('/admin', (req, res) => {
-  // ... garde ton HTML actuel, il est OK, juste remplace la fonction voirCNI pour afficher verificationStatus
-  res.send(`<!DOCTYPE html><html><head><title>UniPay Admin</title><meta charset="UTF-8"><style>body{font-family:Arial;padding:20px}table{border-collapse:collapse;width:100%;margin-top:20px}th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#f2f2f2}button{padding:5px 10px;margin:2px;cursor:pointer;border:none;border-radius:3px}.delete{background:#ff4444;color:white}.edit{background:#44bb44;color:white}.block{background:#f59e0b;color:white}.unblock{background:#10b981;color:white}.view{background:#3b82f6;color:white}.limit{background:#8b5cf6;color:white}.reset{background:#ec4899;color:white}.verify{background:#0ea5e9;color:white}img.avatar{width:40px;height:40px;border-radius:50%;object-fit:cover}.search-bar{margin:15px 0;display:flex;gap:10px}.search-bar input{padding:8px;flex:1;max-width:300px}.badge-bloque{background:#ef4444;color:white;padding:2px 8px;border-radius:12px;font-size:12px}.badge-actif{background:#10b981;color:white;padding:2px 8px;border-radius:12px;font-size:12px}.badge-wait{background:#f59e0b;color:white;padding:2px 8px;border-radius:12px;font-size:12px}.modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.8)}.modal-content{margin:5% auto;padding:20px;background:white;width:80%;max-width:600px;border-radius:8px}.modal-content img{width:100%;max-height:400px;object-fit:contain;margin:10px 0}.close{float:right;font-size:28px;cursor:pointer}.form-group{margin:15px 0}.form-group label{display:block;margin-bottom:5px;font-weight:bold}.form-group input{width:100%;padding:8px;box-sizing:border-box}.btn-primary{background:#007bff;color:white;padding:10px 20px;width:100%;margin-top:10px}</style></head><body>
-<h2>Gestion Clients UniPay - KYC</h2><button style="float:right" onclick="localStorage.removeItem('token');location.href='/api/auth/login'">Déconnexion</button>
-<a href="/api/transactions/add"><button>Transfert</button></a><a href="/api/transactions"><button>Historique</button></a><a href="/api/transactions/dashboard"><button>Dashboard</button></a><a href="/api/clients/add"><button>+ Ajouter</button></a>
-<div class="search-bar"><input type="text" id="searchInput" placeholder="pseudo, téléphone, CNIB..." onkeyup="filterClients()"><button onclick="loadClients()">Actualiser</button></div>
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+<title>UniPay Admin - KYC</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box}
+body{font-family:Inter,Segoe UI,Arial;background:#f6f5f2;margin:0;padding:20px;color:#2b1e12}
+h2{margin:0 0 10px}
+.topbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.topbar button{padding:8px 14px;border-radius:20px;border:1px solid #e5ddd0;background:white;cursor:pointer;font-weight:600}
+.topbar button.primary{background:#2b1e12;color:#f8e7c0;border-color:#2b1e12}
+.search-bar{margin:16px 0;display:flex;gap:10px}
+.search-bar input{padding:10px 14px;border-radius:12px;border:1px solid #ddd;flex:1;max-width:420px}
+table{border-collapse:separate;border-spacing:0;width:100%;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.06);margin-top:10px}
+th,td{padding:12px 10px;text-align:left;border-bottom:1px solid #f0ece4;font-size:14px}
+th{background:#faf7ef;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#8a7a60}
+img.avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid #f0e0b8}
+.badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block}
+.badge-ok{background:#dcfce7;color:#166534}.badge-bloque{background:#fee2e2;color:#991b1b}.badge-wait{background:#fef3c7;color:#92400e}.badge-no{background:#eee;color:#666}
+button.action{padding:6px 10px;margin:2px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600}
+.view{background:#2b1e12;color:#f8e7c0}.block{background:#f59e0b;color:white}.unblock{background:#10b981;color:white}.delete{background:#fff;color:#ef4444;border:1px solid #fee2e2}
+.limit{background:#ede9fe;color:#5b21b6}.edit{background:#e0f2fe;color:#075985}
+/* MODAL MODERNE */
+.modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(18,12,5,.6);backdrop-filter:blur(6px);padding:16px;overflow:auto}
+.modal-card{margin:2% auto;background:white;width:100%;max-width:900px;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:pop .2s ease}
+@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid #f2eee6;background:#fdfbf5}
+.modal-header h3{margin:0;font-size:18px}
+.close{font-size:28px;cursor:pointer;line-height:1}
+.modal-body{display:grid;grid-template-columns:320px 1fr;max-height:80vh}
+.modal-left{padding:20px;background:#faf7f0;border-right:1px solid #f0ece4;overflow:auto}
+.modal-right{background:#111;display:flex;flex-direction:column;overflow:hidden}
+.info-line{margin:8px 0;font-size:13px}.info-line b{display:block;font-size:11px;color:#8a7a60;text-transform:uppercase;margin-bottom:2px}
+.cni-viewer{flex:1;overflow:auto;display:flex;scroll-snap-type:x mandatory;gap:0}
+.cni-slide{min-width:100%;scroll-snap-align:start;position:relative;background:#000;display:flex;align-items:center;justify-content:center;padding:10px}
+.cni-slide img{max-width:100%;max-height:65vh;object-fit:contain;border-radius:12px;cursor:zoom-in;transition:transform .2s}
+.cni-slide img.zoomed{transform:scale(1.8);cursor:zoom-out}
+.cni-label{position:absolute;top:16px;left:16px;background:rgba(0,0,0,.7);color:white;padding:4px 10px;border-radius:20px;font-size:12px}
+.viewer-controls{display:flex;gap:8px;padding:12px;background:#1a1a1a;justify-content:center}
+.viewer-controls button{background:#2a2a2a;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer}
+.modal-footer{padding:14px 20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #f2eee6;background:white}
+.btn-verify{background:#10b981;color:white;padding:10px 18px;border-radius:10px;border:none;font-weight:700;cursor:pointer}
+.btn-reject{background:#fff1f2;color:#991b1b;border:1px solid #fecdd3;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer}
+@media(max-width:800px){.modal-body{grid-template-columns:1fr}.modal-left{order:2}.modal-right{order:1}}
+</style>
+</head>
+<body>
+<h2>Gestion Clients UniPay - KYC</h2>
+<div class="topbar">
+<a href="/api/transactions/add"><button>Transfert</button></a>
+<a href="/api/transactions"><button>Historique</button></a>
+<a href="/api/transactions/dashboard"><button>Dashboard</button></a>
+<a href="/api/clients/add"><button class="primary">+ Ajouter client</button></a>
+<button style="margin-left:auto" onclick="localStorage.removeItem('token');location.href='/api/auth/login'">Déconnexion</button>
+</div>
+
+<div class="search-bar"><input type="text" id="searchInput" placeholder="Rechercher pseudo, téléphone, CNIB..." onkeyup="filterClients()"><button class="action view" onclick="loadClients()">Actualiser</button></div>
 <div id="content">Chargement...</div>
-<div id="cniModal" class="modal"><div class="modal-content"><span class="close" onclick="closeModal('cniModal')">&times;</span><h3>Vérification KYC</h3><div id="cniContent"></div><div style="margin-top:15px"><button class="verify" onclick="setVerify('verifie')">✅ Vérifier</button><button class="block" onclick="setVerify('rejete')">❌ Rejeter</button></div></div></div>
-<div id="limitModal" class="modal"><div class="modal-content"><span class="close" onclick="closeModal('limitModal')">&times;</span><h3>Modifier les limites</h3><div class="form-group"><label>Journalière</label><input type="number" id="limitJour"></div><div class="form-group"><label>Mensuelle</label><input type="number" id="limitMois"></div><button class="btn-primary" onclick="saveLimites()">Enregistrer</button></div></div>
+
+<!-- MODAL KYC MODERNE -->
+<div id="cniModal" class="modal">
+<div class="modal-card">
+<div class="modal-header"><h3>Dossier KYC</h3><span class="close" onclick="closeModal('cniModal')">&times;</span></div>
+<div class="modal-body">
+<div class="modal-left" id="cniInfos"></div>
+<div class="modal-right">
+<div class="cni-viewer" id="cniViewer"></div>
+<div class="viewer-controls">
+<button onclick="scrollViewer(-1)">◀ Recto</button>
+<button onclick="toggleZoom()">🔍 Zoom</button>
+<button onclick="scrollViewer(1)">Verso ▶</button>
+<button onclick="openFull()">⛶ Plein écran</button>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<span id="kycStatusText" style="margin-right:auto;font-size:13px;color:#666"></span>
+<button class="btn-reject" onclick="setVerify('rejete')">❌ Rejeter</button>
+<button class="btn-verify" onclick="setVerify('verifie')">✅ Vérifier ce client</button>
+</div>
+</div>
+</div>
+
+<div id="limitModal" class="modal"><div class="modal-card" style="max-width:420px"><div class="modal-header"><h3>Modifier limites</h3><span class="close" onclick="closeModal('limitModal')">&times;</span></div><div style="padding:20px"><div style="margin-bottom:12px"><b>Journalière</b><input type="number" id="limitJour" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:6px"></div><div style="margin-bottom:12px"><b>Mensuelle</b><input type="number" id="limitMois" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:6px"></div><button style="width:100%;padding:12px;background:#2b1e12;color:#f8e7c0;border:none;border-radius:10px;font-weight:700" onclick="saveLimites()">Enregistrer</button></div></div></div>
+
 <script>
-const token=localStorage.getItem('token');if(!token)location.href='/api/auth/login';let allClients=[];let currentClientId=null;
-async function loadClients(){const res=await fetch('/api/clients',{headers:{'Authorization':'Bearer '+token}});if(res.status===401||res.status===403){localStorage.removeItem('token');location.href='/api/auth/login';return}allClients=await res.json();renderTable(allClients)}
-function filterClients(){const s=document.getElementById('searchInput').value.toLowerCase();renderTable(allClients.filter(c=>c.pseudo?.toLowerCase().includes(s)||c.telephone?.includes(s)||c.nom?.toLowerCase().includes(s)||c.numeroCNIB?.includes(s)))}
-function renderTable(clients){let html='<table><tr><th>Photo</th><th>Client</th><th>Tél / CNIB</th><th>Solde</th><th>Limites</th><th>Statut KYC</th><th>Actions</th></tr>';clients.forEach(c=>{const photo=c.photoProfil?'<img src="'+c.photoProfil+'" class="avatar">':'-';let badgeKyc=c.verificationStatus==='verifie'?'<span class="badge-actif">VERIFIE</span>':c.verificationStatus==='en_cours'?'<span class="badge-wait">EN COURS</span>':'<span style="background:#999;color:white;padding:2px 8px;border-radius:12px;font-size:12px">'+(c.verificationStatus||'NON VERIFIE')+'</span>';const statut=c.bloque?'<span class="badge-bloque">BLOQUÉ</span>':'<span class="badge-actif">ACTIF</span>';const btnBlock=c.bloque?'<button class="unblock" onclick="toggleBlock(\\''+c._id+'\\',false)">Débloquer</button>':'<button class="block" onclick="toggleBlock(\\''+c._id+'\\',true)">Bloquer</button>';html+=\`<tr><td>\${photo}</td><td>\${c.prenom} \${c.nom}<br><small>\${c.pseudo||''}</small></td><td>\${c.telephone}<br><small>\${c.numeroCNIB||''}</small></td><td>\${c.solde.toLocaleString()} FCFA</td><td>\${(c.limiteJournaliere||0).toLocaleString()}/\${(c.limiteMensuelle||0).toLocaleString()}</td><td>\${badgeKyc}<br>\${statut}</td><td><button class="edit" onclick="modifierSolde('\${c._id}','\${c.nom}',\${c.solde})">Solde</button><button class="limit" onclick="modifierLimites('\${c._id}',\${c.limiteJournaliere||0},\${c.limiteMensuelle||0})">Limites</button><button class="view" onclick='voirCNI(\${JSON.stringify(c).replace(/'/g,"&#39;")})'>KYC</button>\${btnBlock}<button class="delete" onclick="supprimerClient('\${c._id}')">X</button></td></tr>\`});html+='</table>';document.getElementById('content').innerHTML=html}
-async function setVerify(status){if(!currentClientId)return;const res=await fetch('/api/clients/'+currentClientId+'/verify',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({status})});if(res.ok){alert('Statut KYC: '+status);closeModal('cniModal');loadClients()}else{alert('Erreur')}}
-function voirCNI(client){currentClientId=client._id;let html='<p><b>'+client.prenom+' '+client.nom+'</b> - '+client.telephone+'</p><p>CNIB: '+(client.numeroCNIB||'-')+'<br>Adresse: '+(client.adresse||'-')+'</p>';if(client.carteRecto)html+='<p>Recto:</p><img src="'+client.carteRecto+'">';if(client.carteVerso)html+='<p>Verso:</p><img src="'+client.carteVerso+'">';if(!client.carteRecto&&!client.carteVerso)html+='<p style="color:#999">Aucune pièce</p>';document.getElementById('cniContent').innerHTML=html;document.getElementById('cniModal').style.display='block'}
-function closeModal(id){document.getElementById(id).style.display='none'}async function supprimerClient(id){if(!confirm('Supprimer?'))return;const res=await fetch('/api/clients/'+id,{method:'DELETE',headers:{'Authorization':'Bearer '+token}});if(res.ok)loadClients();else{const d=await res.json();alert(d.error)}}async function modifierSolde(id,nom,s){const n=prompt('Nouveau solde pour '+nom+':',s);if(n===null)return;const res=await fetch('/api/clients/'+id,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({solde:Number(n)})});if(res.ok)loadClients()}function modifierLimites(id,j,m){currentClientId=id;document.getElementById('limitJour').value=j;document.getElementById('limitMois').value=m;document.getElementById('limitModal').style.display='block'}async function saveLimites(){const res=await fetch('/api/clients/'+currentClientId,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({limiteJournaliere:Number(document.getElementById('limitJour').value),limiteMensuelle:Number(document.getElementById('limitMois').value)})});if(res.ok){closeModal('limitModal');loadClients()}}async function toggleBlock(id,bloquer){if(!confirm((bloquer?'Bloquer':'Débloquer')+' ce client?'))return;await fetch('/api/clients/'+id+'/block',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({bloque:bloquer})});loadClients()}loadClients();
-</script></body></html>`);
+const token=localStorage.getItem('token');if(!token)location.href='/api/auth/login';
+let allClients=[];let currentClientId=null;let currentZoom=false;
+
+async function loadClients(){
+ const res=await fetch('/api/clients',{headers:{'Authorization':'Bearer '+token}});
+ if(res.status===401||res.status===403){localStorage.removeItem('token');location.href='/api/auth/login';return}
+ allClients=await res.json();renderTable(allClients)
+}
+function filterClients(){
+ const s=document.getElementById('searchInput').value.toLowerCase();
+ renderTable(allClients.filter(c=>c.pseudo?.toLowerCase().includes(s)||c.telephone?.includes(s)||c.nom?.toLowerCase().includes(s)||c.numeroCNIB?.includes(s)))
+}
+function renderTable(clients){
+ let html='<table><tr><th>Client</th><th>Contact</th><th>Solde</th><th>Limites J/M</th><th>KYC</th><th>Actions</th></tr>';
+ clients.forEach(c=>{
+  const photo=c.photoProfil?'<img src="'+c.photoProfil+'" class="avatar">':'<div class="avatar" style="background:#eee;display:flex;align-items:center;justify-content:center;font-weight:700">'+(c.prenom?.[0]||'?')+'</div>';
+  let badgeKyc=c.verificationStatus==='verifie'?'<span class="badge badge-ok">VERIFIÉ</span>':c.verificationStatus==='en_cours'?'<span class="badge badge-wait">EN COURS</span>':c.verificationStatus==='rejete'?'<span class="badge badge-bloque">REJETÉ</span>':'<span class="badge badge-no">NON VÉRIFIÉ</span>';
+  const statut=c.bloque?'<span class="badge badge-bloque">BLOQUÉ</span>':'<span class="badge badge-ok">ACTIF</span>';
+  const btnBlock=c.bloque?'<button class="action unblock" onclick="toggleBlock(\\''+c._id+'\\',false)">Débloquer</button>':'<button class="action block" onclick="toggleBlock(\\''+c._id+'\\',true)">Bloquer</button>';
+  html+=\`<tr><td><div style="display:flex;gap:10px;align-items:center">\${photo}<div><b>\${c.prenom||''} \${c.nom||''}</b><br><small style="color:#8a7a60">\${c.pseudo||''}</small></div></div></td><td>\${c.telephone}<br><small>\${c.numeroCNIB||'CNIB: -'}</small></td><td><b>\${(c.solde||0).toLocaleString()} FCFA</b></td><td style="font-size:12px">\${(c.limiteJournaliere||0).toLocaleString()}<br>\${(c.limiteMensuelle||0).toLocaleString()}</td><td>\${badgeKyc}<div style="margin-top:4px">\${statut}</div></td><td><button class="action view" onclick='voirCNI(\${JSON.stringify(c).replace(/'/g,"&#39;")})'>Voir KYC</button><button class="action limit" onclick="modifierLimites('\${c._id}',\${c.limiteJournaliere||0},\${c.limiteMensuelle||0})">Limites</button><br>\${btnBlock}<button class="action delete" onclick="supprimerClient('\${c._id}')">Supp</button></td></tr>\`;
+ });
+ html+='</table>';document.getElementById('content').innerHTML=html;
+}
+
+function voirCNI(client){
+ currentClientId=client._id;
+ // Infos gauche
+ document.getElementById('cniInfos').innerHTML=\`
+  <div class="info-line"><b>Nom complet</b>\${client.prenom||''} \${client.nom||''}</div>
+  <div class="info-line"><b>Pseudo</b>\${client.pseudo||'-'}</div>
+  <div class="info-line"><b>Téléphone</b>\${client.telephone||'-'}</div>
+  <div class="info-line"><b>Email</b>\${client.email||'-'}</div>
+  <div class="info-line"><b>CNIB Numéro</b>\${client.numeroCNIB||'<span style=color:#c00>Non renseigné</span>'}</div>
+  <div class="info-line"><b>Adresse</b>\${client.adresse||'-'}</div>
+  <div class="info-line"><b>Date naissance</b>\${client.dateNaissance?new Date(client.dateNaissance).toLocaleDateString('fr-FR'):'-'}</div>
+  <div class="info-line"><b>Statut KYC</b>\${client.verificationStatus||'non_verifie'}</div>
+  <div class="info-line"><b>Vérifié</b>\${client.isVerified?'✅ Oui':'❌ Non'}</div>
+  <div class="info-line"><b>Créé le</b>\${client.createdAt?new Date(client.createdAt).toLocaleString('fr-FR'):''}</div>
+ \`;
+ document.getElementById('kycStatusText').innerText='Dossier: '+client._id;
+
+ // Viewer droite scrollable
+ let viewerHtml='';
+ if(client.carteRecto){
+  viewerHtml+=\`<div class="cni-slide"><span class="cni-label">RECTO</span><img id="imgRecto" src="\${client.carteRecto}" onclick="this.classList.toggle('zoomed')"></div>\`;
+ }
+ if(client.carteVerso){
+  viewerHtml+=\`<div class="cni-slide"><span class="cni-label">VERSO</span><img id="imgVerso" src="\${client.carteVerso}" onclick="this.classList.toggle('zoomed')"></div>\`;
+ }
+ if(!client.carteRecto && !client.carteVerso){
+  viewerHtml='<div style="padding:40px;color:#999;text-align:center;width:100%">Aucune pièce CNIB uploadée<br><br>Demande au client de renvoyer via l\\'app mobile</div>';
+ }
+ document.getElementById('cniViewer').innerHTML=viewerHtml;
+ document.getElementById('cniModal').style.display='block';
+}
+
+function scrollViewer(dir){
+ const el=document.getElementById('cniViewer');
+ el.scrollBy({left: dir*el.clientWidth, behavior:'smooth'});
+}
+function toggleZoom(){
+ document.querySelectorAll('.cni-slide img').forEach(img=>img.classList.toggle('zoomed'));
+}
+function openFull(){
+ const el=document.getElementById('cniViewer');
+ if(el.requestFullscreen) el.requestFullscreen();
+}
+function closeModal(id){document.getElementById(id).style.display='none'}
+async function setVerify(status){
+ if(!currentClientId) return;
+ if(!confirm('Passer le statut à '+status+' ?')) return;
+ const res=await fetch('/api/clients/'+currentClientId+'/verify',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({status})});
+ if(res.ok){alert('KYC '+status);closeModal('cniModal');loadClients()}else{const d=await res.json();alert(d.error||'Erreur')}
+}
+async function supprimerClient(id){if(!confirm('Supprimer ce client?'))return;const res=await fetch('/api/clients/'+id,{method:'DELETE',headers:{'Authorization':'Bearer '+token}});if(res.ok)loadClients();else{const d=await res.json();alert(d.error)}}
+function modifierLimites(id,j,m){currentClientId=id;document.getElementById('limitJour').value=j;document.getElementById('limitMois').value=m;document.getElementById('limitModal').style.display='block'}
+async function saveLimites(){const res=await fetch('/api/clients/'+currentClientId,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({limiteJournaliere:Number(document.getElementById('limitJour').value),limiteMensuelle:Number(document.getElementById('limitMois').value)})});if(res.ok){closeModal('limitModal');loadClients()}}
+async function toggleBlock(id,bloquer){if(!confirm((bloquer?'Bloquer':'Débloquer')+' ce client?'))return;await fetch('/api/clients/'+id+'/block',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({bloque:bloquer})});loadClients()}
+window.onclick=function(e){if(e.target.classList.contains('modal')) e.target.style.display='none'}
+loadClients();
+</script>
+</body>
+</html>`);
 });
 
 // ==================== API ADMIN SECURISEES ====================
