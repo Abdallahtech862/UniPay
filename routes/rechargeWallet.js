@@ -64,7 +64,7 @@ body{background:#F9F5ED;min-height:100vh;padding:0 16px 24px}
 <div class="label">Choisissez un opérateur</div>
 <div class="operators">
 <div class="op" id="op-orange" onclick="selectOp('orange')"><div class="check">✓</div><img src="https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg"><span>Orange Money</span></div>
-<div class="op" id="op-moov" onclick="selectOp('moov')"><div class="check">✓</div><img src="https://upload.wikimedia.org/wikipedia/commons/9/9a/Moov_Africa_logo.png"><span>Moov Money</span></div>
+<div class="op" id="op-moov" onclick="selectOp('moov')"><div class="check">✓</div><img src="https://upload.wikimedia.org/wikipedia/fr/thumb/1/1d/Moov_Africa_logo.png/250px-Moov_Africa_logo.png"><span>Moov Money</span></div>
 </div>
 
 <div class="label" id="numeroLabel">Numéro Orange Money</div>
