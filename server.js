@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
-
+console.log('DOTENV path:', require('path').resolve('.env'));
+console.log('KEY in ENV file:', process.env.PAWAPAY_API_KEY.slice(-15));
 //const cors = require('cors');
 //app.use(cors({
 //  origin: '*', // Accepte tout pour tester
