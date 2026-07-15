@@ -1212,12 +1212,11 @@ router.post('/', authUser, async (req, res) => {
       motif: motif || '',
       frais,
       status: 'validee',
-      type: 'transfert',
       verificationExpediteur: exp.verificationStatus,
       soldeExpediteurApres: exp.solde,
-      soldeDestinataireApres: dest.solde,
-      ip: req.ip
+      soldeDestinataireApres: dest.solde
     }], { session });
+    
 
     await session.commitTransaction();
 
