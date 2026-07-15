@@ -1,34 +1,28 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid'); // ← décommenté
+const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
+//const crypto = require('crypto');
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { authUser } = require('../middleware/auth');
 
-const PAWAPAY_API_KEY='eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjI0NzkwIiwibWF2IjoiMSIsImV4cCI6MjA5OTY2Nzc2MywiaWF0IjoxNzg0MDQ4NTYzLCJwbSI6IkRBRixQQUYiLCJqdGkiOiIwMDA3YjEwNy1kNGNjLTQzNjktOGJhZS1kN2U3YzViMGY5NzgifQ.BaUaCKboeg3R7oTHQDiE7Kdeq3_XkoLzY23rprbfSNprvn8OLW-My38Qnyj4BqpAH9mFMDKhL59SjLmtz5OXYA';
-  //process.env.PAWAPAY_API_KEY;
-const PAWAPAY_BASE_URL='https://api.sandbox.pawapay.io';
-  //process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
+// Met ça dans .env, JAMAIS en dur
+const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
+const PAWAPAY_BASE_URL = process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
+const PAWAPAY_WEBHOOK_SECRET = process.env.PAWAPAY_WEBHOOK_SECRET;
 
 const PROVIDER_CONFIG = {
-  '221': { currency: 'XOF', operators: { orange: 'ORANGE_SEN', free: 'FREE_SEN' } },
-  '226': { currency: 'XOF', operators: { orange: 'ORANGE_BFA', moov: 'MOOV_BFA' } }, // ← Burkina ajouté
-  '233': { currency: 'GHS', operators: { mtn: 'MTN_MOMO_GHA', at: 'AIRTELTIGO_GHA', telecel: 'VODAFONE_GHA' } },
-  '254': { currency: 'KES', operators: { safaricom: 'MPESA_KEN' } },
-  '250': { currency: 'RWF', operators: { mtn: 'MTN_MOMO_RWA', airtel: 'AIRTEL_RWA' } },
-  '260': { currency: 'ZMW', operators: { mtn: 'MTN_MOMO_ZMB', airtel: 'AIRTEL_OAPI_ZMB', zamtel: 'ZAMTEL_ZMB' } }
+  '226': { currency: 'XOF', operators: { orange: 'ORANGE_BFA', moov: 'MOOV_BFA' } },
+  '221': { currency: 'XOF', operators: { orange: 'ORANGE_SEN', free: 'FREE_SEN' } }
 };
 
-// ─── Page HTML ────────────────────────────────────────────────────────────────
-router.get('/recharge-page', async (req, res) => { // ← async ajouté
+// ─── Page HTML identique au screen ──────────────────────────────────────────
+router.get('/recharge-page', async (req, res) => {
   const { token } = req.query;
+  if (!token) return res.status(401).send('Token manquant');
 
-  if (!token) {
-    return res.status(401).send('<h2>Non autorisé : token manquant</h2>');
-  }
-  console.log(PAWAPAY_API_KEY);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const client = await Client.findById(decoded.id);
@@ -40,177 +34,218 @@ router.get('/recharge-page', async (req, res) => { // ← async ajouté
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Recharger UniPay</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Recharge du wallet</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif}
+    body{background:#F9F5ED;min-height:100vh;padding:0 16px 24px}
+    .header{display:flex;align-items:center;gap:16px;padding:18px 0 20px}
+    .back{width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+    .title{font-size:18px;font-weight:700;color:#2B1E12}
+    .label{font-size:14px;font-weight:600;color:#2B1E12;margin:16px 0 10px}
+    .operators{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .op{background:#FFFFFF;border:1.5px solid #E9E2D0;border-radius:16px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;position:relative;transition:.2s}
+    .op.selected{background:#F1E6CC;border-color:#2B1E12}
+    .op .check{position:absolute;top:8px;right:8px;width:20px;height:20px;background:#2B1E12;border-radius:50%;display:none;align-items:center;justify-content:center;color:#fff;font-size:12px}
+    .op.selected .check{display:flex}
+    .op img{width:64px;height:32px;object-fit:contain}
+    .op span{font-size:13px;font-weight:600;color:#2B1E12}
+    .input-box{position:relative;background:#FFFFFF;border:1.5px solid #E9E2D0;border-radius:14px;display:flex;align-items:center;padding:0 14px;height:54px}
+    .input-box:focus-within{border-color:#2B1E12}
+    .input-box .icon{margin-right:10px;opacity:.7}
+    .input-box input{flex:1;border:none;outline:none;font-size:14px;background:transparent;color:#2B1E12}
+    .input-box .suffix{font-size:13px;font-weight:700;color:#2B1E12;margin-left:8px}
+    .receive-box{background:#F1E6CC;border:1.5px solid #E9E2D0;border-radius:14px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:54px;margin-top:2px}
+    .receive-box .left{display:flex;align-items:center;gap:10px;color:#7A6A52}
+    .receive-box .value{font-weight:700;color:#2B1E12;font-size:16px}
+    .info{display:flex;gap:10px;background:#FFFFFF;border:1.5px solid #E9E2D0;border-radius:14px;padding:12px 14px;margin-top:16px}
+    .info i{width:22px;height:22px;border:1.5px solid #2B1E12;border-radius:50%;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:700;flex-shrink:0}
+    .info p{font-size:12.5px;line-height:1.4;color:#5A4A35}
+    .otp-box{display:none;margin-top:16px}
+    .otp-box.show{display:block}
+    .otp-hint{font-size:11.5px;color:#8A7A65;margin-top:8px;line-height:1.3;background:#FFF7E5;border-radius:10px;padding:8px 10px}
+    .btn{width:100%;height:54px;background:#E8D5A7;border:none;border-radius:16px;font-size:15px;font-weight:700;color:#2B1E12;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;cursor:pointer}
+    .btn:disabled{opacity:.5}
+    .hidden{display:none}
+  </style>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md">
-    <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">Recharger mon wallet</h1>
-    <p class="text-center text-sm text-gray-600 mb-4">Solde: ${client.solde.toLocaleString()} FCFA</p>
-
-    <form id="rechargeForm" class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Montant</label>
-        <input type="number" id="montant" min="100" step="100" required
-          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: 5000">
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Opérateur</label>
-       <select id="operateur" required
-        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-        <option value="">Choisir...</option>
-        <optgroup label="Sénégal">
-          <option value="orange">Orange Sénégal</option>
-          <option value="free">Free Sénégal</option>
-        </optgroup>
-        <optgroup label="Burkina Faso">
-          <option value="orange">Orange Burkina</option>
-          <option value="moov">Moov Burkina</option>
-        </optgroup>
-        <optgroup label="Ghana">
-          <option value="mtn">MTN Ghana</option>
-          <option value="at">AirtelTigo Ghana</option>
-          <option value="telecel">Telecel Ghana</option>
-        </optgroup>
-        <optgroup label="Kenya">
-          <option value="safaricom">Safaricom Kenya</option>
-        </optgroup>
-        <optgroup label="Rwanda">
-          <option value="mtn">MTN Rwanda</option>
-          <option value="airtel">Airtel Rwanda</option>
-        </optgroup>
-        <optgroup label="Zambie">
-          <option value="mtn">MTN Zambie</option>
-          <option value="airtel">Airtel Zambie</option>
-          <option value="zamtel">Zamtel Zambie</option>
-        </optgroup>
-      </select>
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Numéro Mobile Money</label>
-        <input type="tel" id="numero" required value="${client.telephone || ''}"
-          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          placeholder="Ex: 221771234567">
-        <p class="text-xs text-gray-500 mt-1">Format: code pays + numéro, sans +</p>
-      </div>
-
-      <button type="submit" id="submitBtn"
-        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50">
-        Recharger maintenant
-      </button>
-    </form>
-
-    <div id="result" class="mt-4 hidden"></div>
+<body>
+  <div class="header">
+    <div class="back" onclick="window.history.back()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2B1E12" stroke-width="2"><path d="M19 12H5"/><path d="M12 19L5 12L12 5"/></svg>
+    </div>
+    <div class="title">Recharge du wallet</div>
   </div>
 
-  <script>
-    const TOKEN = "${token}";
+  <div class="label">Choisissez un opérateur</div>
+  <div class="operators">
+    <div class="op" id="op-orange" onclick="selectOp('orange')">
+      <div class="check">✓</div>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg" alt="Orange">
+      <span>Orange Money</span>
+    </div>
+    <div class="op" id="op-moov" onclick="selectOp('moov')">
+      <div class="check">✓</div>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/9/9a/Moov_Africa_logo.png" alt="Moov">
+      <span>Moov Money</span>
+    </div>
+  </div>
 
-    const form = document.getElementById('rechargeForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const result = document.getElementById('result');
+  <div class="label" id="numeroLabel">Numéro Orange Money</div>
+  <div class="input-box">
+    <span class="icon">📞</span>
+    <input type="tel" id="numero" placeholder="07 12 34 56" value="${client.telephone || ''}">
+  </div>
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Traitement...';
-      result.classList.add('hidden');
+  <div class="label">Montant</div>
+  <div class="input-box">
+    <span class="icon">💳</span>
+    <input type="number" id="montant" placeholder="Saisir le montant" min="100">
+    <span class="suffix">FCFA</span>
+  </div>
 
-      const payload = {
-        montant: document.getElementById('montant').value,
-        operateur: document.getElementById('operateur').value,
-        numero: document.getElementById('numero').value.replace('+', '')
-      };
+  <div class="label">Vous recevrez</div>
+  <div class="receive-box">
+    <div class="left"><span>💳</span></div>
+    <div class="value" id="receiveValue">0 FCFA</div>
+  </div>
 
-      try {
-        const res = await fetch('/api/rechargeWallet/init', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + TOKEN
-          },
-          body: JSON.stringify(payload)
-        });
+  <div class="otp-box" id="otpBox">
+    <div class="label">Code OTP Orange</div>
+    <div class="input-box">
+      <span class="icon">🔑</span>
+      <input type="text" id="otp" placeholder="Entrez le code OTP">
+    </div>
+    <div class="otp-hint">
+      Composez <b>*144*4*6*<span id="otpMontant">montant</span>#</b> pour obtenir votre OTP Orange Money
+    </div>
+  </div>
 
-        const data = await res.json();
+  <div class="info">
+    <i>i</i>
+    <p id="infoText">Assurez-vous que votre numéro Orange Money est actif et que vous avez suffisamment de solde.</p>
+  </div>
 
-        if (data.success) {
-          result.className = 'mt-4 p-4 bg-green-50 border border-green-200 rounded-lg';
-          result.innerHTML = \`
-            <p class="text-green-800 font-medium">✓ Demande envoyée</p>
-            <p class="text-sm text-green-700 mt-1">Validez le paiement sur votre téléphone.</p>
-            <p class="text-xs text-gray-600 mt-2">ID: \${data.depositId}</p>
-          \`;
-          form.reset();
+  <button class="btn" id="submitBtn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Recharger mon wallet
+  </button>
+  <div id="result" class="hidden" style="margin-top:14px;text-align:center;font-size:13px"></div>
 
-          let attempts = 0;
-          const poll = setInterval(async () => {
-            attempts++;
-            const r = await fetch('/api/rechargeWallet/status/' + data.depositId, {
-              headers: { 'Authorization': 'Bearer ' + TOKEN }
-            });
-            const s = await r.json();
-            if (s.status === 'reussie') {
-              clearInterval(poll);
-              result.innerHTML += '<p class="text-green-700 font-semibold mt-2">✓ Wallet crédité!</p>';
-              setTimeout(() => window.ReactNativeWebView?.postMessage(JSON.stringify({
-                type: 'RECHARGE_SUCCESS',
-                nouveauSolde: s.montant
-              })), 1000);
-            } else if (s.status === 'echouee' || attempts >= 12) {
-              clearInterval(poll);
-              if (s.status === 'echouee') {
-                result.innerHTML += '<p class="text-red-600 mt-2">✗ Paiement échoué.</p>';
-              }
-            }
-          }, 5000);
+<script>
+  const TOKEN = "${token}";
+  let selected = null;
+  const numeroLabel = document.getElementById('numeroLabel');
+  const infoText = document.getElementById('infoText');
+  const montantInput = document.getElementById('montant');
+  const receiveValue = document.getElementById('receiveValue');
+  const otpBox = document.getElementById('otpBox');
+  const otpMontant = document.getElementById('otpMontant');
+  const result = document.getElementById('result');
 
-        } else {
-          throw new Error(data.error || 'Erreur inconnue');
+  function selectOp(op){
+    selected = op;
+    document.getElementById('op-orange').classList.toggle('selected', op==='orange');
+    document.getElementById('op-moov').classList.toggle('selected', op==='moov');
+    
+    if(op==='orange'){
+      numeroLabel.textContent='Numéro Orange Money';
+      infoText.textContent="Assurez-vous que votre numéro Orange Money est actif et que vous avez suffisamment de solde.";
+      otpBox.classList.add('show');
+    } else {
+      numeroLabel.textContent='Numéro Moov Money';
+      infoText.textContent="Assurez-vous que votre numéro Moov Money est actif et que vous avez suffisamment de solde.";
+      otpBox.classList.remove('show');
+    }
+  }
+
+  montantInput.addEventListener('input', ()=>{
+    const v = parseInt(montantInput.value)||0;
+    receiveValue.textContent = v.toLocaleString('fr-FR') + ' FCFA';
+    otpMontant.textContent = v || 'montant';
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const btn = e.currentTarget;
+    if(!selected) return alert('Choisissez un opérateur');
+    const numero = document.getElementById('numero').value.replace(/\\s+/g,'').replace('+','');
+    const montant = montantInput.value;
+    const otp = document.getElementById('otp').value;
+
+    if(!numero || !montant) return alert('Remplis tous les champs');
+    if(selected==='orange' && !otp) return alert('Entrez le code OTP Orange');
+
+    btn.disabled=true;
+    btn.textContent='Traitement...';
+    result.classList.add('hidden');
+
+    try{
+      const res = await fetch('/api/rechargeWallet/init', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+        body: JSON.stringify({ montant, numero, operateur: selected, otp })
+      });
+      const data = await res.json();
+      if(!data.success) throw new Error(data.error||'Erreur');
+
+      result.className='';
+      result.style.cssText='margin-top:14px;padding:12px;background:#E8F5E9;border-radius:12px;color:#2E7D32';
+      result.innerHTML='✓ Demande envoyée<br><small>Validez sur votre téléphone<br>ID: '+data.depositId+'</small>';
+      result.classList.remove('hidden');
+
+      let attempts=0;
+      const poll=setInterval(async()=>{
+        attempts++;
+        const r=await fetch('/api/rechargeWallet/status/'+data.depositId,{headers:{'Authorization':'Bearer '+TOKEN}});
+        const s=await r.json();
+        if(s.status==='reussie'){
+          clearInterval(poll);
+          result.innerHTML+='<br><b>✓ Wallet crédité!</b>';
+          setTimeout(()=>window.ReactNativeWebView?.postMessage(JSON.stringify({type:'RECHARGE_SUCCESS',nouveauSolde:s.montant})),800);
+        } else if(s.status==='echouee' || attempts>=20){
+          clearInterval(poll);
+          if(s.status==='echouee') result.innerHTML+='<br><span style="color:#C62828">✗ Paiement échoué</span>';
         }
-      } catch (err) {
-        result.className = 'mt-4 p-4 bg-red-50 border border-red-200 rounded-lg';
-        result.innerHTML = '<p class="text-red-800">✗ ' + err.message + '</p>';
-      } finally {
-        result.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Recharger maintenant';
-      }
-    });
-  </script>
+      },5000);
+
+    }catch(err){
+      result.style.cssText='margin-top:14px;padding:12px;background:#FFEBEE;border-radius:12px;color:#C62828';
+      result.textContent='✗ '+err.message;
+      result.classList.remove('hidden');
+    }finally{
+      btn.disabled=false;
+      btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Recharger mon wallet';
+    }
+  });
+</script>
 </body>
 </html>
-  `);
+    `);
   } catch (err) {
-    console.error('JWT ERROR:', err.message);
-    res.status(401).send('<h2>Token invalide ou expiré</h2>');
+    res.status(401).send('Token invalide');
   }
 });
 
 // ─── POST /init ───────────────────────────────────────────────────────────────
 router.post('/init', authUser, async (req, res) => {
   try {
-    const { montant, numero, operateur } = req.body;
+    const { montant, numero, operateur, otp } = req.body;
     const userId = req.user.id;
 
-    if (!montant ||!numero ||!operateur) {
+    if (!montant || !numero || !operateur) {
       return res.status(400).json({ error: 'Champs manquants' });
     }
 
-    const cleanNumero = numero.replace('+', '');
-    const prefix = cleanNumero.slice(0, 3);
-    const config = PROVIDER_CONFIG[prefix];
+    const cleanNumero = numero.replace('+','').replace(/\s/g,'');
+    if(!cleanNumero.startsWith('226')) return res.status(400).json({ error: 'Numéro doit commencer par 226' });
 
-    if (!config) {
-      return res.status(400).json({ error: 'Pays non supporté' });
-    }
-
+    const config = PROVIDER_CONFIG['226'];
     const provider = config.operators[operateur.toLowerCase()];
-    if (!provider) {
-      return res.status(400).json({ error: 'Opérateur non supporté pour ce pays' });
+    if (!provider) return res.status(400).json({ error: 'Opérateur non supporté' });
+
+    if (operateur==='orange' && !otp) {
+      return res.status(400).json({ error: 'OTP requis pour Orange Money' });
     }
 
     const depositId = uuidv4();
@@ -226,114 +261,61 @@ router.post('/init', authUser, async (req, res) => {
       depositId,
       date: new Date()
     });
-    console.log('PAWAPAY REQUEST:', {
+
+    const pawapayPayload = {
       depositId,
       amount: String(montant),
-      currency: config.currency,
-      phoneNumber: cleanNumero,
-      provider
-    });
-    const { data } = await axios.post(
-      `${PAWAPAY_BASE_URL}/v2/deposits`,
-      {
-        depositId,
-        amount: String(montant),
-        currency: config.currency,
-        payer: {
-          type: "MMO",
-          accountDetails: {
-            phoneNumber: cleanNumero,
-            provider
-          }
-        },
-        customerMessage: "UniPay Recharge"
+      currency: 'XOF',
+      payer: {
+        type: "MMO",
+        accountDetails: { phoneNumber: cleanNumero, provider }
       },
-      {
-        headers: {
-          'Authorization': `Bearer ${PAWAPAY_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      }
+      customerMessage: "UniPay Recharge"
+    };
+
+    // Si Orange, PawaPay veut l'OTP dans certains cas
+    if (operateur==='orange' && otp) {
+      pawapayPayload.payer.accountDetails.otp = otp;
+    }
+
+    console.log('PAWAPAY REQUEST:', pawapayPayload);
+
+    const { data } = await axios.post(
+      \`\${PAWAPAY_BASE_URL}/v2/deposits\`,
+      pawapayPayload,
+      { headers: { 'Authorization': \`Bearer \${PAWAPAY_API_KEY}\`, 'Content-Type': 'application/json' } }
     );
 
     if (data.status === 'ACCEPTED') {
-      return res.json({
-        success: true,
-        depositId,
-        message: 'Validez le paiement sur votre téléphone',
-        transactionId: tx._id
-      });
+      return res.json({ success: true, depositId, transactionId: tx._id });
     }
 
     await Transaction.findByIdAndUpdate(tx._id, { status: 'echouee' });
-    return res.status(400).json({
-      error: data.failureReason?.failureMessage || 'Paiement refusé'
-    });
+    return res.status(400).json({ error: data.failureReason?.failureMessage || 'Paiement refusé' });
 
   } catch (err) {
     console.error('PAWAPAY INIT ERROR:', err.response?.data || err.message);
-    const msg = err.response?.data?.failureReason?.failureMessage
-             || err.response?.data?.errorMessage
-             || 'Erreur serveur';
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: err.response?.data?.failureReason?.failureMessage || 'Erreur serveur' });
   }
 });
 
-// ─── GET /status/:depositId ───────────────────────────────────────────────────
 router.get('/status/:depositId', authUser, async (req, res) => {
-  try {
-    const tx = await Transaction.findOne({
-      depositId: req.params.depositId,
-      expediteur: req.user.id
-    });
-    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-
-    res.json({
-      status: tx.status,
-      montant: tx.montant,
-      date: tx.date
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur' });
-  }
+  const tx = await Transaction.findOne({ depositId: req.params.depositId, expediteur: req.user.id });
+  if (!tx) return res.status(404).json({ error: 'Introuvable' });
+  res.json({ status: tx.status, montant: tx.montant });
 });
 
-// ─── POST /callback (webhook PawaPay) ────────────────────────────────────────
-//const crypto = require('crypto');
-//const PAWAPAY_WEBHOOK_SECRET = process.env.PAWAPAY_WEBHOOK_SECRET;
-
-router.post('/callback', express.raw({type: 'application/json'}), async (req, res) => {
+router.post('/callback', async (req, res) => {
+  console.log('CALLBACK RAW:', req.body);
   try {
-    const signature = req.headers['x-pawapay-signature'];
-    const payload = req.body.toString();
-
-    const expectedSig = crypto
-      .createHmac('sha256', PAWAPAY_WEBHOOK_SECRET)
-      .update(payload)
-      .digest('hex');
-
-    if (signature !== expectedSig) {
-      console.error('CALLBACK: Signature invalide');
-      return res.status(401).json({ error: 'Signature invalide' });
-    }
-
-    const { depositId, status } = JSON.parse(payload);
-
-    const newStatus = status === 'COMPLETED' ? 'reussie' : 'echouee';
-    const tx = await Transaction.findOneAndUpdate(
-      { depositId },
-      { status: newStatus },
-      { new: true }
-    );
-
-    if (newStatus === 'reussie' && tx) {
+    const { depositId, status } = req.body;
+    const newStatus = status==='COMPLETED' ? 'reussie' : 'echouee';
+    const tx = await Transaction.findOneAndUpdate({ depositId }, { status: newStatus }, { new: true });
+    if (newStatus==='reussie' && tx) {
       await Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: tx.montant } });
     }
-
-    res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('CALLBACK ERROR:', err);
-    res.status(500).json({ error: 'Erreur serveur' });
-  }
+    res.json({ received: true });
+  } catch (e) { res.status(500).json({ error: 'err' }); }
 });
+
 module.exports = router;
