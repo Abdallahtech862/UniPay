@@ -126,7 +126,7 @@ router.get('/search', authUser, async (req, res) => {
 
 // ==================== ADMIN ====================
 
-router.get('/add', verifyAdmin, (req, res) => {
+router.get('/add', (req, res) => {
   res.send(`<!DOCTYPE html><html><head><title>Ajouter Client</title><meta charset="UTF-8"><style>body{font-family:Arial;padding:20px;max-width:600px;margin:auto}input{width:100%;padding:8px;margin:8px 0}button{padding:10px 20px;background:#007bff;color:white;border:none;cursor:pointer}fieldset{border:1px solid #ddd;padding:10px;margin:10px 0}#msg{margin-top:15px;padding:10px}.success{background:#d4edda;color:#155724}.error{background:#f8d7da;color:#721c24}</style></head><body>
 <h2>Ajouter un client</h2><a href="/api/clients/admin">← Retour</a><br><br>
 <form id="addForm" enctype="multipart/form-data">
@@ -137,7 +137,7 @@ router.get('/add', verifyAdmin, (req, res) => {
 <script>const token=localStorage.getItem('token');if(!token)location.href='/api/auth/login';addForm.onsubmit=async e=>{e.preventDefault();msg.innerText='Envoi...';const fd=new FormData(e.target);try{const res=await fetch('/api/clients',{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});const data=await res.json();if(res.ok){msg.className='success';msg.innerHTML='Client créé : '+data.client.pseudo;e.target.reset()}else{msg.className='error';msg.innerText=data.error}}catch(err){msg.className='error';msg.innerText=err.message}}</script></body></html>`);
 });
 
-router.get('/admin', verifyAdmin, (req, res) => {
+router.get('/admin', (req, res) => {
   // ... garde ton HTML actuel, il est OK, juste remplace la fonction voirCNI pour afficher verificationStatus
   res.send(`<!DOCTYPE html><html><head><title>UniPay Admin</title><meta charset="UTF-8"><style>body{font-family:Arial;padding:20px}table{border-collapse:collapse;width:100%;margin-top:20px}th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#f2f2f2}button{padding:5px 10px;margin:2px;cursor:pointer;border:none;border-radius:3px}.delete{background:#ff4444;color:white}.edit{background:#44bb44;color:white}.block{background:#f59e0b;color:white}.unblock{background:#10b981;color:white}.view{background:#3b82f6;color:white}.limit{background:#8b5cf6;color:white}.reset{background:#ec4899;color:white}.verify{background:#0ea5e9;color:white}img.avatar{width:40px;height:40px;border-radius:50%;object-fit:cover}.search-bar{margin:15px 0;display:flex;gap:10px}.search-bar input{padding:8px;flex:1;max-width:300px}.badge-bloque{background:#ef4444;color:white;padding:2px 8px;border-radius:12px;font-size:12px}.badge-actif{background:#10b981;color:white;padding:2px 8px;border-radius:12px;font-size:12px}.badge-wait{background:#f59e0b;color:white;padding:2px 8px;border-radius:12px;font-size:12px}.modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.8)}.modal-content{margin:5% auto;padding:20px;background:white;width:80%;max-width:600px;border-radius:8px}.modal-content img{width:100%;max-height:400px;object-fit:contain;margin:10px 0}.close{float:right;font-size:28px;cursor:pointer}.form-group{margin:15px 0}.form-group label{display:block;margin-bottom:5px;font-weight:bold}.form-group input{width:100%;padding:8px;box-sizing:border-box}.btn-primary{background:#007bff;color:white;padding:10px 20px;width:100%;margin-top:10px}</style></head><body>
 <h2>Gestion Clients UniPay - KYC</h2><button style="float:right" onclick="localStorage.removeItem('token');location.href='/api/auth/login'">Déconnexion</button>
