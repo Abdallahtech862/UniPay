@@ -239,7 +239,7 @@ Merchant PawaPay ID : 24790
 </p>
 </div>
 
-<p><a href="/privacy">Voir Politique de Confidentialité complète</a></p>
+<p><a href="https://www.unipayburkina.com/api/legal/privacy">Voir Politique de Confidentialité complète</a></p>
 </body>
 </html>
 `);
