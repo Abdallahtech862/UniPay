@@ -208,7 +208,7 @@ router.post('/init', authUser, async (req, res) => {
     const response = await axios.post(
       PAWAPAY_BASE_URL + '/v2/deposits',
       payload,
-      { headers: { 'Authorization': 'Bearer ' + process.env.PAWAPAY_API_KEY, 'Content-Type': 'application/json' } }
+      { headers: { 'Authorization':`Bearer ${process.env.PAWAPAY_API_KEY}`, 'Content-Type': 'application/json' } }
     );
 
     if (response.data.status === 'ACCEPTED') {
