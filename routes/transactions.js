@@ -1212,7 +1212,7 @@ router.post('/', authUser, async (req, res) => {
       motif: motif || '',
       frais,
       status: 'validee',
-      type: 'transfert_unipay',
+      type: 'transfert',
       verificationExpediteur: exp.verificationStatus,
       soldeExpediteurApres: exp.solde,
       soldeDestinataireApres: dest.solde,
