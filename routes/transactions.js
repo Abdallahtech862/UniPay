@@ -1130,47 +1130,81 @@ router.post('/', authUser, async (req, res) => {
 
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
-
-    // 1. VALIDATION DES INPUTS
     const montantInt = Number(montant);
 
-    if (!Number.isInteger(montantInt) || montantInt <= 0) {
-      throw new Error('Montant invalide. Doit être un entier positif');
-    }
-    if (montantInt > 2000000) {
-      throw new Error('Plafond de 2,000,000 FCFA dépassé');
-    }
-    if (req.user.id!== expediteur) {
-      throw new Error('Tu ne peux transférer que depuis ton compte');
-    }
-    if (expediteur === destinataire) {
-      throw new Error('Impossible de transférer à soi-même');
-    }
+    // 1. VALIDATION DE BASE
+    if (!Number.isInteger(montantInt) || montantInt <= 0) throw new Error('Montant invalide');
+    if (montantInt > 2000000) throw new Error('Plafond de 2 000 000 FCFA dépassé');
+    if (req.user.id!== expediteur) throw new Error('Tu ne peux transférer que depuis ton compte');
+    if (expediteur === destinataire) throw new Error('Impossible de transférer à soi-même');
 
-    // 2. RÉCUPÉRATION ATOMIQUE AVEC VERROU
+    // 2. RECUP + VERROU
     const exp = await Client.findById(expediteur).session(session);
     const dest = await Client.findById(destinataire).session(session);
 
     if (!exp) throw new Error('Compte expéditeur introuvable');
     if (!dest) throw new Error('Compte destinataire introuvable');
-    if (exp.bloque) throw new Error('Compte suspendu. Impossible d’effectuer un transfert');
-    if (dest.bloque) throw new Error('Le destinataire a un compte suspendu');
+    if (exp.bloque) throw new Error('Compte suspendu. Contacte le support');
+    if (dest.bloque) throw new Error('Destinataire suspendu');
+
+    // ====== NOUVEAU : VERIFICATION KYC (LBC/FT) ======
+    if (!exp.isVerified || exp.verificationStatus!== 'verifie') {
+      // Tolérance : non vérifié peut envoyer max 50 000/jour
+      if (montantInt > 50000) {
+        throw new Error('KYC non vérifié : tu ne peux envoyer que 50 000 FCFA max. Envoie ta CNIB dans Profil pour débloquer 2M');
+      }
+    }
+    if (dest.verificationStatus === 'rejete') {
+      throw new Error('Destinataire rejeté KYC, transfert impossible');
+    }
+
+    // ====== NOUVEAU : RESET ET CHECK LIMITES JOURNALIERE / MENSUELLE ======
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Reset journalier
+    if (!exp.dernierResetJour || exp.dernierResetJour < todayStart) {
+      exp.totalDepotJour = 0;
+      exp.dernierResetJour = now;
+    }
+    // Reset mensuel (si mois différent)
+    const lastMonth = exp.dernierResetJour? exp.dernierResetJour.getMonth() : -1;
+    if (lastMonth!== now.getMonth() ||!exp.totalDepotMois) {
+      // On garde totalDepotJour déjà reset, on reset mensuel si nouveau mois
+      if (lastMonth!== now.getMonth()) {
+        exp.totalDepotMois = 0;
+      }
+    }
 
     const frais = Math.round(montantInt * 0.01);
     const totalDebit = montantInt + frais;
 
-    if (exp.solde < totalDebit) {
-      throw new Error('Solde insuffisant');
+    // Check solde
+    if (exp.solde < totalDebit) throw new Error(`Solde insuffisant. Solde: ${exp.solde.toLocaleString()} FCFA, besoin: ${totalDebit.toLocaleString()} FCFA`);
+
+    // Check limite journalière
+    if ((exp.totalDepotJour + montantInt) > exp.limiteJournaliere) {
+      const restant = exp.limiteJournaliere - exp.totalDepotJour;
+      throw new Error(`Limite journalière dépassée. Il te reste ${restant.toLocaleString()} FCFA aujourd'hui (limite: ${exp.limiteJournaliere.toLocaleString()} FCFA)`);
     }
 
-    // 3. MISE À JOUR ATOMIQUE DES SOLDES
+    // Check limite mensuelle
+    if ((exp.totalDepotMois + montantInt) > exp.limiteMensuelle) {
+      const restant = exp.limiteMensuelle - exp.totalDepotMois;
+      throw new Error(`Limite mensuelle dépassée. Il te reste ${restant.toLocaleString()} FCFA ce mois (limite: ${exp.limiteMensuelle.toLocaleString()} FCFA)`);
+    }
+
+    // 3. DEBIT / CREDIT
     exp.solde -= totalDebit;
     dest.solde += montantInt;
+    exp.totalDepotJour += montantInt;
+    exp.totalDepotMois += montantInt;
+    exp.dernierResetJour = now;
 
     await exp.save({ session });
     await dest.save({ session });
 
-    // 4. CRÉATION TRANSACTION POUR AUDIT
+    // 4. TRANSACTION AUDIT (PawaPay compliant)
     const [tx] = await Transaction.create([{
       expediteur: exp._id,
       destinataire: dest._id,
@@ -1178,46 +1212,42 @@ router.post('/', authUser, async (req, res) => {
       motif: motif || '',
       frais,
       status: 'validee',
+      type: 'transfert_unipay',
+      verificationExpediteur: exp.verificationStatus,
       soldeExpediteurApres: exp.solde,
-      soldeDestinataireApres: dest.solde
+      soldeDestinataireApres: dest.solde,
+      ip: req.ip
     }], { session });
 
-    // 5. COMMIT : tout passe ou rien ne passe
     await session.commitTransaction();
 
-    // 6. NOTIFICATIONS HORS TRANSACTION - ne bloque pas si Expo down
+    // 5. NOTIFS HORS TX
     if (exp.expoPushToken) {
-      sendPushNotification(
-        exp.expoPushToken,
-        'Transfert envoyé',
-        `Tu as envoyé ${montantInt} FCFA à ${dest.prenom}`,
-        { type: 'transfert', transactionId: tx._id }
-      ).catch(err => console.error('Erreur notif expéditeur:', err));
+      sendPushNotification(exp.expoPushToken, 'Transfert envoyé', `Tu as envoyé ${montantInt.toLocaleString()} FCFA à ${dest.prenom}`, { type: 'transfert', transactionId: tx._id }).catch(()=>{});
     }
-
     if (dest.expoPushToken) {
-      sendPushNotification(
-        dest.expoPushToken,
-        'Argent reçu',
-        `Tu as reçu ${montantInt} FCFA de ${exp.prenom}`,
-        { type: 'reception', transactionId: tx._id }
-      ).catch(err => console.error('Erreur notif destinataire:', err));
+      sendPushNotification(dest.expoPushToken, 'Argent reçu', `Tu as reçu ${montantInt.toLocaleString()} FCFA de ${exp.prenom}`, { type: 'reception', transactionId: tx._id }).catch(()=>{});
     }
 
-    // 7. RÉCUP HISTORIQUE POUR RETOUR
-    const transactions = await Transaction.find({
-      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
-    })
-   .sort({ createdAt: -1 })
-   .limit(20)
-   .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
-   .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
+    // 6. RETOUR
+    const transactions = await Transaction.find({ $or: [{ expediteur: exp._id }, { destinataire: exp._id }] })
+     .sort({ createdAt: -1 }).limit(20)
+     .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
+     .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
 
     res.json({
       message: 'Transfert effectué',
       nouveauSolde: exp.solde,
-      nouveauSoldeDestinataire: dest.solde,
       transactionId: tx._id,
+      limites: {
+        journaliere: exp.limiteJournaliere,
+        utiliseJour: exp.totalDepotJour,
+        restantJour: exp.limiteJournaliere - exp.totalDepotJour,
+        mensuelle: exp.limiteMensuelle,
+        utiliseMois: exp.totalDepotMois,
+        restantMois: exp.limiteMensuelle - exp.totalDepotMois
+      },
+      kyc: { verifie: exp.isVerified, status: exp.verificationStatus },
       historique: transactions.map(t => ({
         id: t._id,
         type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
@@ -1232,118 +1262,12 @@ router.post('/', authUser, async (req, res) => {
 
   } catch (err) {
     await session.abortTransaction();
-    console.error('Erreur transfert:', err);
+    console.error('Erreur transfert:', err.message);
     res.status(400).json({ error: err.message });
   } finally {
     session.endSession();
   }
 });
-router.post('/e', authUser, async (req, res) => {
-  try {
-    const { expediteur, destinataire, montant, motif } = req.body;
-    
-    if (req.user.id !== expediteur) {
-      return res.status(403).json({ error: 'Tu ne peux transférer que depuis ton compte' });
-    }
-
-    const exp = await Client.findById(expediteur);
-    const dest = await Client.findById(destinataire);
-
-    if (!exp || !dest) return res.status(404).json({ error: 'Compte introuvable' });
-    
-    // ✅ Check si expéditeur bloqué
-    if (exp.bloque) {
-      return res.status(403).json({ error: 'Compte suspendu. Impossible d’effectuer un transfert.' });
-    }
-
-    // ✅ Check si destinataire bloqué aussi
-    if (dest.bloque) {
-      return res.status(403).json({ error: 'Le destinataire a un compte suspendu.' });
-    }
-
-    if (exp.solde < montant) return res.status(400).json({ error: 'Solde insuffisant' });
-
-    const frais = Math.round(montant * 0.01);
-    const nouveauSoldeExp = exp.solde - montant - frais;
-    const nouveauSoldeDest = dest.solde + montant;
-    
-    const tx = await Transaction.create({
-      expediteur: exp._id,
-      destinataire: dest._id,
-      montant: Number(montant),
-      motif,
-      frais,
-      status: 'validee',
-      soldeExpediteurApres: nouveauSoldeExp,
-      soldeDestinataireApres: nouveauSoldeDest
-    });
-
-    // Tu fais 2 fois la mise à jour, supprime le premier bloc
-    const [updatedExp, updatedDest] = await Promise.all([
-      Client.findByIdAndUpdate(
-        expediteur, 
-        { solde: nouveauSoldeExp },
-        { new: true, select: 'solde nom prenom' }
-      ),
-      Client.findByIdAndUpdate(
-        destinataire, 
-        { solde: nouveauSoldeDest },
-        { new: true, select: 'solde nom prenom' }
-      )
-    ]);
-
-    const transactions = await Transaction.find({
-      $or: [{ expediteur: exp._id }, { destinataire: exp._id }]
-    })
-    .sort({ createdAt: -1 })
-    .limit(20)
-    .populate('expediteur', 'nom prenom telephone pseudo photoProfil')
-    .populate('destinataire', 'nom prenom telephone pseudo photoProfil');
-    // Notif expéditeur
-    const sender = await Client.findById(req.user.id);
-    if (sender.expoPushToken) {
-      await sendPushNotification(
-        sender.expoPushToken,
-        'Transfert envoyé',
-        `Tu as envoyé ${t.montant} FCFA à ${destinataire.prenom}`,
-        { type: 'transfert', transactionId: newTx._id }
-      );
-    }
-
-    // Notif destinataire
-    const destinataires = await Client.findById(destinataire);
-    if (destinataires.expoPushToken) {
-      await sendPushNotification(
-        destinataires.expoPushToken,
-        'Argent reçu',
-        `Tu as reçu ${t.montant} FCFA de ${sender.prenom}`,
-        { type: 'reception', transactionId: newTx._id }
-      );
-    }
-    
-
-    res.json({
-      message: 'Transfert effectué',
-      nouveauSolde: updatedExp.solde,
-      nouveauSoldeDestinataire: updatedDest.solde,
-      historique: transactions.map(t => ({
-        id: t._id,
-        type: t.expediteur._id.equals(exp._id)? 'envoi' : 'reception',
-        montant: t.montant,
-        frais: t.frais || 0,
-        contact: t.expediteur._id.equals(exp._id)? t.destinataire : t.expediteur,
-        motif: t.motif || '',
-        status: t.status,
-        date: t.createdAt
-      }))
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==================== ROUTES AVEC :id EN DERNIER ====================
 
 
 // POST /api/transactions/:id/cancel
