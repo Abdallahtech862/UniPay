@@ -455,10 +455,151 @@ router.get('/',authUser, async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
+// POST /api/transfer/preview → calculer frais avant validation
+router.post('/withdraw/preview', authUser, async (req, res) => {
+  try {
+    const { montant } = req.body;
+    const montantNum = parseInt(montant);
+    
+    if (!montantNum || montantNum < 100) {
+      return res.status(400).json({ error: 'Montant invalide' });
+    }
 
+    const frais = calculFrais(montantNum);
+    const total = montantNum + frais;
+
+    const user = await Client.findById(req.user.id);
+    
+    res.json({
+      montant: montantNum,
+      frais,
+      total,
+      soldeActuel: user.solde,
+      soldeApres: user.solde - total,
+      canTransfer: user.solde >= total && !user.bloque
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // ==================== ACTIONS ====================
+router.post('/', authUser, async (req, res) => {
+  try {
+    const { identifier, montant, motif, type = 'envoi' } = req.body;
+    
+    if (!identifier || !montant) {
+      return res.status(400).json({ error: 'Destinataire et montant requis' });
+    }
 
-router.post('/',authUser, async (req, res) => {
+    const montantNum = parseInt(montant);
+    if (isNaN(montantNum) || montantNum < 100) {
+      return res.status(400).json({ error: 'Montant minimum 100 FCFA' });
+    }
+    if (montantNum > 1000000) {
+      return res.status(400).json({ error: 'Montant maximum 1,000,000 FCFA' });
+    }
+
+    // 1. Expediteur
+    const expediteur = await Client.findById(req.user.id);
+    if (!expediteur) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    if (expediteur.bloque) {
+      return res.status(403).json({ error: 'Votre compte est suspendu' });
+    }
+
+    if (expediteur.solde < montantNum + calculFrais(montantNum)) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    // Limites journalières
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const sentToday = await Transaction.aggregate([
+      { $match: { senderId: expediteur._id, createdAt: { $gte: today }, status: 'validee' } },
+      { $group: { _id: null, total: { $sum: '$montant' } } }
+    ]);
+    const totalToday = sentToday[0]?.total || 0;
+    if (totalToday + montantNum > expediteur.limiteJournaliere) {
+      return res.status(400).json({ 
+        error: `Limite journalière dépassée (${expediteur.limiteJournaliere.toLocaleString()} FCFA)` 
+      });
+    }
+
+    // 2. Destinataire par pseudo / telephone / email
+    const destinataire = await Client.findOne({
+      $or: [
+        { pseudo: identifier },
+        { telephone: identifier },
+        { telephone: `+226${identifier.slice(-8)}` },
+        { email: identifier }
+      ]
+    });
+
+    if (!destinataire) return res.status(404).json({ error: 'Destinataire introuvable' });
+    if (destinataire._id.equals(expediteur._id)) {
+      return res.status(400).json({ error: 'Impossible de se transférer à soi-même' });
+    }
+    if (destinataire.bloque) {
+      return res.status(403).json({ error: 'Compte destinataire suspendu' });
+    }
+
+    const frais = calculFrais(montantNum);
+    const totalDebit = montantNum + frais;
+
+    const nouveauSoldeExp = expediteur.solde - totalDebit;
+    const nouveauSoldeDest = destinataire.solde + montantNum;
+
+    // 3. Créer transaction
+    const transaction = await Transaction.create({
+      type: type, // envoi / reception
+      senderId: expediteur._id,
+      receiverId: destinataire._id,
+      expediteur: { _id: expediteur._id },
+      destinataire: { _id: destinataire._id },
+      montant: montantNum,
+      frais,
+      motif: motif || '',
+      soldeExpediteurApres: nouveauSoldeExp,
+      soldeDestinataireApres: nouveauSoldeDest,
+      status: 'validee'
+    });
+
+    // 4. Mettre à jour soldes
+    await Client.findByIdAndUpdate(expediteur._id, { solde: nouveauSoldeExp });
+    await Client.findByIdAndUpdate(destinataire._id, { solde: nouveauSoldeDest });
+
+    // 5. Push notif destinataire
+    if (destinataire.expoPushToken && destinataire.notificationsEnabled !== false) {
+      await sendPushNotification(
+        destinataire.expoPushToken,
+        `Vous avez reçu ${montantNum.toLocaleString()} FCFA de ${expediteur.prenom} ${expediteur.nom}`,
+        { transactionId: transaction._id }
+      );
+    }
+
+    res.json({
+      message: 'Transfert réussi',
+      transaction: {
+        id: transaction._id,
+        montant: montantNum,
+        frais,
+        totalDebit,
+        nouveauSolde: nouveauSoldeExp,
+        destinataire: {
+          nom: destinataire.nom,
+          prenom: destinataire.prenom,
+          telephone: destinataire.telephone,
+          pseudo: destinataire.pseudo
+        }
+      }
+    });
+
+  } catch (err) {
+    console.error('Transfer error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+router.post('/e',authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     if (expediteur === destinataire) return res.status(400).json({ error: 'Même compte' });
@@ -480,7 +621,38 @@ router.post('/',authUser, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// GET /api/transfer/history/me
+router.get('/me', authUser, async (req, res) => {
+  try {
+    const transactions = await Transaction.find({
+      $or: [{ senderId: req.user.id }, { receiverId: req.user.id }]
+    })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .populate('senderId', 'nom prenom telephone pseudo photoProfil')
+    .populate('receiverId', 'nom prenom telephone pseudo photoProfil');
 
+    const formatted = transactions.map(t => ({
+      id: t._id,
+      type: t.senderId._id.equals(req.user.id) ? 'envoi' : 'reception',
+      montant: t.montant,
+      frais: t.frais,
+      contact: t.senderId._id.equals(req.user.id) ? t.receiverId : t.senderId,
+      expediteur: t.senderId,
+      destinataire: t.receiverId,
+      motif: t.motif,
+      soldeExpediteurApres: t.soldeExpediteurApres,
+      soldeDestinataireApres: t.soldeDestinataireApres,
+      status: t.status,
+      date: t.createdAt,
+      createdAt: t.createdAt
+    }));
+
+    res.json({ transactions: formatted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 router.delete('/:id', verifyAdmin, async (req, res) => {
   try {
     const transaction = await Transaction.findById(req.params.id)
