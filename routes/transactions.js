@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
-const { verifyAdmin } = require('../middleware/auth');
+const { verifyToken, verifyAdmin, authUser } = require('../middleware/auth');
 
 // ==================== API JSON ====================
 
-router.get('/data', verifyAdmin, async (req, res) => {
+router.get('/data', async (req, res) => {
   try {
     const { client, debut, fin } = req.query;
     let query = {};
@@ -258,7 +258,7 @@ router.get('/dashboard', verifyAdmin, async (req, res) => {
 </html>`);
 });
 
-router.get('/', verifyAdmin, async (req, res) => {
+router.get('/',authUser, async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
@@ -458,7 +458,7 @@ router.get('/', verifyAdmin, async (req, res) => {
 
 // ==================== ACTIONS ====================
 
-router.post('/', verifyAdmin, async (req, res) => {
+router.post('/',authUser, async (req, res) => {
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     if (expediteur === destinataire) return res.status(400).json({ error: 'Même compte' });
