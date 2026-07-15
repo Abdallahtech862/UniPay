@@ -60,10 +60,6 @@ body{background:#F9F5ED;min-height:100vh;padding:0 16px 24px}
 </style>
 </head>
 <body>
-<div class="header">
-<div class="back" onclick="window.history.back()"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2B1E12" stroke-width="2"><path d="M19 12H5"/><path d="M12 19L5 12L12 5"/></svg></div>
-<div class="title">Recharge du wallet</div>
-</div>
 
 <div class="label">Choisissez un opérateur</div>
 <div class="operators">
