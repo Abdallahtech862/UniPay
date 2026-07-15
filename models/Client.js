@@ -4,12 +4,12 @@ const bcrypt = require('bcryptjs');
 const clientSchema = new mongoose.Schema({
   nom: { type: String, required: true, trim: true },
   prenom: { type: String, required: true, trim: true },
-  telephone: { type: String, required: true, unique: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  telephone: { type: String, required: true, trim: true }, // enlève unique
+  email: { type: String, required: true, lowercase: true, trim: true }, // enlève unique
+  pseudo: { type: String, sparse: true },
   password: { type: String, required: true, minlength: 6 }, // 6 mini pour PawaPay
   solde: { type: Number, default: 0, min: 0 },
   role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
-  pseudo: { type: String, unique: true, sparse: true },
   photoProfil: { type: String, default: null },
   
   // --- COMPLIANCE LBC/FT (ce qui manquait) ---
@@ -67,9 +67,9 @@ clientSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 // Index pour recherche rapide admin
-//clientSchema.index({ telephone: 1 });
-//clientSchema.index({ email: 1 });
-//clientSchema.index({ numeroCNIB: 1 });
+clientSchema.index({ telephone: 1 });
+clientSchema.index({ email: 1 });
+clientSchema.index({ numeroCNIB: 1 });
 clientSchema.index({ pseudo: 1 });
 
 module.exports = mongoose.model('Client', clientSchema);
