@@ -67,9 +67,9 @@ clientSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 // Index pour recherche rapide admin
-clientSchema.index({ telephone: 1 });
-clientSchema.index({ email: 1 });
-clientSchema.index({ numeroCNIB: 1 });
-clientSchema.index({ pseudo: 1 });
+
+clientSchema.index({ telephone: 1 }, { unique: true });
+clientSchema.index({ email: 1 }, { unique: true });
+clientSchema.index({ pseudo: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Client', clientSchema);
