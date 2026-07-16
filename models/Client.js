@@ -6,7 +6,8 @@ const clientSchema = new mongoose.Schema({
   prenom: { type: String, required: true, trim: true },
   telephone: { type: String, required: true, trim: true },
   email: { type: String, required: true, lowercase: true, trim: true },
-  pseudo: { type: String, sparse: true, trim: true }, // ← J'ai enlevé unique:true ici
+  //pseudo: { type: String, sparse: true, trim: true }, // ← J'ai enlevé unique:true ici
+  pseudo: { type: String, unique: true, sparse: true },
   password: { type: String, required: true, minlength: 4 },
   solde: { type: Number, default: 0, min: 0 },
   role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
