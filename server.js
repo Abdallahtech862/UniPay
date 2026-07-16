@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 require('dotenv').config();
-
+console.log('DOTENV path:', require('path').resolve('.env'));
+console.log('KEY in ENV file:', process.env.PAWAPAY_API_KEY.slice(-15));
 //const cors = require('cors');
 //app.use(cors({
 //  origin: '*', // Accepte tout pour tester
@@ -796,19 +797,13 @@ app.get('/health', (req, res) => res.status(200).json({
   db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
 }));
 
-const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL;
+//app.get('/health', (req, res) => res.status(200).send('OK'));
+//app.get('/', (req, res) => res.status(200).json({ 
+ // status: 'OK',
+ // db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+//}));
 
-if (!MONGO_URI) {
-  console.error('FATAL: MONGO_URI manquant dans les variables');
-} else {
-  mongoose.connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 10000
-  }).then(async () => {
-    console.log('MongoDB connecté');
-    await initAdmin();
-  }).catch(err => console.error('Mongo error:', err.message));
-}
-
+mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/auth', require('./routes/auth'));
@@ -817,6 +812,7 @@ app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/cards', require('./routes/cards'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
+app.use('/api/pawapay', require('./routes/pawapay'));
 
 
 const PORT = process.env.PORT;
