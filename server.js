@@ -1,29 +1,58 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const path = require('path');
 require('dotenv').config();
-console.log('DOTENV path:', require('path').resolve('.env'));
-console.log('KEY in ENV file:', process.env.PAWAPAY_API_KEY.slice(-15));
-//const cors = require('cors');
-//app.use(cors({
-//  origin: '*', // Accepte tout pour tester
-//  credentials: true
-//}));
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
-//app.use(express.json());
-//app.use(express.urlencoded({ extended: true })); // Pour les formulaires HTML
+
+// LOGS SAFE - ne crashe pas
+console.log('DOTENV path:', path.resolve('.env'));
+console.log('MONGO_URL present:',!!process.env.MONGO_URL);
+console.log('PAWAPAY_KEY present:',!!process.env.PAWAPAY_API_KEY);
+if (process.env.PAWAPAY_API_KEY) {
+  console.log('KEY tail:', process.env.PAWAPAY_API_KEY.slice(-6));
+}
 
 process.on('uncaughtException', (err) => {
   console.error('FATAL:', err.message);
 });
-//
 
-// Ta page HTML complète
-const html = `<!DOCTYPE html>
+// ============ MONGODB CONNEXION ROBUSTE ============
+const MONGO_URI = process.env.MONGO_URL || process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error('❌ ERREUR: MONGO_URL manquant dans Railway Variables');
+} else {
+  console.log('Tentative connexion Mongo:', MONGO_URI.split('@').pop()?.split('?')[0]);
+  mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+  })
+ .then(() => console.log('✅ MongoDB connecté'))
+ .catch(err => {
+    console.error('❌ Mongo error:', err.message);
+    console.error('Astuce: Vérifie que MONGO_URL = ${{MongoDB.MONGO_URL}} et que les 2 services sont dans le même projet Railway');
+  });
+}
+
+mongoose.connection.on('error', err => console.error('Mongo event error:', err.message));
+mongoose.connection.on('disconnected', () => console.warn('Mongo disconnected'));
+
+// ============ TA PAGE HTML LANDING ============
+const html = `<!DOCTYPE html>... COLLE TON HTML ICI SANS CHANGER...` // garde ton html actuel
+
+app.get('/', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send(html);
+});
+
+// ============ ROUTES GOOGLE PLAY OBLIGATOIRES ============
+app.get('/delete', (req, res) => {
+  res.send(`<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -783,39 +812,31 @@ const html = `<!DOCTYPE html>
 </script>
 
 </body>
-</html>`;
-
-// Route principale : renvoie la page HTML
-app.get('/', (req, res) => {
-  res.set('Content-Type', 'text/html');
-  res.send(html);
+</html>`);
 });
 
-// Route de health check pour Railway/monitoring : garde-la séparée
-app.get('/health', (req, res) => res.status(200).json({ 
+app.get('/privacy', (req, res) => {
+  res.redirect('/#confidentialite');
+});
+
+app.get('/health', (req, res) => res.status(200).json({
   status: 'OK',
-  db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+  db: mongoose.connection.readyState === 1? 'Connected' : 'Disconnected',
+  readyState: mongoose.connection.readyState
 }));
 
-//app.get('/health', (req, res) => res.status(200).send('OK'));
-//app.get('/', (req, res) => res.status(200).json({ 
- // status: 'OK',
- // db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
-//}));
-
-mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
+// ============ API ROUTES ============
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
-//app.use('/api/transfer', require('./routes/transfer'));
 app.use('/api/cards', require('./routes/cards'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
 app.use('/api/pawapay', require('./routes/pawapay'));
 
-
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur sur port ${PORT}`);
 });
+
