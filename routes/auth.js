@@ -224,6 +224,58 @@ router.post('/register', upload.fields([
 router.post('/check-user', async (req, res) => {
   try {
     let { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: "identifier manquant" });
+
+    identifier = identifier.trim();
+
+    // Normalise AVANT de chercher
+    let normalizedPhone = identifier;
+    if (!identifier.includes('@')) {
+      // Enlève espaces
+      normalizedPhone = identifier.replace(/\s/g, '');
+      if (!normalizedPhone.startsWith('+')) {
+        if (normalizedPhone.startsWith('226')) normalizedPhone = '+' + normalizedPhone;
+        else if (!normalizedPhone.startsWith('+226')) normalizedPhone = '+226' + normalizedPhone;
+      }
+    }
+
+    const query = identifier.includes('@') 
+      ? { email: identifier.toLowerCase() }
+      : { $or: [{ telephone: identifier }, { telephone: normalizedPhone }] };
+
+    const user = await Client.findOne(query);
+
+    if (user) {
+      return res.json({ exists: true, userId: user._id });
+    }
+
+    // Si user n'existe pas
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`OTP pour ${normalizedPhone}: ${otp}`); // A retirer en prod
+
+    const message = `Votre code UniPay : ${otp}. Valide 5 min.`;
+    
+    const smsSent = await sendSMSOrange(normalizedPhone, message);
+
+    if (!smsSent) {
+      return res.status(500).json({ error: "Échec envoi SMS Orange - POL0001" });
+    }
+
+    return res.json({
+      exists: false,
+      message: "OTP envoyé"
+      // NE JAMAIS renvoyer otp:otp au frontend !
+    });
+
+  } catch (err) {
+    console.error('CHECK-USER ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/check-userr', async (req, res) => {
+  try {
+    let { identifier } = req.body;
 
     const user = await Client.findOne({
       $or: [
