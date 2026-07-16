@@ -796,15 +796,15 @@ app.get('/health', (req, res) => res.status(200).json({
   db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
 }));
 
-//app.get('/health', (req, res) => res.status(200).send('OK'));
-//app.get('/', (req, res) => res.status(200).json({ 
- // status: 'OK',
- // db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
-//}));
-mongoose.connect(process.env.MONGO_URL, {
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL;
+const initAdmin = require('./initAdmin');
+mongoose.connect(MONGO_URI, {
   serverSelectionTimeoutMS: 10000
-});
-//mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
+}).then(async () => {
+  console.log('MongoDB connecté');
+  await initAdmin();
+}).catch(err => console.error('Mongo error:', err.message));
+
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/auth', require('./routes/auth'));
