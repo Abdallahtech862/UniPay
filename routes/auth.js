@@ -221,7 +221,7 @@ router.post('/register', upload.fields([
 });
 
 //verifie si un utilisateur existe
-router.post('/check-user', async (req, res) => {
+router.post('/check-userr', async (req, res) => {
   try {
     let { identifier } = req.body;
     if (!identifier) return res.status(400).json({ error: "identifier manquant" });
@@ -273,7 +273,7 @@ router.post('/check-user', async (req, res) => {
   }
 });
 
-router.post('/check-userr', async (req, res) => {
+router.post('/check-user', async (req, res) => {
   try {
     let { identifier } = req.body;
 
