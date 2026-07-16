@@ -801,8 +801,10 @@ app.get('/health', (req, res) => res.status(200).json({
  // status: 'OK',
  // db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
 //}));
-
-mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
+mongoose.connect(process.env.MONGO_URL, {
+  serverSelectionTimeoutMS: 10000
+});
+//mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/auth', require('./routes/auth'));
