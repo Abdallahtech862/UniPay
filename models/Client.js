@@ -64,7 +64,7 @@ clientSchema.methods.comparePassword = async function(candidatePassword) {
 // UN SEUL endroit pour les index - plus de duplicate
 clientSchema.index({ telephone: 1 }, { unique: true });
 clientSchema.index({ email: 1 }, { unique: true });
-clientSchema.index({ pseudo: 1 }, { unique: true, sparse: true });
+//clientSchema.index({ pseudo: 1 }, { unique: true, sparse: true });
 clientSchema.index({ numeroCNIB: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Client', clientSchema);
