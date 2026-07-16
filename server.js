@@ -43,16 +43,7 @@ mongoose.connection.on('error', err => console.error('Mongo event error:', err.m
 mongoose.connection.on('disconnected', () => console.warn('Mongo disconnected'));
 
 // ============ TA PAGE HTML LANDING ============
-const html = `<!DOCTYPE html>... COLLE TON HTML ICI SANS CHANGER...` // garde ton html actuel
-
-app.get('/', (req, res) => {
-  res.set('Content-Type', 'text/html');
-  res.send(html);
-});
-
-// ============ ROUTES GOOGLE PLAY OBLIGATOIRES ============
-app.get('/delete', (req, res) => {
-  res.send(`<!DOCTYPE html>
+const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -812,7 +803,16 @@ app.get('/delete', (req, res) => {
 </script>
 
 </body>
-</html>`);
+</html>` // garde ton html actuel
+
+app.get('/', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send(html);
+});
+
+// ============ ROUTES GOOGLE PLAY OBLIGATOIRES ============
+app.get('/delete', (req, res) => {
+  res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Suppression - UniPay</title><style>body{font-family:Arial;max-width:700px;margin:0 auto;padding:20px;line-height:1.6}.card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin:16px 0}</style></head><body><h1>Suppression compte UniPay</h1><div class="card"><h3>Dans l'app</h3><p>Profil > Paramètres > Supprimer mon compte</p><h3>Sans l'app</h3><p>Email à <b>abdallah.unipay@gmail.com</b> avec objet "Suppression compte UniPay - [votre numéro]"</p><p>Suppression sous 48h. Données CNIB supprimées de Cloudinary. Historique anonymisé 5 ans pour obligation BCEAO LBC/FT.</p></div><p>Contact: ETABLISSEMENT SABDOU TRANSFERT BUSINESS - Kilwin 15, Ouaga - +226 70 87 94 25 - Merchant PawaPay 24790</p></body></html>`);
 });
 
 app.get('/privacy', (req, res) => {
@@ -839,4 +839,6 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur sur port ${PORT}`);
 });
+
+
 
