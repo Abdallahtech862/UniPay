@@ -8,6 +8,10 @@ const jwt = require('jsonwebtoken');
 const Client = require('../models/Client');
 const { sendSMSOrange } = require('../utils/sendSMS');
 
+const Otp = require('../models/Otp');
+
+
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -433,175 +437,83 @@ router.post('/login-passwordd', async (req, res) => {
 });
 
 
-// Stockage temporaire en mémoire pour rate limit (mieux avec Redis en prod)
 const otpRateLimit = new Map();
 
-// POST /api/auth/request-otp-signup → nouveau user
 router.post('/request-otp-signup', async (req, res) => {
   try {
-    const { identifier } = req.body; // +22675322321 ou email@...
+    const { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: 'Numéro ou email requis' });
 
-    if (!identifier) {
-      return res.status(400).json({ error: 'Numéro ou email requis' });
-    }
-
-    // 1. Formatage
     const isEmail = identifier.includes('@');
     let phone = null;
     let email = null;
 
     if (isEmail) {
       email = identifier.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({ error: 'Email invalide' });
-      }
     } else {
-      // Numéro BF
       const num = identifier.replace(/\D/g, '');
-      if (num.length < 8) {
-        return res.status(400).json({ error: 'Numéro invalide' });
-      }
+      if (num.length < 8) return res.status(400).json({ error: 'Numéro invalide' });
       phone = `+226${num.slice(-8)}`;
     }
 
-    // 2. Rate limit : max 3 OTP / 10 min par numéro
     const key = phone || email;
     const now = Date.now();
     const attempts = otpRateLimit.get(key) || [];
-    const recent = attempts.filter(t => now - t < 10 * 60 * 1000);
-    
-    if (recent.length >= 3) {
-      return res.status(429).json({ 
-        error: 'Trop de tentatives. Réessaie dans 10 minutes.' 
-      });
-    }
+    const recent = attempts.filter(t => now - t < 10*60*1000);
+    if (recent.length >= 3) return res.status(429).json({ error: 'Trop de tentatives. 10 min.' });
     recent.push(now);
     otpRateLimit.set(key, recent);
 
-    // 3. Vérifie si user existe déjà
-    const existingUser = await Client.findOne({
-      $or: [
-        { telephone: phone },
-        { email: email },
-        { telephone: `+226${phone?.slice(-3)}` } // tolérance
-      ].filter(Boolean)
-    });
+    // Vérifie si compte existe déjà
+    const existing = await Client.findOne({ $or: [{ telephone: phone }, { email }].filter(Boolean) });
+    if (existing) return res.status(400).json({ error: 'Compte existe déjà. Connecte-toi.' });
 
-    if (existingUser && existingUser.isVerified) {
-      return res.status(400).json({ 
-        error: 'Ce compte existe déjà. Connecte-toi.' 
-      });
-    }
-
-    // 4. Génère OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+    const expiresAt = new Date(Date.now() + 5*60*1000);
 
-    // 5. Save / Update user temp
-    let user;
-    if (existingUser) {
-      // User non vérifié → update OTP
-      existingUser.otpCode = otp;
-      existingUser.otpExpires = expiresAt;
-      user = await existingUser.save();
-    } else {
-      // Nouveau user temp
-      user = await Client.create({
-        telephone: phone,
-        email: email || null,
-        nom: '',
-        prenom: '',
-        pseudo: '',
-        password: '', // sera défini après
-        otpCode: otp,
-        otpExpires: expiresAt,
-        isVerified: false,
-        solde: 0,
-        bloque: false,
-        limiteJournaliere: 200000,
-        limiteMensuelle: 2000000
-      });
-    }
+    // Supprime anciens OTP et crée nouveau
+    await Otp.deleteMany({ identifier: key });
+    await Otp.create({ identifier: key, otpCode: otp, expiresAt });
 
-    // 6. Envoi SMS Orange si téléphone
     if (phone) {
-      const message = `Bienvenue sur UniPay! Votre code de vérification est: ${otp}. Valide 5 min. Ne le partagez pas.`;
-      
-      const sent = await sendSMSOrange(phone, message);
-      
-      if (!sent) {
-        // Rollback si SMS échoue
-        await Client.findByIdAndDelete(user._id);
-        return res.status(500).json({ error: 'Échec envoi SMS. Réessaie.' });
-      }
-      
-      console.log(`[OTP Signup] ${phone} → ${otp}`);
-    } else {
-      // Si email → envoi email (à implémenter)
-      console.log(`[OTP Signup Email] ${email} → ${otp}`);
-      // await sendEmail(email, otp);
+      const sent = await sendSMSOrange(phone, `UniPay: ${otp} valide 5 min.`);
+      if (!sent) return res.status(500).json({ error: 'Échec SMS' });
     }
 
-    res.json({ 
-      message: 'Code envoyé',
-      userId: user._id,
-      identifier: phone || email,
-      expiresIn: 300 // secondes
-    });
+    console.log(`[OTP] ${key} -> ${otp}`);
+    res.json({ message: 'Code envoyé', identifier: key, expiresIn: 300 });
 
   } catch (err) {
-    console.error('Erreur request-otp-signup:', err);
+    console.error('request-otp:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// POST /api/auth/verify-otp-signup → validation
 router.post('/verify-otp-signup', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
-
-    if (!identifier || !otp) {
-      return res.status(400).json({ error: 'Code requis' });
-    }
+    if (!identifier || !otp) return res.status(400).json({ error: 'Code requis' });
 
     const isEmail = identifier.includes('@');
-    const phone = isEmail ? null : identifier;
-    const email = isEmail ? identifier.toLowerCase() : null;
-
-    const user = await Client.findOne({
-      $or: [
-        { telephone: phone },
-        { email: email }
-      ].filter(Boolean),
-      otpCode: otp
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Code invalide' });
+    let key = identifier;
+    if (!isEmail) {
+      const num = identifier.replace(/\D/g, '');
+      key = `+226${num.slice(-8)}`;
+    } else {
+      key = identifier.toLowerCase();
     }
 
-    if (!user.otpExpires || Date.now() > new Date(user.otpExpires).getTime()) {
-      return res.status(401).json({ error: 'Code expiré. Redemande un code.' });
-    }
+    const record = await Otp.findOne({ identifier: key, otpCode: otp });
+    if (!record) return res.status(401).json({ error: 'Code invalide' });
+    if (Date.now() > new Date(record.expiresAt).getTime()) return res.status(401).json({ error: 'Code expiré' });
 
-    // OK → clear OTP
-    user.otpCode = null;
-    user.otpExpires = null;
-    await user.save();
+    record.verified = true;
+    await record.save();
+    otpRateLimit.delete(key);
 
-    // Clear rate limit
-    otpRateLimit.delete(phone || email);
-
-    res.json({
-      message: 'Code vérifié',
-      userId: user._id,
-      identifier: phone || email,
-      nextStep: 'profile' // front va vers /profile
-    });
+    res.json({ message: 'Code vérifié', identifier: key, nextStep: 'profile' });
 
   } catch (err) {
-    console.error('Erreur verify-otp-signup:', err);
     res.status(500).json({ error: err.message });
   }
 });
