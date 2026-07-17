@@ -89,7 +89,7 @@ router.put('/update-profile', authUser, upload.fields([
     if (dateNaissance) updateData.dateNaissance = dateNaissance;
     if (adresse) updateData.adresse = adresse;
     if (numeroCNIB) updateData.numeroCNIB = numeroCNIB.trim();
-
+    console.log('nom:',nom);
     updateData.updatedAt = new Date();
 
     if (req.files?.photoProfil?.[0]) {
