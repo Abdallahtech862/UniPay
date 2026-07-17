@@ -62,83 +62,6 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 
-
-// test login admin
-router.get('/login', (req, res) => {
-  res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Login Test</title>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family:Arial;max-width:400px;margin:50px auto;padding:20px">
-  <h2>Login UniPay</h2>
-  <form id="loginForm">
-    <label>Email ou Téléphone</label>
-    <input 
-      name="identifier" 
-      placeholder="admin@unipay.bf ou 0771234567" 
-      required 
-      style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box"
-    >
-    <label>Mot de passe</label>
-    <input 
-      name="password" 
-      type="password" 
-      placeholder="Mot de passe" 
-      required 
-      style="width:100%;padding:10px;margin:8px 0;box-sizing:border-box"
-    >
-    <button 
-      type="submit" 
-      style="width:100%;padding:12px;background:#007bff;color:white;border:none;cursor:pointer;border-radius:4px"
-    >
-      Se connecter
-    </button>
-  </form>
-  <div id="msg" style="margin-top:15px;padding:10px;border-radius:4px;display:none"></div>
-  
-  <script>
-    loginForm.onsubmit = async e => {
-      e.preventDefault();
-      const body = Object.fromEntries(new FormData(e.target));
-      console.log('Envoi:', body);
-      
-      msg.style.display = 'block';
-      msg.style.background = '#fff3cd';
-      msg.innerText = 'Connexion...';
-      
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        console.log('Réponse:', data);
-        
-        if (res.ok) {
-          localStorage.setItem('token', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-          msg.style.background = '#d4edda';
-          msg.innerHTML = 'Connecté en tant que <b>' + data.role + '</b><br>' +
-                          'Nom: ' + data.user.nom + ' ' + data.user.prenom + '<br>' +
-                          '<a href="/api/transactions">Aller au transfert</a>';
-        } else {
-          msg.style.background = '#f8d7da';
-          msg.innerText = 'Erreur: ' + data.error;
-        }
-      } catch (err) {
-        msg.style.background = '#f8d7da';
-        msg.innerText = 'Erreur réseau: ' + err.message;
-      }
-    };
-  </script>
-</body>
-</html>`);
-});
-
 router.post('/login', async (req, res) => {
   try {
     const { identifier, password } = req.body;
@@ -194,7 +117,6 @@ router.post('/register', upload.fields([
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    //const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     const pseudo = `${prenom.trim()}${nom.trim().charAt(0)}`;
     const client = new Client({
       nom: nom.trim(),
@@ -363,72 +285,6 @@ router.post('/login-password', async (req, res) => {
     });
   }
     res.json({ message: 'OTP envoyé par SMS' }); // ← Plus de otp dans la réponse
-    
-  } catch (err) {
-    console.error('Erreur login-password:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Ajoute une route pour nouveau user aussi
-router.post('/verify-otpp', async (req, res) => {
-  try {
-    const { identifier } = req.body;
-    const exists = await Client.findOne({
-      $or: [{ telephone: identifier }, { email: identifier }]
-    });
-    
-    if (exists) return res.status(400).json({ error: 'Compte déjà existant' });
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Stockage temporaire en DB ou Redis. Ici on crée un user temp
-    await Client.create({
-      telephone: identifier.includes('@') ? null : identifier,
-      email: identifier.includes('@') ? identifier : null,
-      otpCode: otp,
-      otpExpires: Date.now() + 5 * 60 * 1000,
-      isVerified: false
-    });
-
-    const message = `Votre code UniPay: ${otp}. Valide 5 min.`;
-    await sendSMSOrange(identifier, message);
-
-    res.json({ message: 'OTP envoyé' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 2. Login avec password + envoi OTP
-router.post('/login-passwordd', async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-    const user = await Client.findOne({
-      $or: [{ telephone: identifier }, { email: identifier }]
-    });
-
-    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-
-    const isMatch = await user.comparePassword(password);
-    console.log('Test compare:', password, user.password, isMatch);
-    if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
-
-    // ✅ Vérif si client bloqué
-    if (user.bloque) {
-      return res.status(403).json({ 
-        error: 'Votre compte a été suspendu. Contactez le support UniPay.' 
-      });
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    user.otpCode = otp;
-    user.otpExpires = Date.now() + 5 * 60 * 1000; // 5min
-    await user.save();
-
-    console.log(`OTP pour ${identifier}: ${otp}, expire: ${new Date(user.otpExpires)}`);
-    res.json({ message: 'OTP envoyé', otp }); // Retire otp en prod
     
   } catch (err) {
     console.error('Erreur login-password:', err);
