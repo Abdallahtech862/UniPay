@@ -190,16 +190,17 @@ router.post('/register', upload.fields([
       carteVersoUrl = result.secure_url;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const plainPin = password; // on garde le clair pour le renvoyer 1 fois
+    const hashedPassword = await bcrypt.hash(plainPin, 10);
     const pseudo = `${prenom.trim()}${nom.trim().charAt(0)}`;
+    
     const client = new Client({
       nom: nom.trim(),
       prenom: prenom.trim(),
-      //token,
       pseudo,
       telephone,
       email: email || `${telephone.replace('+226', '')}@unipay.local`,
-      password: hashedPassword, // Déjà hashé
+      password: hashedPassword,
       solde: 0,
       role: 'client',
       limiteJournaliere: 500000,
@@ -208,18 +209,23 @@ router.post('/register', upload.fields([
       carteVerso: carteVersoUrl
     });
     
-    await client.save(); // Plus de pre('save') donc pas de double hash
+    await client.save();
     
     const token = jwt.sign({ id: client._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     const user = client.toObject();
-    //delete user.password;
-    res.status(201).json({message: 'Compte créé',token,user});   
+    delete user.password; // on enlève le hash
+
+    res.status(201).json({
+      message: 'Compte créé',
+      token,
+      user,
+      plainPin // <-- à sauver dans SecureStore côté mobile
+    });   
   } catch (err) {
     console.error('Erreur register:', err);
     res.status(500).json({ error: err.message });
   }
 });
-
 //verifie si un utilisateur existe
 router.post('/check-userr', async (req, res) => {
   try {
