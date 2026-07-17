@@ -74,36 +74,19 @@ router.put('/change-password', authUser, async (req, res) => {
   }
 });
 
-router.put('/update-profile', authUser, upload.fields([
+router.put('/update-profile', auth, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
-  { name: 'carteVerso', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    const { nom, prenom, dateNaissance, adresse, numeroCNIB } = req.body;
-    const updateData = { nom, prenom, dateNaissance, adresse, numeroCNIB };
-
-    if (req.files?.photoProfil?.[0]) {
-      const result = await uploadToCloudinary(req.files.photoProfil[0].buffer);
-      updateData.photoProfil = result.secure_url;
-    }
-    if (req.files?.carteRecto?.[0]) {
-      const result = await uploadToCloudinary(req.files.carteRecto[0].buffer);
-      updateData.carteRecto = result.secure_url;
-      updateData.verificationStatus = 'en_cours';
-    }
-    if (req.files?.carteVerso?.[0]) {
-      const result = await uploadToCloudinary(req.files.carteVerso[0].buffer);
-      updateData.carteVerso = result.secure_url;
-      updateData.verificationStatus = 'en_cours';
-    }
-
-    const client = await Client.findByIdAndUpdate(req.user.id, updateData, { new: true }).select('-password');
-    res.json({ message: 'Profil mis à jour', client });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
+  { name: 'carteVerso', maxCount: 1 },
+]), async (req,res)=>{
+  const user = await Client.findById(req.user.id);
+  if(req.body.nom) user.nom = req.body.nom;
+  if(req.body.prenom) user.prenom = req.body.prenom;
+  if(req.files?.photoProfil) user.photoProfil = (await uploadToCloudinary(req.files.photoProfil[0].buffer)).secure_url;
+  if(req.files?.carteRecto) user.carteRecto = (await uploadToCloudinary(req.files.carteRecto[0].buffer)).secure_url;
+  if(req.files?.carteVerso) user.carteVerso = (await uploadToCloudinary(req.files.carteVerso[0].buffer)).secure_url;
+  await user.save();
+  res.json({ user });
 });
 
 router.get('/search', authUser, async (req, res) => {
