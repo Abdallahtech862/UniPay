@@ -74,7 +74,7 @@ router.put('/change-password', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-router.put('/update-profile', authUser, upload.fields([
+router.put('/update-profile', upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
