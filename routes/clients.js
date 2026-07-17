@@ -306,6 +306,18 @@ async function saveLimites(){const res=await fetch('/api/clients/'+currentClient
 async function toggleBlock(id,bloquer){if(!confirm((bloquer?'Bloquer':'Débloquer')+' ce client?'))return;await fetch('/api/clients/'+id+'/block',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({bloque:bloquer})});loadClients()}
 window.onclick=function(e){if(e.target.classList.contains('modal')) e.target.style.display='none'}
 loadClients();
+
+async function resetPassword(id){
+  if(!confirm('Réinitialiser le mot de passe à 1234 ?')) return;
+  const res=await fetch('/api/clients/'+id+'/reset-password',{
+    method:'PUT',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    body: JSON.stringify({ newPassword: '1234' })
+  });
+  const d=await res.json();
+  if(res.ok) alert('Mot de passe reset à 1234');
+  else alert(d.error||'Erreur');
+}
 </script>
 </body>
 </html>`);
