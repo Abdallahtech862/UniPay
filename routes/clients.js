@@ -8,6 +8,10 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -74,19 +78,84 @@ router.put('/change-password', authUser, async (req, res) => {
   }
 });
 
-router.put('/update-profile', authUser, upload.fields([
+
+
+// Storage Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'unipay',
+    allowed_formats: ['jpg', 'png', 'jpeg']
+  }
+});
+const upload = multer({ storage });
+
+// ROUTE QUI CORRIGE TON 404
+router.post('/update-profile', auth, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
-  { name: 'carteVerso', maxCount: 1 },
-]), async (req,res)=>{
-  const user = await Client.findById(req.user.id);
-  if(req.body.nom) user.nom = req.body.nom;
-  if(req.body.prenom) user.prenom = req.body.prenom;
-  if(req.files?.photoProfil) user.photoProfil = (await uploadToCloudinary(req.files.photoProfil[0].buffer)).secure_url;
-  if(req.files?.carteRecto) user.carteRecto = (await uploadToCloudinary(req.files.carteRecto[0].buffer)).secure_url;
-  if(req.files?.carteVerso) user.carteVerso = (await uploadToCloudinary(req.files.carteVerso[0].buffer)).secure_url;
-  await user.save();
-  res.json({ user });
+  { name: 'carteVerso', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { nom, prenom } = req.body;
+
+    const updateData = {
+      updatedAt: new Date()
+    };
+
+    if (nom) updateData.nom = nom.trim();
+    if (prenom) updateData.prenom = prenom.trim();
+
+    // Recrée le pseudo
+    if (nom && prenom) {
+      updateData.pseudo = `${prenom.trim()}${nom.trim().charAt(0)}`.toLowerCase().replace(/\s/g,'');
+    }
+
+    if (req.files) {
+      if (req.files.photoProfil) {
+        updateData.photoProfil = req.files.photoProfil[0].path;
+      }
+      if (req.files.carteRecto) {
+        updateData.carteRecto = req.files.carteRecto[0].path;
+        updateData.verificationStatus = 'en_cours'; // passe en vérification
+      }
+      if (req.files.carteVerso) {
+        updateData.carteVerso = req.files.carteVerso[0].path;
+        updateData.verificationStatus = 'en_cours';
+      }
+    }
+
+    const updatedUser = await Client.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true }
+    ).select('-password -otpCode -otpExpires');
+
+    if (!updatedUser) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    res.json({
+      message: 'Profil mis à jour avec succès',
+      user: {
+        id: updatedUser._id,
+        nom: updatedUser.nom,
+        prenom: updatedUser.prenom,
+        pseudo: updatedUser.pseudo,
+        photoProfil: updatedUser.photoProfil,
+        carteRecto: updatedUser.carteRecto,
+        carteVerso: updatedUser.carteVerso,
+        verificationStatus: updatedUser.verificationStatus
+      }
+    });
+
+  } catch (err) {
+    console.error('update-profile error:', err);
+    // Erreur pseudo unique
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Ce pseudo existe déjà' });
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/search', authUser, async (req, res) => {
