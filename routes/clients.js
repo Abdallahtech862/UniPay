@@ -60,7 +60,7 @@ router.put('/change-password', authUser, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Champs manquants' });
-    if (newPassword.length < 6) return res.status(400).json({ error: 'Mot de passe trop court (4 min)' });
+    if (newPassword.length < 4) return res.status(400).json({ error: 'Mot de passe trop court (4 min)' });
 
     const client = await Client.findById(req.user.id);
     const isMatch = await client.comparePassword(oldPassword);
