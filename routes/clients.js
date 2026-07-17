@@ -81,7 +81,16 @@ router.put('/update-profile', authUser, upload.fields([
 ]), async (req, res) => {
   try {
     const { nom, prenom, dateNaissance, adresse, numeroCNIB } = req.body;
-    const updateData = { nom, prenom, dateNaissance, adresse, numeroCNIB };
+
+    // CORRECTION 1: Ne garder que les champs envoyés
+    const updateData = {};
+    if (nom) updateData.nom = nom.trim();
+    if (prenom) updateData.prenom = prenom.trim();
+    if (dateNaissance) updateData.dateNaissance = dateNaissance;
+    if (adresse) updateData.adresse = adresse;
+    if (numeroCNIB) updateData.numeroCNIB = numeroCNIB.trim();
+
+    updateData.updatedAt = new Date();
 
     if (req.files?.photoProfil?.[0]) {
       const result = await uploadToCloudinary(req.files.photoProfil[0].buffer);
@@ -98,14 +107,20 @@ router.put('/update-profile', authUser, upload.fields([
       updateData.verificationStatus = 'en_cours';
     }
 
-    const client = await Client.findByIdAndUpdate(req.user.id, updateData, { new: true }).select('-password');
+    const client = await Client.findByIdAndUpdate(
+      req.user.id,
+      { $set: updateData }, // CORRECTION 2: $set
+      { new: true, runValidators: true }
+    ).select('-password -otpCode -otpExpires');
+
+    if (!client) return res.status(404).json({ error: 'Client introuvable' });
+
     res.json({ message: 'Profil mis à jour', client });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
-
 router.get('/search', authUser, async (req, res) => {
   try {
     const { q } = req.query;
