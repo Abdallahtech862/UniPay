@@ -130,13 +130,13 @@ router.get('/add', (req, res) => {
   res.send(`<!DOCTYPE html><html><head><title>Ajouter Client</title><meta charset="UTF-8"><style>body{font-family:Arial;padding:20px;max-width:600px;margin:auto}input{width:100%;padding:8px;margin:8px 0}button{padding:10px 20px;background:#007bff;color:white;border:none;cursor:pointer}fieldset{border:1px solid #ddd;padding:10px;margin:10px 0}#msg{margin-top:15px;padding:10px}.success{background:#d4edda;color:#155724}.error{background:#f8d7da;color:#721c24}</style></head><body>
 <h2>Ajouter un client</h2><a href="/api/clients/admin">← Retour</a><br><br>
 <form id="addForm" enctype="multipart/form-data">
-<input name="nom" placeholder="Nom" required><input name="prenom" placeholder="Prénom" required><input name="pseudo" placeholder="Pseudo unique" required><input name="email" type="email" placeholder="Email" required><input name="telephone" placeholder="Téléphone" required><input name="solde" type="number" placeholder="Solde initial" value="0">
-<input name="telephone" placeholder="Téléphone" required><input name="solde" type="number" placeholder="Solde initial" value="0">
+<input name="nom" placeholder="Nom" required><input name="prenom" placeholder="Prénom" required><input name="pseudo" placeholder="Pseudo unique" required><input name="email" type="email" placeholder="Email" required><input name="telephone" placeholder="Téléphone" required><input name="password" type="password" placeholder="Mot de passe" value="1234" required><input name="solde" type="number" placeholder="Solde initial" value="0">
 <fieldset><legend>Limites (PawaPay)</legend><label>Journalière:</label><input name="limiteJournaliere" type="number" value="500000"><label>Mensuelle:</label><input name="limiteMensuelle" type="number" value="2000000"></fieldset>
 <fieldset><legend>KYC</legend><input name="numeroCNIB" placeholder="Numéro CNIB"><input name="adresse" placeholder="Adresse"><input name="dateNaissance" type="date"><label>Photo profil:</label><input name="photoProfil" type="file" accept="image/*"><label>CNIB Recto:</label><input name="carteRecto" type="file" accept="image/*"><label>CNIB Verso:</label><input name="carteVerso" type="file" accept="image/*"></fieldset>
 <button type="submit">Créer</button></form><div id="msg"></div>
 <script>const token=localStorage.getItem('token');if(!token)location.href='/api/auth/login';addForm.onsubmit=async e=>{e.preventDefault();msg.innerText='Envoi...';const fd=new FormData(e.target);try{const res=await fetch('/api/clients',{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});const data=await res.json();if(res.ok){msg.className='success';msg.innerHTML='Client créé : '+data.client.pseudo;e.target.reset()}else{msg.className='error';msg.innerText=data.error}}catch(err){msg.className='error';msg.innerText=err.message}}</script></body></html>`);
 });
+
 
 router.get('/admin', (req, res) => {
   res.send(`<!DOCTYPE html>
