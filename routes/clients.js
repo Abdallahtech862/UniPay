@@ -60,7 +60,7 @@ router.put('/change-password', authUser, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Champs manquants' });
-    if (newPassword.length < 6) return res.status(400).json({ error: 'Mot de passe trop court (6 min)' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Mot de passe trop court (4 min)' });
 
     const client = await Client.findById(req.user.id);
     const isMatch = await client.comparePassword(oldPassword);
@@ -131,6 +131,7 @@ router.get('/add', (req, res) => {
 <h2>Ajouter un client</h2><a href="/api/clients/admin">← Retour</a><br><br>
 <form id="addForm" enctype="multipart/form-data">
 <input name="nom" placeholder="Nom" required><input name="prenom" placeholder="Prénom" required><input name="pseudo" placeholder="Pseudo unique" required><input name="email" type="email" placeholder="Email" required><input name="telephone" placeholder="Téléphone" required><input name="solde" type="number" placeholder="Solde initial" value="0">
+<input name="telephone" placeholder="Téléphone" required><input name="solde" type="number" placeholder="Solde initial" value="0">
 <fieldset><legend>Limites (PawaPay)</legend><label>Journalière:</label><input name="limiteJournaliere" type="number" value="500000"><label>Mensuelle:</label><input name="limiteMensuelle" type="number" value="2000000"></fieldset>
 <fieldset><legend>KYC</legend><input name="numeroCNIB" placeholder="Numéro CNIB"><input name="adresse" placeholder="Adresse"><input name="dateNaissance" type="date"><label>Photo profil:</label><input name="photoProfil" type="file" accept="image/*"><label>CNIB Recto:</label><input name="carteRecto" type="file" accept="image/*"><label>CNIB Verso:</label><input name="carteVerso" type="file" accept="image/*"></fieldset>
 <button type="submit">Créer</button></form><div id="msg"></div>
