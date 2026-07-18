@@ -74,12 +74,14 @@ router.put('/change-password', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 router.put('/update-profile', upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
 ]), async (req, res) => {
   try {
+    console.log('ok:');
     const { nom, prenom, dateNaissance, adresse, numeroCNIB } = req.body;
 
     // CORRECTION 1: Ne garder que les champs envoyés
