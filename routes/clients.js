@@ -75,7 +75,7 @@ router.put('/change-password', authUser, async (req, res) => {
   }
 });
 
-router.put('/update-profile', upload.fields([
+router.put('/update-profile',authUser, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
@@ -91,7 +91,7 @@ router.put('/update-profile', upload.fields([
     if (dateNaissance) updateData.dateNaissance = dateNaissance;
     if (adresse) updateData.adresse = adresse;
     if (numeroCNIB) updateData.numeroCNIB = numeroCNIB.trim();
-    console.log('nom:',nom);
+    console.log('nom:',nom,req.user.id);
     updateData.updatedAt = new Date();
 
     if (req.files?.photoProfil?.[0]) {
