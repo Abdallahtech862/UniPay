@@ -74,12 +74,13 @@ router.put('/change-password', authUser, async (req, res) => {
 
 
 // ROUTE CORRIGÉE
-router.post('/update-profile', upload.fields([
+router.post('/update-profile', authUser, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
 ]), async (req, res) => {
   try {
+    console.log('reçus:);
     //const userId = req.user.id;
     const userId = req.client._id;
     const { nom, prenom } = req.body;
