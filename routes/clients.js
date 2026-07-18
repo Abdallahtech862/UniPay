@@ -74,7 +74,7 @@ router.put('/change-password', authUser, async (req, res) => {
 
 
 // ROUTE CORRIGÉE
-router.post('/update-profile', authUser, upload.fields([
+router.post('/update-profile',verifyToken, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
