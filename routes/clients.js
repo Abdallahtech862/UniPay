@@ -80,7 +80,7 @@ router.post('/update-profile', authUser, upload.fields([
   { name: 'carteVerso', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    console.log('reçus:);
+    console.log('reçus:');
     //const userId = req.user.id;
     const userId = req.client._id;
     const { nom, prenom } = req.body;
