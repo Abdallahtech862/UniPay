@@ -14,18 +14,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// CORRECTION: Un seul upload en mémoire
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5Mo max
-});
+const upload = multer({ storage: multer.memoryStorage() });
 
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
-    if (!process.env.CLOUDINARY_CLOUD_NAME) return reject(new Error('Cloudinary config manquante'));
     const stream = cloudinary.uploader.upload_stream(
-      { folder: 'unipay_clients', resource_type: 'image', timeout: 60000 },
-      (error, result) => error ? reject(error) : resolve(result)
+      { folder: 'unipay_clients', resource_type: 'image' },
+      (err, result) => err? reject(err) : resolve(result)
     );
     streamifier.createReadStream(buffer).pipe(stream);
   });
@@ -78,10 +73,8 @@ router.put('/change-password', authUser, async (req, res) => {
 });
 
 
-
-
-// ROUTE QUI CORRIGE TON 404
-router.post('/update-profile',authUser, upload.fields([
+// ROUTE CORRIGÉE
+router.post('/update-profile', authUser, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
@@ -89,61 +82,39 @@ router.post('/update-profile',authUser, upload.fields([
   try {
     const userId = req.user.id;
     const { nom, prenom } = req.body;
-
-    const updateData = {
-      updatedAt: new Date()
-    };
+    const updateData = { updatedAt: new Date() };
 
     if (nom) updateData.nom = nom.trim();
     if (prenom) updateData.prenom = prenom.trim();
-
-    // Recrée le pseudo
     if (nom && prenom) {
-      updateData.pseudo = `${prenom.trim()}${nom.trim().charAt(0)}`.toLowerCase().replace(/\s/g,'');
+      updateData.pseudo = `${prenom.trim()}${nom.trim().charAt(0)}`.toLowerCase().replace(/\s/g,'') + Date.now().toString().slice(-3);
     }
 
-    if (req.files) {
-      if (req.files.photoProfil) {
-        updateData.photoProfil = req.files.photoProfil[0].path;
-      }
-      if (req.files.carteRecto) {
-        updateData.carteRecto = req.files.carteRecto[0].path;
-        updateData.verificationStatus = 'en_cours'; // passe en vérification
-      }
-      if (req.files.carteVerso) {
-        updateData.carteVerso = req.files.carteVerso[0].path;
-        updateData.verificationStatus = 'en_cours';
-      }
+    console.log('Files reçus:', req.files); // pour debug
+
+    if (req.files?.photoProfil?.[0]) {
+      const result = await uploadToCloudinary(req.files.photoProfil[0].buffer);
+      updateData.photoProfil = result.secure_url; // CORRECTION
+    }
+    if (req.files?.carteRecto?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteRecto[0].buffer);
+      updateData.carteRecto = result.secure_url;
+      updateData.verificationStatus = 'en_cours';
+    }
+    if (req.files?.carteVerso?.[0]) {
+      const result = await uploadToCloudinary(req.files.carteVerso[0].buffer);
+      updateData.carteVerso = result.secure_url;
+      updateData.verificationStatus = 'en_cours';
     }
 
-    const updatedUser = await Client.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true }
-    ).select('-password -otpCode -otpExpires');
-
+    const updatedUser = await Client.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).select('-password -otpCode -otpExpires');
     if (!updatedUser) return res.status(404).json({ error: 'Utilisateur introuvable' });
 
-    res.json({
-      message: 'Profil mis à jour avec succès',
-      user: {
-        id: updatedUser._id,
-        nom: updatedUser.nom,
-        prenom: updatedUser.prenom,
-        pseudo: updatedUser.pseudo,
-        photoProfil: updatedUser.photoProfil,
-        carteRecto: updatedUser.carteRecto,
-        carteVerso: updatedUser.carteVerso,
-        verificationStatus: updatedUser.verificationStatus
-      }
-    });
+    res.json({ message: 'Profil mis à jour avec succès', user: updatedUser });
 
   } catch (err) {
     console.error('update-profile error:', err);
-    // Erreur pseudo unique
-    if (err.code === 11000) {
-      return res.status(400).json({ error: 'Ce pseudo existe déjà' });
-    }
+    if (err.code === 11000) return res.status(400).json({ error: 'Pseudo déjà pris' });
     res.status(500).json({ error: err.message });
   }
 });
