@@ -6,7 +6,7 @@ const { v2: cloudinary } = require('cloudinary');
 const streamifier = require('streamifier');
 const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
-const { verifyAdmin, authUser } = require('../middleware/auth');
+const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
