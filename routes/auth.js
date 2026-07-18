@@ -304,8 +304,6 @@ router.post('/check-user', async (req, res) => {
 
     return res.json({
       exists: false,
-      message: "OTP envoyé",
-      otp:otp
     });
 
   } catch (err) {
