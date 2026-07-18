@@ -302,21 +302,6 @@ router.post('/check-user', async (req, res) => {
       identifier = '+226' + identifier;
     }
 
-    // Générer un OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // TODO : Stocker l'OTP (Redis, collection OTP, etc.)
-
-    const message = `Votre code UniPay : ${otp}. Valide 5 min. Ne le partagez jamais.`;
-    
-    const smsSent = await sendSMSOrange(identifier, message);
-
-    if (!smsSent) {
-      return res.status(500).json({
-        error: "Échec de l'envoi du SMS"
-      });
-    }
-
     return res.json({
       exists: false,
       message: "OTP envoyé",
