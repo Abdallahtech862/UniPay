@@ -82,15 +82,13 @@ router.put('/update-profile',authUser, upload.fields([
 ]), async (req, res) => {
   try {
     console.log('ok:');
-    const { nom, prenom, dateNaissance, adresse, numeroCNIB } = req.body;
+    const { nom, prenom } = req.body;
 
     // CORRECTION 1: Ne garder que les champs envoyés
     const updateData = {};
     if (nom) updateData.nom = nom.trim();
     if (prenom) updateData.prenom = prenom.trim();
-    if (dateNaissance) updateData.dateNaissance = dateNaissance;
-    if (adresse) updateData.adresse = adresse;
-    if (numeroCNIB) updateData.numeroCNIB = numeroCNIB.trim();
+    
     console.log('nom:',nom);
     updateData.updatedAt = new Date();
 
