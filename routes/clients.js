@@ -81,7 +81,7 @@ router.put('/change-password', authUser, async (req, res) => {
 
 
 // ROUTE QUI CORRIGE TON 404
-router.post('/update-profile', auth, upload.fields([
+router.post('/update-profile',authUser, upload.fields([
   { name: 'photoProfil', maxCount: 1 },
   { name: 'carteRecto', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
