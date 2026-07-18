@@ -8,26 +8,17 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 
-
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-//const cloudinary = require('../config/cloudinary');
-
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'unipay',
-    allowed_formats: ['jpg', 'png', 'jpeg']
-  }
-});
-const upload = multer({ storage });
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-//const upload = multer({ storage: multer.memoryStorage() });
+// CORRECTION: Un seul upload en mémoire
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5Mo max
+});
 
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
@@ -39,7 +30,6 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
-
 // ==================== CLIENT CONNECTÉ ====================
 
 router.get('/me', authUser, async (req, res) => {
