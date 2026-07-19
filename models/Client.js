@@ -12,7 +12,8 @@ const clientSchema = new mongoose.Schema({
   solde: { type: Number, default: 0, min: 0 },
   role: { type: String, enum: ['client', 'admin', 'merchant'], default: 'client' },
   photoProfil: { type: String, default: null },
-  
+  totalRecuMois: { type: Number, default: 0 }, // volume réception mois en cours
+  dernierResetRecuMois: { type: Date, default: null },
   dateNaissance: { type: Date, default: null },
   adresse: { type: String, default: null },
   numeroCNIB: { type: String, default: null, trim: true },
