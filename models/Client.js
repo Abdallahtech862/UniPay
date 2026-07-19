@@ -29,6 +29,8 @@ const clientSchema = new mongoose.Schema({
   dateVerification: { type: Date, default: null },
 
   bloque: { type: Boolean, default: false },
+  tentativesEchouees: { type: Number, default: 0 },
+  bloqueJusqua: { type: Date },
   raisonBlocage: { type: String, default: null },
   limiteJournaliere: { type: Number, default: 500000 },
   limiteMensuelle: { type: Number, default: 2000000 },
