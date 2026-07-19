@@ -131,47 +131,47 @@ router.get('/pricing', (req, res) => {
         
         <div class="tarif-card">
           <div class="tarif-title">Transfert entre utilisateurs UniPay</div>
-          <div class="tarif-price">Gratuit pour l'envoyeur</div>
-          <div class="tarif-detail">Le destinataire reçoit le montant - 1% de frais (min 50 FCFA). Ex: on t'envoie 10 000F, tu reçois 9 900F.</div>
+          <div class="tarif-price">Gratuit jusqu'à 200 000 FCFA / mois</div>
+          <div class="tarif-detail">Au-delà de 200 000F reçus dans le mois, frais de <b>0,5%</b> pour le destinataire uniquement. L'envoyeur ne paie jamais de frais.<br>Ex: tu as déjà reçu 200 000F ce mois, on t'envoie 10 000F de plus → tu reçois 9 950F.</div>
         </div>
 
         <div class="tarif-card highlight">
-          <div class="tarif-title">Recharge du wallet via Mobile Money</div>
+          <div class="tarif-title">Recharge du wallet</div>
           <div class="tarif-price">
-            <span>Orange Money : 4%</span><br>
-            <span>Moov Money : 5%</span><br>
-            <span style="color:#10b981">Wave : Gratuit</span>
+            Orange Money : 4%<br>
+            Moov Money : 5%
           </div>
-          <div class="tarif-detail">Frais prélevés à la source. Ex: tu recharges 10 000F via Orange, ton wallet est crédité de 9 600F.</div>
+          <div class="tarif-detail">Opéré par notre partenaire pawaPay. Frais déduits du montant crédité.<br>Ex: recharge 10 000F Orange → 9 600F crédités. Recharge 10 000F Moov → 9 500F crédités.</div>
         </div>
 
         <div class="tarif-card">
           <div class="tarif-title">Retrait vers Mobile Money</div>
-          <div class="tarif-price">1% du montant (minimum 100 FCFA)</div>
-          <div class="tarif-detail">Frais prélevés sur ton solde UniPay au moment du retrait.</div>
+          <div class="tarif-price" style="color:#10b981">Gratuit</div>
+          <div class="tarif-detail">0% de frais UniPay pour le moment. Retrait vers Orange et Moov via pawaPay.</div>
         </div>
 
         <div class="tarif-card">
           <div class="tarif-title">Paiement QR chez commerçant</div>
-          <div class="tarif-price">Gratuit pour l'acheteur</div>
-          <div class="tarif-detail">0% pour le client. Commission de 1% prélevée côté commerçant.</div>
+          <div class="tarif-price">Gratuit</div>
+          <div class="tarif-detail">Gratuit pour l'acheteur et le commerçant pendant la phase de lancement.</div>
         </div>
 
         <div class="tarif-card">
           <div class="tarif-title">Plafonds</div>
           <div class="tarif-price">2 000 000 FCFA / jour</div>
-          <div class="tarif-detail">10 000 000 FCFA / mois. Vérification KYC requise au-delà de 200 000F.</div>
+          <div class="tarif-detail">Plafond mensuel : 10 000 000 FCFA. KYC obligatoire au-delà de 200 000F reçus.</div>
         </div>
 
         <p style="margin-top:24px;font-size:13px;color:#9C7E5C;">
-          Les tarifs peuvent évoluer. Toute modification sera notifiée 30 jours avant application conformément aux conditions pawaPay.
+          Wave n'est pas encore disponible. Seuls Orange et Moov sont actifs via notre agrégateur pawaPay. Les tarifs peuvent évoluer avec un préavis de 30 jours.
         </p>
 
         <div class="disclaimer">
-          <strong>Note importante :</strong><br>
-          • Transfert UniPay : l'envoyeur ne paie rien, le destinataire supporte 1% de frais.<br>
-          • Recharge : les frais Orange (4%) et Moov (5%) correspondent aux frais d'agrégation pawaPay + opérateur. Ils sont déduits du montant crédité.<br>
-          • Wave : 100% gratuit, montant intégral crédité.
+          <strong>Résumé :</strong><br>
+          - Envoi UniPay : toujours gratuit.<br>
+          - Réception UniPay : gratuit jusqu'à 200 000F/mois, puis 0,5%.<br>
+          - Recharge : 4% Orange, 5% Moov (frais pawaPay + opérateur).<br>
+          - Retrait : gratuit.
         </div>
       </div>
       <style>
@@ -179,7 +179,7 @@ router.get('/pricing', (req, res) => {
         .tarif-card.highlight{ border-color:#2B1E12; background:#F1E6CC; }
         .tarif-title{ font-weight:700; color:#2B1E12; font-size:15px; }
         .tarif-price{ font-weight:700; color:#2B1E12; margin:8px 0; font-size:14px; line-height:1.6; }
-        .tarif-detail{ font-size:12.5px; color:#5A4A35; line-height:1.4; }
+        .tarif-detail{ font-size:12.5px; color:#5A4A35; line-height:1.5; }
       </style>
     </body></html>
   `);
