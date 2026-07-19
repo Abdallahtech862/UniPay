@@ -127,45 +127,63 @@ router.get('/pricing', (req, res) => {
     <body>
       <div class="container">
         <h1>Nos tarifs</h1>
-        <p class="update">Transparents, sans surprise. Dernière mise à jour : 10 juillet 2026</p>
+        <p class="update">Transparents, sans surprise. Dernière mise à jour : 19 juillet 2026</p>
         
         <div class="tarif-card">
           <div class="tarif-title">Transfert entre utilisateurs UniPay</div>
-          <div class="tarif-price">Gratuit</div>
+          <div class="tarif-price">Gratuit pour l'envoyeur</div>
+          <div class="tarif-detail">Le destinataire reçoit le montant - 1% de frais (min 50 FCFA). Ex: on t'envoie 10 000F, tu reçois 9 900F.</div>
+        </div>
+
+        <div class="tarif-card highlight">
+          <div class="tarif-title">Recharge du wallet via Mobile Money</div>
+          <div class="tarif-price">
+            <span>Orange Money : 4%</span><br>
+            <span>Moov Money : 5%</span><br>
+            <span style="color:#10b981">Wave : Gratuit</span>
+          </div>
+          <div class="tarif-detail">Frais prélevés à la source. Ex: tu recharges 10 000F via Orange, ton wallet est crédité de 9 600F.</div>
         </div>
 
         <div class="tarif-card">
           <div class="tarif-title">Retrait vers Mobile Money</div>
           <div class="tarif-price">1% du montant (minimum 100 FCFA)</div>
-        </div>
-
-        <div class="tarif-card">
-          <div class="tarif-title">Recharge du wallet</div>
-          <div class="tarif-price">Orange/Moov : 1% | Wave : Gratuit</div>
+          <div class="tarif-detail">Frais prélevés sur ton solde UniPay au moment du retrait.</div>
         </div>
 
         <div class="tarif-card">
           <div class="tarif-title">Paiement QR chez commerçant</div>
           <div class="tarif-price">Gratuit pour l'acheteur</div>
+          <div class="tarif-detail">0% pour le client. Commission de 1% prélevée côté commerçant.</div>
         </div>
 
         <div class="tarif-card">
-          <div class="tarif-title">Plafond journalier indicatif</div>
-          <div class="tarif-price">2 000 000 FCFA</div>
+          <div class="tarif-title">Plafonds</div>
+          <div class="tarif-price">2 000 000 FCFA / jour</div>
+          <div class="tarif-detail">10 000 000 FCFA / mois. Vérification KYC requise au-delà de 200 000F.</div>
         </div>
 
         <p style="margin-top:24px;font-size:13px;color:#9C7E5C;">
-          Les tarifs peuvent évoluer. Toute modification sera notifiée 30 jours avant application. Les frais sont prélevés par UniPay ou directement par les opérateurs partenaires selon l’opération.
+          Les tarifs peuvent évoluer. Toute modification sera notifiée 30 jours avant application conformément aux conditions pawaPay.
         </p>
 
         <div class="disclaimer">
-          <strong>Note :</strong> UniPay facture uniquement l’usage de son interface. Les frais de transfert Mobile Money sont appliqués par Orange, Moov ou Wave selon leurs grilles.
+          <strong>Note importante :</strong><br>
+          • Transfert UniPay : l'envoyeur ne paie rien, le destinataire supporte 1% de frais.<br>
+          • Recharge : les frais Orange (4%) et Moov (5%) correspondent aux frais d'agrégation pawaPay + opérateur. Ils sont déduits du montant crédité.<br>
+          • Wave : 100% gratuit, montant intégral crédité.
         </div>
       </div>
+      <style>
+        .tarif-card{ background:#fff; border:1.5px solid #E9E2D0; border-radius:16px; padding:16px; margin-bottom:12px; }
+        .tarif-card.highlight{ border-color:#2B1E12; background:#F1E6CC; }
+        .tarif-title{ font-weight:700; color:#2B1E12; font-size:15px; }
+        .tarif-price{ font-weight:700; color:#2B1E12; margin:8px 0; font-size:14px; line-height:1.6; }
+        .tarif-detail{ font-size:12.5px; color:#5A4A35; line-height:1.4; }
+      </style>
     </body></html>
   `);
 });
-
 router.get('/supprime', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="fr">
