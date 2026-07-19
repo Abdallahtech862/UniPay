@@ -355,9 +355,6 @@ router.post('/login-passwordd', async (req, res) => {
   }
 });
 
-
-const otpRateLimit = new Map();
-
 const otpRateLimit = new Map();
 const MAX_TENTATIVES = 4;
 const DUREE_BLOCAGE_MIN = 30; // 30 minutes
