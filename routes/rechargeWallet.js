@@ -234,7 +234,7 @@ router.get('/status/:depositId', authUser, async (req, res) => {
 router.post('/callback', async (req, res) => {
   console.log('CALLBACK PAWAPAY:', JSON.stringify(req.body));
   try {
-    const { depositId, status, amount } = req.body;
+    const { depositId, status } = req.body;
     const isSuccess = status === 'COMPLETED';
     const newStatus = isSuccess ? 'reussie' : 'echouee';
 
@@ -247,29 +247,22 @@ router.post('/callback', async (req, res) => {
     if (!tx) return res.json({ received: false, reason: 'tx not found' });
 
     if (isSuccess) {
-      // 1. Créditer l'utilisateur du NET (montant - frais)
+      // Montant que l'utilisateur a reçu (après frais)
       const montantACrediter = tx.montantNet || (tx.montant - (tx.frais || 0));
+
+      // 1. Créditer l'utilisateur
       await Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: montantACrediter } });
 
-      // 2. Créditer les frais sur le compte ADMIN 7000000000
+      // 2. Créditer LE MÊME MONTANT sur le compte admin PAWAPAY 7000000000
       const admin = await Client.findOne({ telephone: ADMIN_TEL });
       if (admin) {
         await Client.findByIdAndUpdate(admin._id, { $inc: { solde: montantACrediter } });
-        
-        // Optionnel : créer une transaction de frais pour l'historique admin
-        await Transaction.create({
-          type: 'frais_recharge',
-          expediteur: tx.expediteur,
-          destinataire: admin._id,
-          montant: tx.frais,
-          status: 'reussie',
-          operateur: tx.operateur,
-          depositId: depositId + '_FRAIS',
-          description: `Frais recharge ${tx.montant}F ${tx.operateur} de ${tx.expediteur}`,
-          date: new Date()
-        });
+        console.log(`✅ Admin ${ADMIN_TEL} crédité de +${montantACrediter}F`);
+      } else {
+        console.log(`⚠️ Compte admin ${ADMIN_TEL} introuvable`);
       }
-      console.log(`✅ Recharge OK: User +${montantACrediter}F, Admin +${tx.frais}F`);
+
+      console.log(`✅ Recharge OK: User +${montantACrediter}F`);
     }
 
     res.json({ received: true });
