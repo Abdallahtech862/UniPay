@@ -17,7 +17,8 @@ const transactionSchema = new mongoose.Schema({
     required: false//true
   },
   montant: { type: Number, required: true, min: 1 },
-  frais: { type: Number, default: 0 },
+  montantNet: { type: Number },
+frais: { type: Number },
   motif: String,
   status: { type: String, enum: ['validee', 'annulee', 'en_attente'], default: 'en_attente' },
   soldeExpediteurApres: Number,
