@@ -91,7 +91,7 @@ router.get('/search', authUser, async (req, res) => {
       $or: orConditions,
       isAdmin: { $ne: true },
       role: { $ne: 'admin' },
-      telephone: { $nin: ['7000000000', ADMIN_TEL] }
+      telephone: { $nin: ['7000000000'] }
     })
     .select('_id nom prenom pseudo telephone email photoProfil')
     .limit(20) // limite à 20 résultats
