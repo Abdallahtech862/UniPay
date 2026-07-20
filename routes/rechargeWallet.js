@@ -93,14 +93,21 @@ router.post('/init', authUser, async (req, res) => {
 
     const { frais, net } = calculerFrais(montant, operateur);
     if (net <= 0) return res.status(400).json({ error: 'Montant trop faible' });
-
+    //
     const depositId = uuidv4();
-    await Transaction.create({
-      type: 'recharge', expediteur: userId, destinataire: userId,
-      montant: parseFloat(montant), montantNet: net, frais,
-      operateur, numeroSource: cleanNumero,
-      status: 'en_attente', depositId, date: new Date()
-    });
+    console.log('Creating Tx', depositId, 'for user', userId);
+    try {
+      await Transaction.create({
+        type: 'recharge', expediteur: userId, destinataire: userId,
+        montant: parseFloat(montant), montantNet: net, frais,
+        operateur, numeroSource: cleanNumero,
+        status: 'en_attente', depositId, date: new Date()
+      });
+      console.log('✅ Tx créée', depositId);
+    } catch (dbErr) {
+      console.error('❌ ERREUR CREATE TX:', dbErr.message, dbErr.errors);
+      return res.status(500).json({ error: 'Erreur DB: ' + dbErr.message });
+    }
 
     const payload = {
       depositId, amount: String(montant), currency: 'XOF',
