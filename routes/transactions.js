@@ -44,50 +44,79 @@ router.get('/search', authUser, async (req, res) => {
 // rechercher un seul client pour un transfert par QRCode
 router.get('/searchClient', authUser, async (req, res) => {
   try {
-    const { pseudo, telephone } = req.query;
+    const { pseudo, telephone, email } = req.query;
     
-    const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
-    let cleanTel = telephone && telephone !== 'undefined' ? String(telephone) : null;
-    
-    if (!cleanPseudo && !cleanTel) {
-      return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
+    const cleanPseudo = pseudo && pseudo !== 'undefined' && pseudo !== 'null' ? pseudo.replace('@', '').trim() : null;
+    let cleanTel = telephone && telephone !== 'undefined' && telephone !== 'null' ? String(telephone).trim() : null;
+    let cleanEmail = email && email !== 'undefined' && email !== 'null' ? String(email).trim().toLowerCase() : null;
+
+    if (!cleanPseudo && !cleanTel && !cleanEmail) {
+      return res.status(400).json({ error: 'Pseudo, téléphone ou email requis' });
     }
 
-    // ✅ Normalise le numéro : retire +226, 00226, espaces, tirets
     const normalizePhone = (num) => {
       if (!num) return null;
-      return num.replace(/^\+?226|^00226|[\s-]/g, '');
+      // garde seulement les chiffres, retire 226 au début
+      let n = num.replace(/\D/g, ''); // enlève tout sauf chiffres
+      if (n.startsWith('226')) n = n.substring(3);
+      return n;
     };
 
-    const normalizedTel = normalizePhone(cleanTel);
+    let orConditions = [];
 
-    let query = {};
     if (cleanPseudo) {
-      query.$or = [{ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') }];
-    }
-    
-    if (normalizedTel) {
-      // Cherche avec ou sans +226 en BDD
-      const telRegex = new RegExp(`^(\\+?226|00226)?${normalizedTel}$`);
-      query.$or = query.$or || [];
-      query.$or.push({ telephone: telRegex });
+      orConditions.push({ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') });
     }
 
-    const user = await Client.findOne(query)
-      .select('_id nom prenom pseudo telephone photoProfil')
-      .lean();
-    
+    if (cleanTel) {
+      const normalized = normalizePhone(cleanTel);
+      if (normalized) {
+        // Cherche 70xxxxx, +22670xxxxx, 0022670xxxxx
+        orConditions.push({ 
+          telephone: { $regex: `^(\\+?226|00226)?${normalized}$` } 
+        });
+        // Fallback: cherche aussi si en DB c'est stocké sans indicatif
+        orConditions.push({ telephone: normalized });
+      }
+    }
+
+    if (cleanEmail) {
+      orConditions.push({ email: new RegExp(`^${cleanEmail}$`, 'i') });
+    }
+
+    if (orConditions.length === 0) {
+      return res.status(400).json({ error: 'Recherche invalide' });
+    }
+
+    const user = await Client.findOne({
+      $or: orConditions,
+      // ✅ ÉLIMINE LES ADMINS - adapte selon ton champ admin
+      $and: [
+        { isAdmin: { $ne: true } },
+        { role: { $ne: 'admin' } },
+        { telephone: { $ne: ADMIN_TEL } }, // ton 7000000000
+        { telephone: { $ne: '7000000000' } }
+      ]
+    })
+    .select('_id nom prenom pseudo telephone email photoProfil isAdmin role')
+    .lean();
+
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
 
+    // Double sécurité: si c'est un admin, on le bloque
+    if (user.isAdmin || user.role === 'admin') {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+
     res.json({ user });
+
   } catch (err) {
+    console.error('searchClient error', err);
     res.status(500).json({ error: err.message });
   }
 });
-
-
 // ==================== ROUTES des transfert unipay a mobil money ====================
 
 
