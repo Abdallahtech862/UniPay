@@ -41,7 +41,7 @@ router.get('/search', authUser, async (req, res) => {
   }
 });
 // rechercher un seul client pour un transfert par QRCode
-router.get('/searchClient', authUser, async (req, res) => {
+router.get('/searchClientt', authUser, async (req, res) => {
   try {
     const { pseudo, telephone } = req.query;
     
@@ -86,75 +86,49 @@ router.get('/searchClient', authUser, async (req, res) => {
   }
 });
 // rechercher un seul client pour un transfert par QRCode
-router.get('/searchClientt', authUser, async (req, res) => {
+router.get('/searchClient', authUser, async (req, res) => {
   try {
-    const { pseudo, telephone, email } = req.query;
+    const { q, pseudo, telephone, email } = req.query;
     
-    const cleanPseudo = pseudo && pseudo !== 'undefined' && pseudo !== 'null' ? pseudo.replace('@', '').trim() : null;
-    let cleanTel = telephone && telephone !== 'undefined' && telephone !== 'null' ? String(telephone).trim() : null;
-    let cleanEmail = email && email !== 'undefined' && email !== 'null' ? String(email).trim().toLowerCase() : null;
-
-    if (!cleanPseudo && !cleanTel && !cleanEmail) {
-      return res.status(400).json({ error: 'Pseudo, téléphone ou email requis' });
+    // q = recherche générale, ou tu peux toujours utiliser pseudo/telephone/email
+    const queryRaw = (q || pseudo || telephone || email || '').toString().trim();
+    
+    if (!queryRaw) {
+      return res.status(400).json({ error: 'Query vide' });
     }
 
-    const normalizePhone = (num) => {
-      if (!num) return null;
-      // garde seulement les chiffres, retire 226 au début
-      let n = num.replace(/\D/g, ''); // enlève tout sauf chiffres
-      if (n.startsWith('226')) n = n.substring(3);
-      return n;
-    };
+    // Nettoie le query
+    const cleanQuery = queryRaw.replace('@', '').trim();
+    
+    // Pour téléphone: garde que les chiffres pour la recherche floue
+    const onlyDigits = cleanQuery.replace(/\D/g, '');
+    const isPhoneSearch = onlyDigits.length >= 4;
 
-    let orConditions = [];
+    let orConditions = [
+      { pseudo: { $regex: cleanQuery, $options: 'i' } }, // ressemble à
+      { nom: { $regex: cleanQuery, $options: 'i' } },
+      { prenom: { $regex: cleanQuery, $options: 'i' } },
+      { email: { $regex: cleanQuery, $options: 'i' } },
+    ];
 
-    if (cleanPseudo) {
-      orConditions.push({ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') });
+    if (isPhoneSearch) {
+      orConditions.push({ telephone: { $regex: onlyDigits, $options: 'i' } });
     }
 
-    if (cleanTel) {
-      const normalized = normalizePhone(cleanTel);
-      if (normalized) {
-        // Cherche 70xxxxx, +22670xxxxx, 0022670xxxxx
-        orConditions.push({ 
-          telephone: { $regex: `^(\\+?226|00226)?${normalized}$` } 
-        });
-        // Fallback: cherche aussi si en DB c'est stocké sans indicatif
-        orConditions.push({ telephone: normalized });
-      }
-    }
-
-    if (cleanEmail) {
-      orConditions.push({ email: new RegExp(`^${cleanEmail}$`, 'i') });
-    }
-
-    if (orConditions.length === 0) {
-      return res.status(400).json({ error: 'Recherche invalide' });
-    }
-
-    const user = await Client.findOne({
+    const users = await Client.find({
       $or: orConditions,
-      // ✅ ÉLIMINE LES ADMINS - adapte selon ton champ admin
-      $and: [
-        { isAdmin: { $ne: true } },
-        { role: { $ne: 'admin' } },
-        { telephone: { $ne: ADMIN_TEL } }, // ton 7000000000
-        { telephone: { $ne: '7000000000' } }
-      ]
+      isAdmin: { $ne: true },
+      role: { $ne: 'admin' },
+      telephone: { $nin: ['7000000000', ADMIN_TEL] }
     })
-    .select('_id nom prenom pseudo telephone email photoProfil isAdmin role')
+    .select('_id nom prenom pseudo telephone email photoProfil')
+    .limit(20) // limite à 20 résultats
     .lean();
 
-    if (!user) {
-      return res.status(404).json({ error: 'Utilisateur introuvable' });
-    }
+    // Filtre final anti-admin en JS au cas où
+    const filtered = users.filter(u => !u.isAdmin && u.role !== 'admin');
 
-    // Double sécurité: si c'est un admin, on le bloque
-    if (user.isAdmin || user.role === 'admin') {
-      return res.status(404).json({ error: 'Utilisateur introuvable' });
-    }
-
-    res.json({ user });
+    res.json({ users: filtered, count: filtered.length });
 
   } catch (err) {
     console.error('searchClient error', err);
