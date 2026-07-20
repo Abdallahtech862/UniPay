@@ -4,11 +4,7 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 console.log('DOTENV path:', require('path').resolve('.env'));
 console.log('KEY in ENV file:', process.env.PAWAPAY_API_KEY.slice(-15));
-//const cors = require('cors');
-//app.use(cors({
-//  origin: '*', // Accepte tout pour tester
-//  credentials: true
-//}));
+
 
 const app = express();
 app.use(cors());
@@ -797,13 +793,14 @@ app.get('/health', (req, res) => res.status(200).json({
   db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
 }));
 
-//app.get('/health', (req, res) => res.status(200).send('OK'));
-//app.get('/', (req, res) => res.status(200).json({ 
- // status: 'OK',
- // db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
-//}));
 
-mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL || process.env.MONGODB_URI;
+
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ Mongo connecté:', MONGO_URI.substring(0,20)+'...'))
+  .catch(err => console.error('❌ Mongo erreur:', err));
+
+//mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/auth', require('./routes/auth'));
