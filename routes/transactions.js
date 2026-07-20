@@ -10,36 +10,52 @@ const mongoose = require('mongoose');
 
 
 // ==================== ROUTES pour rechercher un contact pour des transferts B2B ====================
-//rechercher des client par numero ou par pseudo pour faire un transfert
-router.get('/search', authUser, async (req, res) => {
+// rechercher un seul client pour un transfert par QRCode
+router.get('/searchClient', authUser, async (req, res) => {
   try {
-    const { q } = req.query;
-    if (!q || q.length < 2) {
-      return res.status(400).json({ error: 'Recherche trop courte' });
+    const { pseudo, telephone } = req.query;
+    
+    const cleanPseudo = pseudo && pseudo !== 'undefined' ? pseudo.replace('@', '') : null;
+    let cleanTel = telephone && telephone !== 'undefined' ? String(telephone) : null;
+    
+    if (!cleanPseudo && !cleanTel) {
+      return res.status(400).json({ error: 'Pseudo ou téléphone requis' });
+    }
+
+    // ✅ Normalise le numéro : retire +226, 00226, espaces, tirets
+    const normalizePhone = (num) => {
+      if (!num) return null;
+      return num.replace(/^\+?226|^00226|[\s-]/g, '');
+    };
+
+    const normalizedTel = normalizePhone(cleanTel);
+
+    let query = {};
+    if (cleanPseudo) {
+      query.$or = [{ pseudo: new RegExp(`^${cleanPseudo}$`, 'i') }];
     }
     
-    const regex = new RegExp(q, 'i');
-    
-    const users = await Client.find({
-      $or: [
-        { pseudo: regex },
-        { nom: regex },
-        { prenom: regex }
-        // { telephone: regex } -> SUPPRIMÉ pour ne pas chercher par numéro
-      ],
-      _id: { $ne: req.user.id },
-      telephone: { $ne: '+22670000000' }, // ✅ Exclure l'admin
-      role: { $ne: 'admin' } // ✅ Exclure tous les admins si tu as un champ role
-    })
-    .select('nom prenom pseudo photoProfil') // ✅ telephone retiré du select
-    .limit(50)
-    .lean();
+    if (normalizedTel) {
+      // Cherche avec ou sans +226 en BDD
+      const telRegex = new RegExp(`^(\\+?226|00226)?${normalizedTel}$`);
+      query.$or = query.$or || [];
+      query.$or.push({ telephone: telRegex });
+    }
 
-    res.json({ users });
+    const user = await Client.findOne(query)
+      .select('_id nom prenom pseudo telephone photoProfil')
+      .lean();
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+
+    res.json({ user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // rechercher un seul client pour un transfert par QRCode
 router.get('/search', authUser, async (req, res) => {
