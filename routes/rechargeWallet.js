@@ -8,7 +8,7 @@ const Transaction = require('../models/Transaction');
 const { authUser } = require('../middleware/auth');
 
 const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY;
-const PAWAPAY_BASE_URL = 'https://dashboard.pawapay.io/';process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
+const PAWAPAY_BASE_URL = 'https://dashboard.pawapay.io/';//process.env.PAWAPAY_BASE_URL || 'https://api.sandbox.pawapay.io';
 
 const PROVIDER_CONFIG = {
   '226': { currency: 'XOF', operators: { orange: 'ORANGE_BFA', moov: 'MOOV_BFA' } }
