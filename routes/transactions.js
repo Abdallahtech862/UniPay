@@ -42,7 +42,7 @@ router.get('/search', authUser, async (req, res) => {
 });
 
 // rechercher un seul client pour un transfert par QRCode
-router.get('/searchClient', authUser, async (req, res) => {
+router.get('/search', authUser, async (req, res) => {
   try {
     const { q, pseudo, telephone, email } = req.query;
     
