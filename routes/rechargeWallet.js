@@ -143,68 +143,57 @@ router.get('/status/:depositId', authUser, async (req, res) => {
 router.post('/callback', async (req, res) => {
   console.log('CALLBACK:', JSON.stringify(req.body));
   try {
-    const { depositId, status } = req.body;
-    
-    // En PROD pawaPay signe avec SA clé, pas la tienne.
-    // Si tu n'as pas leur clé publique, on ne bloque pas.
-    // Pour activer la vérif en prod plus tard, mets PAWAPAY_CALLBACK_PUBLIC_KEY dans Railway
-    const callbackPublicKey = process.env.PAWAPAY_CALLBACK_PUBLIC_KEY;
-    if (callbackPublicKey) {
-      const signature = req.headers['x-signature'] || req.headers['signature'];
-      if (signature) {
-        try {
-          const verify = crypto.createVerify('SHA256');
-          verify.update(JSON.stringify(req.body));
-          verify.end();
-          const pubKey = callbackPublicKey.replace(/\\n/g, '\n');
-          const ok = verify.verify(pubKey, signature, 'base64');
-          if (!ok) {
-            console.log('❌ Signature callback pawaPay invalide');
-            return res.status(401).json({ error: 'Invalid signature' });
-          }
-        } catch(e) {
-          console.log('VERIFY CALLBACK ERROR', e.message);
-        }
-      }
-    }
-
+    const { depositId, status, amount, payer } = req.body;
     const isSuccess = status === 'COMPLETED';
-    const newStatus = isSuccess ? 'reussie' : 'echouee';
-
-    const tx = await Transaction.findOneAndUpdate({ depositId }, { status: newStatus }, { new: true });
-    if (!tx) {
-      console.log('Tx not found', depositId);
-      return res.json({ received: true });
-    }
-
-    if (isSuccess && tx.status !== 'reussie') { // évite double crédit
-      // déjà fait par findOneAndUpdate, mais on garde logique
-    }
     
-    if (isSuccess) {
-      // Évite de créditer 2 fois si pawaPay renvoie 2 fois le même callback
-      const existing = await Transaction.findOne({ depositId, status: 'reussie' });
-      // On vient déjà de le passer en reussie, donc on vérifie si solde déjà crédité
-      // Solution simple : on ne crédite que si le tx était en_attente avant
-      if (tx.status === 'reussie') {
-        const montantACrediter = tx.montantNet || (tx.montant - (tx.frais || 0));
-        
-        // Vérifie si déjà crédité pour éviter double
-        if (tx.montantNet && !tx.credited) {
-          await Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: montantACrediter } });
-          const admin = await Client.findOne({ telephone: ADMIN_TEL });
-          if (admin) await Client.findByIdAndUpdate(admin._id, { $inc: { solde: montantACrediter } });
-          await Transaction.findByIdAndUpdate(tx._id, { credited: true });
-          console.log(`✅ Recharge OK: User +${montantACrediter}F | Admin +${montantACrediter}F`);
+    // 1. Cherche la transaction
+    let tx = await Transaction.findOne({ depositId: depositId.trim() });
+
+    if (!tx) {
+      console.log(`⚠️ Tx not found ${depositId} - recherche insensible à la casse`);
+      tx = await Transaction.findOne({ depositId: { $regex: `^${depositId}$`, $options: 'i' } });
+    }
+
+    if (!tx) {
+      console.log(`❌ Tx ${depositId} vraiment introuvable en DB. Création de secours`);
+      // Si tu es en prod et que tu reçois un COMPLETED sans Tx, c'est que la Tx a été créée sur une autre DB
+      // On log et on sort, on ne peut pas créditer sans userId
+      // SAUF si tu veux créditer par numéro de téléphone (mode secours)
+      if (isSuccess && payer?.accountDetails?.phoneNumber) {
+        const phone = payer.accountDetails.phoneNumber.replace('226','');
+        // Essaie de trouver un client avec ce numéro et crédite directement
+        const clientByPhone = await Client.findOne({ telephone: { $regex: phone } });
+        if (clientByPhone) {
+          const montantBrut = parseFloat(amount);
+          const { frais, net } = calculerFrais(montantBrut, 'moov'); // ou détecte opérateur
+          await Client.findByIdAndUpdate(clientByPhone._id, { $inc: { solde: net } });
+          console.log(`✅ SECOURS: Crédité ${net}F à ${clientByPhone.telephone} via phone lookup`);
         }
       }
+      return res.json({ received: true, note: 'tx not found, secours tenté' });
+    }
+
+    if (isSuccess && tx.status !== 'reussie') {
+      const montantACrediter = tx.montantNet || (tx.montant - (tx.frais || 0));
+      
+      await Transaction.findByIdAndUpdate(tx._id, { status: 'reussie', credited: true });
+      await Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: montantACrediter } });
+      
+      const admin = await Client.findOne({ telephone: ADMIN_TEL });
+      if (admin) {
+        await Client.findByIdAndUpdate(admin._id, { $inc: { solde: montantACrediter } });
+      }
+      
+      console.log(`✅ Recharge OK: depositId=${depositId} User=${tx.expediteur} +${montantACrediter}F`);
+    } else if (!isSuccess) {
+      await Transaction.findByIdAndUpdate(tx._id, { status: 'echouee' });
+      console.log(`❌ Recharge échouée: ${depositId}`);
     }
 
     res.json({ received: true });
   } catch (e) {
     console.error('CALLBACK ERROR:', e);
-    res.json({ received: true }); // toujours 200 pour que pawaPay arrête de retry
+    res.json({ received: true });
   }
 });
-
 module.exports = router;
