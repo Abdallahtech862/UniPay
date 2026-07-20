@@ -47,7 +47,7 @@ router.get('/searchClient', authUser, async (req, res) => {
     const { pseudo, telephone, email } = req.query;
     
     const cleanPseudo = pseudo && pseudo !== 'undefined' && pseudo !== 'null' ? pseudo.replace('@', '').trim() : null;
-    let cleanTel = telephone && telephone !== 'undefined' && telephone !== 'null' ? String(telephone).trim() : null;
+    let cleanTel = telephone;// && telephone !== 'undefined' && telephone !== 'null' ? String(telephone).trim() : null;
     let cleanEmail = email && email !== 'undefined' && email !== 'null' ? String(email).trim().toLowerCase() : null;
 
     if (!cleanPseudo && !cleanTel && !cleanEmail) {
