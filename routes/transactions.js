@@ -200,7 +200,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     const nouveauSolde = user.solde - total;
 
     // Comptes destinataires
-    const COMPTE_RETRAIT = '2670879425'; // reçoit le montant
+    const COMPTE_RETRAIT = '22670879425'; // reçoit le montant
     const COMPTE_FRAIS = '70000000'; // reçoit les frais - adapte si c'est 7000000000
 
     const compteRetrait = await Client.findOne({ telephone: { $regex: COMPTE_RETRAIT } });
