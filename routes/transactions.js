@@ -189,7 +189,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     // ✅ CORRIGÉ : pas de +100
     const tauxFrais = FRAIS[operateur] || 0.01;
-    const frais = Math.ceil(parseFloat(montant) * tauxFrais);
+    const frais = Math.ceil(parseFloat(montant) * tauxFrais) + 100;
     const total = parseFloat(montant) + frais;
 
     if (user.solde < total) {
