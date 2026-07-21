@@ -108,62 +108,33 @@ router.get('/search', authUser, async (req, res) => {
   }
 });
 // ==================== ROUTES des transfert unipay a mobil money ====================
-// POST /api/transactions/withdraw/preview - Calcule les frais seulement
-router.post('/withdraw/preview', authUser, async (req, res) => {
+
+// GET /api/transactions/pending - Admin voit les retraits/transferts en attente
+router.get('/pending', authUser, async (req, res) => {
   try {
-    const { montant, operateur, numero } = req.body;
-    const userId = req.user.id;
-
-    if (!montant || montant <= 0 ||!operateur ||!numero) {
-      return res.status(400).json({ error: 'Données manquantes' });
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
-    const user = await Client.findById(userId);
+    const transactions = await Transaction.find({ status: 'en_attente' })
+      .populate({
+        path: 'expediteur',
+        select: 'nom prenom telephone solde bloque'
+      })
+      .populate({
+        path: 'destinataire',
+        select: 'nom prenom telephone'
+      })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    if (user.bloque) {
-      return res.status(403).json({
-        error: 'Compte suspendu. Impossible d’effectuer un retrait.'
-      });
-    }
-
-    if (user.solde < montant) {
-      return res.status(400).json({ error: 'Solde insuffisant' });
-    }
-
-    const FRAIS = {
-      'Telecel Money': 0.01,
-      'Orange Money': 0.01,
-      'Moov Money': 0.01,
-      'SankMoney': 0.01,
-      'Coris Money': 0.01,
-      'Wave': 0.01,
-      'XpresCash': 0.01,
-      'Carte Visa': 0.025
-    };
-
-    const tauxFrais = FRAIS[operateur] || 0.01;
-    const frais = Math.ceil(montant * tauxFrais) + 100;
-    const total = montant + frais;
-
-    if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
-    }
-
-    // ✅ Ne crée rien, retourne juste les données
-    res.json({
-      montant,
-      frais,
-      total,
-      operateur,
-      numero,
-      soldeRestant: user.solde - total
-    });
+    res.json({ total: transactions.length, transactions });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erreur /pending:', err.message, err.stack);
+    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
-
 
 // le code pour voir les transactions en attent
 router.get('/pending-view', async (req, res) => {
@@ -295,6 +266,63 @@ router.get('/pending-view', async (req, res) => {
     </html>
   `);
 });
+
+// POST /api/transactions/withdraw/preview - Calcule les frais seulement
+router.post('/withdraw/preview', authUser, async (req, res) => {
+  try {
+    const { montant, operateur, numero } = req.body;
+    const userId = req.user.id;
+
+    if (!montant || montant <= 0 ||!operateur ||!numero) {
+      return res.status(400).json({ error: 'Données manquantes' });
+    }
+
+    const user = await Client.findById(userId);
+
+    if (user.bloque) {
+      return res.status(403).json({
+        error: 'Compte suspendu. Impossible d’effectuer un retrait.'
+      });
+    }
+
+    if (user.solde < montant) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    const FRAIS = {
+      'Telecel Money': 0.01,
+      'Orange Money': 0.01,
+      'Moov Money': 0.01,
+      'SankMoney': 0.01,
+      'Coris Money': 0.01,
+      'Wave': 0.01,
+      'XpresCash': 0.01,
+      'Carte Visa': 0.025
+    };
+
+    const tauxFrais = FRAIS[operateur] || 0.01;
+    const frais = Math.ceil(montant * tauxFrais) + 100;
+    const total = montant + frais;
+
+    if (user.solde < total) {
+      return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
+    }
+
+    // ✅ Ne crée rien, retourne juste les données
+    res.json({
+      montant,
+      frais,
+      total,
+      operateur,
+      numero,
+      soldeRestant: user.solde - total
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // POST /api/transactions/withdraw/confirm - Crée en attente SEULEMENT
 router.post('/withdraw/confirm', authUser, async (req, res) => {
