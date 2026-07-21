@@ -93,7 +93,67 @@ router.get('/recharge-page', async (req, res) => {
     <div style="font-size:11px;margin-top:6px;color:#8a7a60">Le montant sera mis à jour automatiquement</div>
     </div></div><div class="info"><i>i</i><p id="infoText">Choisis un opérateur pour voir les frais.</p></div><button class="btn" id="submitBtn">↗ Recharger mon wallet</button>
     <div id="result" style="display:none;margin-top:14px;text-align:center;font-size:13px"></div>
-    <script>var TOKEN="${token}";var selected=null;function selectOp(op){selected=op;document.getElementById('op-orange').classList.toggle('selected',op==='orange');document.getElementById('op-moov').classList.toggle('selected',op==='moov');document.getElementById('fraisPct').textContent=op==='orange'?'4':'5';document.getElementById('numeroLabel').textContent=op==='orange'?'Numéro Orange Money':'Numéro Moov Money';document.getElementById('otpBox').classList.toggle('show',op==='orange');updateCalcul();}var montantInput=document.getElementById('montant');function updateCalcul(){var v=parseInt(montantInput.value)||0;if(!v)v=1000;var taux=selected==='orange'?0.04:selected==='moov'?0.05:0;var frais=Math.ceil(v*taux);var net=v-frais;document.getElementById('payValue').textContent=v.toLocaleString('fr-FR')+' FCFA';document.getElementById('fraisValue').textContent='-'+frais.toLocaleString('fr-FR')+' FCFA';document.getElementById('receiveValue').textContent=net.toLocaleString('fr-FR')+' FCFA';if(selected)document.getElementById('infoText').textContent='Frais '+(taux*100)+'% : vous payez '+v+'F, vous recevez '+net+'F.';if(selected==='orange'){var ussd='*144*4*6*'+v+'#';var ussdEncoded='*144*4*6*'+v+'%23';document.getElementById('ussdCode').textContent=ussd;document.getElementById('ussdLink').setAttribute('href','tel:'+ussdEncoded);document.getElementById('otpHelp').classList.add('show');}}montantInput.addEventListener('input',updateCalcul);document.getElementById('submitBtn').addEventListener('click',async function(e){e.preventDefault();var btn=e.currentTarget;if(!selected){alert('Choisissez un opérateur');return;}var numero=document.getElementById('numero').value.replace(/\\s+/g,'').replace('+','');var montant=montantInput.value;var otp=document.getElementById('otp').value;if(!numero||!montant){alert('Remplis tous les champs');return;}if(selected==='orange'&&!otp){alert('Entrez le code OTP Orange');return;}btn.disabled=true;btn.textContent='Traitement...';try{var res=await fetch('/api/rechargeWallet/init',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify({montant:montant,numero:numero,operateur:selected,otp:otp})});var data=await res.json();if(!data.success)throw new Error(data.error||'Erreur');var result=document.getElementById('result');result.style.cssText='margin-top:14px;padding:12px;background:#E8F5E9;border-radius:12px;color:#2E7D32;display:block;text-align:center';result.innerHTML='✓ Demande envoyée<br><small>ID: '+data.depositId+'<br>Net: '+data.montantNet+'F, Frais: '+data.frais+'F</small>';var attempts=0;var poll=setInterval(async function(){attempts++;var r=await fetch('/api/rechargeWallet/status/'+data.depositId,{headers:{'Authorization':'Bearer '+TOKEN}});var s=await r.json();if(s.status==='reussie'){clearInterval(poll);result.innerHTML+='<br><b>✓ Wallet crédité de '+s.montantNet+'F !</b>';setTimeout(function(){if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'RECHARGE_SUCCESS',nouveauSolde:s.montantNet}));}},800);}else if(s.status==='echouee'||attempts>=20){clearInterval(poll);if(s.status==='echouee')result.innerHTML+='<br><span style="color:#C62828">✗ Paiement échoué</span>';}},5000);}catch(err){var result=document.getElementById('result');result.style.cssText='margin-top:14px;padding:12px;background:#FFEBEE;border-radius:12px;color:#C62828;display:block;text-align:center';result.textContent='✗ '+err.message;}finally{btn.disabled=false;btn.textContent='Recharger mon wallet';}});</script></body></html>`; 
+    <script>var TOKEN="${token}";
+    var selected=null;
+    function selectOp(op){selected=op;
+    document.getElementById('op-orange').classList.toggle('selected',op==='orange');
+    document.getElementById('op-moov').classList.toggle('selected',op==='moov');
+    document.getElementById('fraisPct').textContent=op==='orange'?'0':'0';
+    document.getElementById('numeroLabel').textContent=op==='orange'?'Numéro Orange Money':'Numéro Moov Money';
+    document.getElementById('otpBox').classList.toggle('show',op==='orange');
+    updateCalcul();}var montantInput=document.getElementById('montant');
+    function updateCalcul(){var v=parseInt(montantInput.value)||0;if(!v)v=1000;
+    var taux=selected==='orange'?0.00:selected==='moov'?0.00:0;var frais=Math.ceil(v*taux);
+    var net=v-frais;document.getElementById('payValue').textContent=v.toLocaleString('fr-FR')+' FCFA';
+    document.getElementById('fraisValue').textContent='-'+frais.toLocaleString('fr-FR')+' FCFA';
+    document.getElementById('receiveValue').textContent=net.toLocaleString('fr-FR')+' FCFA';
+    if(selected)document.getElementById('infoText').textContent='Frais '+(taux*100)+'% : vous payez '+v+'F, vous recevez '+net+'F.';
+    if(selected==='orange'){var ussd='*144*4*6*'+v+'#';
+    var ussdEncoded='*144*4*6*'+v+'%23';
+    document.getElementById('ussdCode').textContent=ussd;document.getElementById('ussdLink').setAttribute('href','tel:'+ussdEncoded);
+    document.getElementById('otpHelp').classList.add('show');}}montantInput.addEventListener('input',updateCalcul);
+    document.getElementById('submitBtn').addEventListener('click',async function(e){e.preventDefault();
+    var btn=e.currentTarget;if(!selected){alert('Choisissez un opérateur');
+    return;
+    }
+    var numero=document.getElementById('numero').value.replace(/\\s+/g,'').replace('+','');var montant=montantInput.value;
+    var otp=document.getElementById('otp').value;if(!numero||!montant){alert('Remplis tous les champs');
+    return;
+    }
+    if(selected==='orange'&&!otp){alert('Entrez le code OTP Orange');
+    return;
+    }
+    btn.disabled=true;
+    btn.textContent='Traitement...';
+    try{var res=await fetch('/api/rechargeWallet/init',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify({montant:montant,numero:numero,operateur:selected,otp:otp})});
+    var data=await res.json();
+    if(!data.success)throw new Error(data.error||'Erreur');
+    var result=document.getElementById('result');
+    result.style.cssText='margin-top:14px;padding:12px;background:#E8F5E9;
+    border-radius:12px;color:#2E7D32;display:block;
+    text-align:center';
+    result.innerHTML='✓ Demande envoyée<br><small>ID: '+data.depositId+'<br>Net: '+data.montantNet+'F, Frais: '+data.frais+'F</small>';
+    var attempts=0;
+    var poll=setInterval(async function(){attempts++;
+    var r=await fetch('/api/rechargeWallet/status/'+data.depositId,{headers:{'Authorization':'Bearer '+TOKEN}});var s=await r.json();
+    if(s.status==='reussie'){clearInterval(poll);
+    result.innerHTML+='<br><b>✓ Wallet crédité de '+s.montantNet+'F !</b>';
+    setTimeout(function(){if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'RECHARGE_SUCCESS',nouveauSolde:s.montantNet}));}},800);
+    }else if(s.status==='echouee'||attempts>=20){clearInterval(poll);if(s.status==='echouee')result.innerHTML+='<br><span style="color:#C62828">✗ Paiement échoué</span>';}},5000);
+    }
+    catch(err){var result=document.getElementById('result');
+    result.style.cssText='margin-top:14px;padding:12px;
+    background:#FFEBEE;
+    border-radius:12px;
+    color:#C62828;
+    display:block;
+    text-align:center'
+    ;result.textContent='✗ '+err.message;
+    }
+    finally{btn.disabled=false;btn.textContent='Recharger mon wallet';
+    }});
+    </script>
+    </body></html>`; 
     res.send(html);
   } catch (err) { res.status(401).send('Token invalide'); }
 });
