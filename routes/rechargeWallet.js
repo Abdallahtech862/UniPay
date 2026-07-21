@@ -14,6 +14,9 @@ const ADMIN_TEL = '7000000000';
 
 // ✅ 0% FRAIS PROMO
 const FRAIS_CONFIG = { orange: 0, moov: 0 };
+const PROVIDER_CONFIG = {
+  '226': { currency: 'XOF', operators: { orange: 'ORANGE_BFA', moov: 'MOOV_BFA' } }
+};
 
 function calculerFrais(montant, operateur) {
   const frais = 0; // ✅ plus de frais
