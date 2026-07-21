@@ -166,66 +166,93 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
   }
 });
 
-// POST /api/transactions/withdraw/confirm - Crée et débite après auth
+// POST /api/transactions/withdraw/confirm
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
-    const { montant, operateur, numero } = req.body; // ← Reçoit les params, pas transactionId
+    const { montant, operateur, numero } = req.body;
     const userId = req.user.id;
 
     const user = await Client.findById(userId);
-
-    if (user.bloque) {
-      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
-    }
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
 
     const FRAIS = {
       'MTN Money': 0.01,
       'Orange Money': 0.01,
-      'Moov Money': 0.015,
-      'SankMoney': 0.005,
+      'Moov Money': 0.01,
+      'SankMoney': 0.01,
       'Coris Money': 0.01,
       'Wave': 0.01,
-      'XpresCash': 0.02,
+      'XpresCash': 0.01,
       'Carte Visa': 0.025
     };
 
+    // ✅ CORRIGÉ : pas de +100
     const tauxFrais = FRAIS[operateur] || 0.01;
-    const frais = Math.ceil(montant * tauxFrais);
-    const total = montant + frais;
+    const frais = Math.ceil(parseFloat(montant) * tauxFrais);
+    const total = parseFloat(montant) + frais;
 
     if (user.solde < total) {
-      return res.status(400).json({ error: 'Solde insuffisant' });
+      return res.status(400).json({ error: `Solde insuffisant. Besoin de ${total}F (dont ${frais}F de frais)` });
     }
 
-    const nouveauSolde = user.solde;// - total;
+    // ✅ CORRIGÉ : on débite vraiment
+    const nouveauSolde = user.solde - total;
 
-    // ✅ Crée la transaction et débite en même temps
+    // Comptes destinataires
+    const COMPTE_RETRAIT = '2670879425'; // reçoit le montant
+    const COMPTE_FRAIS = '70000000'; // reçoit les frais - adapte si c'est 7000000000
+
+    const compteRetrait = await Client.findOne({ telephone: { $regex: COMPTE_RETRAIT } });
+    const compteFrais = await Client.findOne({ telephone: { $regex: COMPTE_FRAIS } });
+
+    if (!compteRetrait) {
+      console.log('⚠️ Compte retrait introuvable', COMPTE_RETRAIT);
+    }
+    if (!compteFrais) {
+      console.log('⚠️ Compte frais introuvable', COMPTE_FRAIS);
+    }
+
+    // Transaction
     const transaction = await Transaction.create({
       expediteur: userId,
       type: 'retrait',
-      montant,
+      montant: parseFloat(montant),
       frais,
       operateur,
       numeroDestination: numero,
-      status: 'en_attente', // ✅ Direct validée car auth OK
+      status: 'en_attente',
       soldeExpediteurAvant: user.solde,
       soldeExpediteurApres: nouveauSolde,
-      motif: `Retrait ${operateur}`,
+      motif: `Retrait ${operateur} vers ${numero}`,
       dateValidation: new Date()
     });
 
+    // ✅ Débite l'utilisateur + crédite les 2 comptes
     await Client.findByIdAndUpdate(userId, { solde: nouveauSolde });
+
+    if (compteRetrait) {
+      await Client.findByIdAndUpdate(compteRetrait._id, { $inc: { solde: parseFloat(montant) } });
+    }
+
+    if (compteFrais) {
+      await Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: frais } });
+    }
+
+    console.log(`✅ Retrait: User -${total}F | ${COMPTE_RETRAIT} +${montant}F | ${COMPTE_FRAIS} +${frais}F`);
 
     res.json({
       success: true,
       message: 'Retrait confirmé',
       transactionId: transaction._id,
       nouveauSolde,
-      montantRetire: montant,
-      frais
+      montantRetire: parseFloat(montant),
+      frais,
+      totalDebite: total
     });
 
   } catch (err) {
+    console.error('withdraw error', err);
     res.status(500).json({ error: err.message });
   }
 });
