@@ -127,7 +127,7 @@ router.get('/pricing', (req, res) => {
     <body>
       <div class="container">
         <h1>Nos tarifs</h1>
-        <p class="update">Transparents, sans surprise. Dernière mise à jour : 19 juillet 2026</p>
+        <p class="update">Transparents, sans surprise. Dernière mise à jour : 21 juillet 2026</p>
         
         <div class="tarif-card">
           <div class="tarif-title">Transfert entre utilisateurs UniPay</div>
@@ -136,18 +136,20 @@ router.get('/pricing', (req, res) => {
         </div>
 
         <div class="tarif-card highlight">
-          <div class="tarif-title">Recharge du wallet</div>
-          <div class="tarif-price">
-            Orange Money : 4%<br>
-            Moov Money : 5%
+          <div class="tarif-title">Recharge du wallet 🎉</div>
+          <div class="tarif-price" style="color:#00C853">
+            Orange Money : 0%<br>
+            Moov Money : 0%
           </div>
-          <div class="tarif-detail">Opéré par notre partenaire pawaPay. Frais déduits du montant crédité.<br>Ex: recharge 10 000F Orange → 9 600F crédités. Recharge 10 000F Moov → 9 500F crédités.</div>
+          <div class="tarif-detail"><b>PROMO LANCEMENT : 0% de frais !</b><br>Tu payes 10 000F → tu reçois 10 000F dans ton wallet. Opéré par pawaPay.</div>
         </div>
 
         <div class="tarif-card">
           <div class="tarif-title">Retrait vers Mobile Money</div>
-          <div class="tarif-price" style="color:#10b981">Gratuit</div>
-          <div class="tarif-detail">0% de frais UniPay pour le moment. Retrait vers Orange et Moov via pawaPay.</div>
+          <div class="tarif-price">
+            1% + 100F
+          </div>
+          <div class="tarif-detail">Tous opérateurs : Orange, Moov, MTN, Wave, Coris.<br>Ex: retrait 10 000F → frais 200F (1% = 100F + 100F fixe) → tu reçois 9 800F sur ton mobile money.<br>Ex: retrait 5 000F → frais 150F → tu reçois 4 850F.</div>
         </div>
 
         <div class="tarif-card">
@@ -163,20 +165,21 @@ router.get('/pricing', (req, res) => {
         </div>
 
         <p style="margin-top:24px;font-size:13px;color:#9C7E5C;">
-          Wave n'est pas encore disponible. Seuls Orange et Moov sont actifs via notre agrégateur pawaPay. Les tarifs peuvent évoluer avec un préavis de 30 jours.
+          Seuls Orange et Moov sont actifs via notre agrégateur pawaPay pour les recharges/retraits. Wave arrive bientôt. Les tarifs peuvent évoluer avec un préavis de 30 jours.
         </p>
 
         <div class="disclaimer">
           <strong>Résumé :</strong><br>
           - Envoi UniPay : toujours gratuit.<br>
-          - Réception UniPay : gratuit jusqu'à 200 000F/mois, puis 0,5%.<br>
-          - Recharge : 4% Orange, 5% Moov (frais pawaPay + opérateur).<br>
-          - Retrait : gratuit.
+          - Réception UniPay : gratuit jusqu'à 200 000F/mois, puis 0,5% chez le destinataire.<br>
+          - Recharge : <b>0% (promo)</b> Orange et Moov.<br>
+          - Retrait : <b>1% + 100F</b>.<br>
+          - QR : gratuit.
         </div>
       </div>
       <style>
         .tarif-card{ background:#fff; border:1.5px solid #E9E2D0; border-radius:16px; padding:16px; margin-bottom:12px; }
-        .tarif-card.highlight{ border-color:#2B1E12; background:#F1E6CC; }
+        .tarif-card.highlight{ border-color:#00C853; background:#E8F5E9; }
         .tarif-title{ font-weight:700; color:#2B1E12; font-size:15px; }
         .tarif-price{ font-weight:700; color:#2B1E12; margin:8px 0; font-size:14px; line-height:1.6; }
         .tarif-detail{ font-size:12.5px; color:#5A4A35; line-height:1.5; }
