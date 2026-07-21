@@ -166,7 +166,7 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
   }
 });
 
-// POST /api/transactions/withdraw/confirm
+// POST /api/transactions/withdraw/confirm - Crée en attente SEULEMENT
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
     const { montant, operateur, numero } = req.body;
@@ -174,46 +174,17 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     const user = await Client.findById(userId);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
+    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
 
-    const FRAIS = {
-      'MTN Money': 0.01,
-      'Orange Money': 0.01,
-      'Moov Money': 0.01,
-      'SankMoney': 0.01,
-      'Coris Money': 0.01,
-      'Wave': 0.01,
-      'XpresCash': 0.01,
-      'Carte Visa': 0.025
-    };
-
-    // ✅ CORRIGÉ : pas de +100
-    const tauxFrais = FRAIS[operateur] || 0.01;
-    const frais = Math.ceil(parseFloat(montant) * tauxFrais) + 100;
+    const tauxFrais = 0.01; // 1%
+    const frais = Math.ceil(parseFloat(montant) * tauxFrais) + 100; // 1% + 100
     const total = parseFloat(montant) + frais;
 
     if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Besoin de ${total}F (dont ${frais}F de frais)` });
+      return res.status(400).json({ error: `Solde insuffisant. Besoin de ${total}F dont ${frais}F de frais` });
     }
 
-    // ✅ CORRIGÉ : on débite vraiment
-    const nouveauSolde = user.solde - total;
-
-    // Comptes destinataires
-    const COMPTE_RETRAIT = '22670879425'; // reçoit le montant
-    const COMPTE_FRAIS = '70000000'; // reçoit les frais - adapte si c'est 7000000000
-
-    const compteRetrait = await Client.findOne({ telephone: { $regex: COMPTE_RETRAIT } });
-    const compteFrais = await Client.findOne({ telephone: { $regex: COMPTE_FRAIS } });
-
-    if (!compteRetrait) {
-      console.log('⚠️ Compte retrait introuvable', COMPTE_RETRAIT);
-    }
-    if (!compteFrais) {
-      console.log('⚠️ Compte frais introuvable', COMPTE_FRAIS);
-    }
-
-    // Transaction
+    // ✅ On ne débite PAS, on crée juste en attente
     const transaction = await Transaction.create({
       expediteur: userId,
       type: 'retrait',
@@ -222,30 +193,17 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       operateur,
       numeroDestination: numero,
       status: 'en_attente',
-      soldeExpediteurAvant: user.solde,
-      soldeExpediteurApres: nouveauSolde,
+      soldeExpediteurAvant: req.user.solde,
       motif: `Retrait ${operateur} vers ${numero}`,
-      dateValidation: new Date()
+      date: new Date()
     });
 
-    // ✅ Débite l'utilisateur + crédite les 2 comptes
-    await Client.findByIdAndUpdate(userId, { solde: nouveauSolde });
-
-    if (compteRetrait) {
-      await Client.findByIdAndUpdate(compteRetrait._id, { $inc: { solde: parseFloat(montant) } });
-    }
-
-    if (compteFrais) {
-      await Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: frais } });
-    }
-
-    console.log(`✅ Retrait: User -${total}F | ${COMPTE_RETRAIT} +${montant}F | ${COMPTE_FRAIS} +${frais}F`);
+    console.log(`🕒 Retrait en attente: ${montant}F + ${frais}F de ${user.telephone}`);
 
     res.json({
       success: true,
-      message: 'Retrait confirmé',
+      message: 'Demande de retrait envoyée, en attente validation admin',
       transactionId: transaction._id,
-      nouveauSolde,
       montantRetire: parseFloat(montant),
       frais,
       totalDebite: total
@@ -256,90 +214,57 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/transactions/pending - Admin voit les retraits/transferts en attente
-router.get('/pending', authUser, async (req, res) => {
+
+// POST /api/transactions/:id/validate - Admin valide et là on débite/crédite
+router.post('/:id/validate', authUser, async (req, res) => {
   try {
     if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
-    const transactions = await Transaction.find({ status: 'en_attente' })
-      .populate({
-        path: 'expediteur',
-        select: 'nom prenom telephone solde bloque'
-      })
-      .populate({
-        path: 'destinataire',
-        select: 'nom prenom telephone'
-      })
-      .sort({ createdAt: -1 })
-      .lean();
+    const tx = await Transaction.findById(req.params.id).populate('expediteur');
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Déjà traitée' });
 
-    res.json({ total: transactions.length, transactions });
-
-  } catch (err) {
-    console.error('Erreur /pending:', err.message, err.stack);
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
-  }
-});
-
-// POST /api/transactions/:id/validate - Valider un retrait/transfert
-router.post('/:id/validate', authUser, async (req, res) => { // ← authUser obligatoire
-  try {
-    // Check admin
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    const user = tx.expediteur;
+    if (user.bloque) {
+      await Transaction.findByIdAndUpdate(tx._id, { status: 'annulee', motif: 'Client suspendu' });
+      return res.status(403).json({ error: 'Client suspendu' });
     }
 
-    const tx = await Transaction.findById(req.params.id)
-      .populate('expediteur');
-
-    if (!tx) {
-      return res.status(404).json({ error: 'Transaction introuvable' });
-    }
-
-    if (tx.status !== 'en_attente') {
-      return res.status(400).json({ error: 'Transaction déjà traitée' });
-    }
-
-    // Vérif solde encore suffisant
     const total = tx.montant + (tx.frais || 0);
-    if (tx.expediteur.solde < total) {
-      await Transaction.findByIdAndUpdate(req.params.id, { 
-        status: 'annulee',
-        motifAnnulation: 'Solde insuffisant au moment de la validation'
-      });
-      return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
+    if (user.solde < total) {
+      await Transaction.findByIdAndUpdate(tx._id, { status: 'annulee', motif: 'Solde insuffisant' });
+      return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
-    // Vérif client pas bloqué entre-temps
-    if (tx.expediteur.bloque) {
-      await Transaction.findByIdAndUpdate(req.params.id, { 
-        status: 'annulee',
-        motifAnnulation: 'Client suspendu'
-      });
-      return res.status(403).json({ error: 'Client suspendu. Transaction annulée.' });
-    }
+    // Comptes qui reçoivent
+    const COMPTE_RETRAIT = '22670879425';
+    const COMPTE_FRAIS = '70000000'; // ou 7000000000
 
-    const nouveauSolde = tx.expediteur.solde - total;
+    const compteRetrait = await Client.findOne({ telephone: { $regex: COMPTE_RETRAIT } });
+    const compteFrais = await Client.findOne({ telephone: { $regex: COMPTE_FRAIS } });
 
+    const nouveauSolde = user.solde - total;
+
+    // ✅ Débite user + crédite les 2 comptes SEULEMENT à la validation
     await Promise.all([
-      Transaction.findByIdAndUpdate(req.params.id, {
+      Transaction.findByIdAndUpdate(tx._id, {
         status: 'validee',
         soldeExpediteurApres: nouveauSolde,
         dateValidation: new Date()
       }),
-      Client.findByIdAndUpdate(tx.expediteur._id, { solde: nouveauSolde })
+      Client.findByIdAndUpdate(user._id, { solde: nouveauSolde }),
+      compteRetrait ? Client.findByIdAndUpdate(compteRetrait._id, { $inc: { solde: tx.montant } }) : null,
+      compteFrais ? Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: tx.frais } }) : null
     ]);
 
-    res.json({ 
-      success: true, 
-      message: 'Transaction validée',
-      nouveauSolde
-    });
+    console.log(`✅ Validé: User -${total}F | ${COMPTE_RETRAIT} +${tx.montant}F | ${COMPTE_FRAIS} +${tx.frais}F`);
+
+    res.json({ success: true, message: 'Retrait validé et comptes crédités', nouveauSolde });
 
   } catch (err) {
-    console.error('Erreur /validate:', err);
+    console.error('validate error', err);
     res.status(500).json({ error: err.message });
   }
 });
