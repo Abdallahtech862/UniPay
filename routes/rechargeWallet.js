@@ -123,7 +123,7 @@ router.post('/callback', async (req, res) => {
         status: 'reussie', 
         credited: true,
         soldeExpediteurApres: updatedUser.solde, // ✅ solde après recharge
-        soldeExpediteurAvant: tx.soldeExpediteurApres // l'ancien devient avant
+        //soldeExpediteurAvant: tx.soldeExpediteurApres // l'ancien devient avant
       });
 
       // 3. Crédite admin
