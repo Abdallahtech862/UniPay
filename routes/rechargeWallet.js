@@ -67,7 +67,7 @@ router.post('/init', authUser, async (req, res) => {
     try {
       await Transaction.create({
         type: 'recharge', expediteur: userId, destinataire: userId,motif: 'recharge',
-        montant: parseFloat(montant), montantNet: net, frais: 0, soldeExpediteurApres: user.solde,
+        montant: parseFloat(montant), montantNet: net, frais: 0, soldeExpediteurApres: req.user.solde,
         operateur:operateur +''+ numero, numeroSource: cleanNumero,
         status: 'en_attente', depositId, date: new Date()
       });
