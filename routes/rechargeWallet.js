@@ -64,7 +64,7 @@ router.post('/init', authUser, async (req, res) => {
     try {
       await Transaction.create({
         type: 'recharge', expediteur: userId, destinataire: userId,motif: 'recharge',
-        montant: parseFloat(montant), montantNet: net, frais: 0,
+        montant: parseFloat(montant), montantNet: net, frais: 0, soldeExpediteurApres: user.solde,
         operateur:operateur +''+ numero, numeroSource: cleanNumero,
         status: 'en_attente', depositId, date: new Date()
       });
@@ -107,18 +107,38 @@ router.post('/callback', async (req, res) => {
     const isSuccess = status === 'COMPLETED';
     let tx = await Transaction.findOne({ depositId: depositId.trim() });
     if (!tx) return res.json({ received: true });
+
     if (isSuccess && tx.status !== 'reussie') {
       const montantACrediter = tx.montantNet || tx.montant;
-      await Transaction.findByIdAndUpdate(tx._id, { status: 'reussie', credited: true });
-      await Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: montantACrediter } });
+
+      // 1. Crédite l'utilisateur et récupère son nouveau solde
+      const updatedUser = await Client.findByIdAndUpdate(
+        tx.expediteur, 
+        { $inc: { solde: montantACrediter } },
+        { new: true } // ✅ retourne le document après update
+      );
+
+      // 2. Mets à jour la transaction avec le VRAI solde après recharge
+      await Transaction.findByIdAndUpdate(tx._id, { 
+        status: 'reussie', 
+        credited: true,
+        soldeExpediteurApres: updatedUser.solde, // ✅ solde après recharge
+        soldeExpediteurAvant: tx.soldeExpediteurApres // l'ancien devient avant
+      });
+
+      // 3. Crédite admin
       const admin = await Client.findOne({ telephone: ADMIN_TEL });
       if (admin) await Client.findByIdAndUpdate(admin._id, { $inc: { solde: montantACrediter } });
-      console.log(`✅ 0% FRAIS - Recharge OK: +${montantACrediter}F`);
-    } else if (!isSuccess) {
+
+      console.log(`✅ Recharge OK: +${montantACrediter}F | Nouveau solde: ${updatedUser.solde}F`);
+      
+    } else if (!isSuccess && tx.status === 'en_attente') {
       await Transaction.findByIdAndUpdate(tx._id, { status: 'echouee' });
     }
+
     res.json({ received: true });
   } catch (e) {
+    console.error('CALLBACK ERROR', e);
     res.json({ received: true });
   }
 });
