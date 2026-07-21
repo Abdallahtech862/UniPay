@@ -67,7 +67,7 @@ router.post('/init', authUser, async (req, res) => {
     try {
       await Transaction.create({
         type: 'recharge', expediteur: userId, destinataire: userId,motif: 'recharge',
-        montant: parseFloat(montant), montantNet: net, frais: 0, soldeExpediteurApres: req.user.solde,
+        montant: parseFloat(montant), montantNet: net, frais: 0, soldeDestinataireApres: req.user.solde,
         operateur:operateur +''+ numero, numeroSource: cleanNumero,
         status: 'en_attente', depositId, date: new Date()
       });
@@ -125,7 +125,7 @@ router.post('/callback', async (req, res) => {
       await Transaction.findByIdAndUpdate(tx._id, { 
         status: 'reussie', 
         credited: true,
-        soldeExpediteurApres: updatedUser.solde, // ✅ solde après recharge
+        soldeDestinataireApres: updatedUser.solde, // ✅ solde après recharge
         //soldeExpediteurAvant: tx.soldeExpediteurApres // l'ancien devient avant
       });
 
