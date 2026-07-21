@@ -143,8 +143,8 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       'Carte Visa': 0.025
     };
 
-    const tauxFrais = FRAIS[operateur] + 100 || 0.01 + 100;
-    const frais = Math.ceil(montant * tauxFrais);
+    const tauxFrais = FRAIS[operateur] || 0.01;
+    const frais = Math.ceil(montant * tauxFrais) + 100;
     const total = montant + frais;
 
     if (user.solde < total) {
