@@ -17,7 +17,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const PROVIDER_CONFIG = {
   '226': { currency: 'XOF', operators: { orange: 'ORANGE_BFA', moov: 'MOOV_BFA' } }
 };
-const FRAIS_CONFIG = { orange: 0.04, moov: 0.05 };
+const FRAIS_CONFIG = { orange: 0.00, moov: 0.00 };
 const ADMIN_TEL = '7000000000';
 
 function calculerFrais(montant, operateur) {
@@ -119,9 +119,9 @@ router.post('/init', authUser, async (req, res) => {
     console.log('Creating Tx', depositId, 'for user', userId);
     try {
       await Transaction.create({
-        type: 'recharge', expediteur: userId, destinataire: userId,
+        type: 'recharge', expediteur: userId, destinataire: userId, motif: 'recharge',
         montant: parseFloat(montant), montantNet: net, frais,
-        operateur, numeroSource: cleanNumero,
+        operateur:operateur +''+ numero, numeroSource: cleanNumero,
         status: 'en_attente', depositId, date: new Date()
       });
       console.log('✅ Tx créée', depositId);
