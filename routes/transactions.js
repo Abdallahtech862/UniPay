@@ -135,15 +135,15 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
     const FRAIS = {
       'Telecel Money': 0.01,
       'Orange Money': 0.01,
-      'Moov Money': 0.015,
-      'SankMoney': 0.005,
+      'Moov Money': 0.01,
+      'SankMoney': 0.01,
       'Coris Money': 0.01,
       'Wave': 0.01,
-      'XpresCash': 0.02,
+      'XpresCash': 0.01,
       'Carte Visa': 0.025
     };
 
-    const tauxFrais = FRAIS[operateur] || 0.01;
+    const tauxFrais = FRAIS[operateur] + 100 || 0.01 + 100;
     const frais = Math.ceil(montant * tauxFrais);
     const total = montant + frais;
 
