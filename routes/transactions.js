@@ -1026,99 +1026,70 @@ router.get('/', async (req, res) => {
       document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
     }
 
-    function renderTable(transactions) {
-  if (!transactions || transactions.length === 0) {
-    document.getElementById('content').innerHTML = 'Aucune transaction';
-    return;
-  }
-  
-  let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
-  
-  transactions.forEach(t => {
-    if (!t.expediteur) return; // garde seulement ce check
-    
-    const date = new Date(t.createdAt).toLocaleString('fr-FR');
-    const estRetrait = t.type === 'retrait';
-    const estRecharge = t.type === 'recharge';
-    
-    let typeBadge = t.type;
-    if (estRetrait) typeBadge = 'Retrait ' + (t.operateur || '');
-    if (estRecharge) typeBadge = 'Recharge ' + (t.operateur || '');
-    
-    let destAffichage = '-';
-    if (estRetrait) destAffichage = t.numeroDestination + ' (' + t.operateur + ')';
-    else if (estRecharge) destAffichage = t.numeroSource || t.operateur;
-    else if (t.destinataire) destAffichage = t.destinataire.prenom + ' ' + t.destinataire.nom + '<br>' + t.destinataire.telephone;
-    
-    let statut = t.status;
-    if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
-    if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
-    if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">'+t.status.toUpperCase()+'</span>';
-    
-    html += '<tr>';
-    html += '<td>' + date + '</td>';
-    html += '<td>' + typeBadge + '</td>';
-    html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + t.expediteur.telephone + '</small><br><small class="solde-apres">Solde: ' + (t.soldeExpediteurApres||0).toLocaleString() + '</small></td>';
-    html += '<td>' + destAffichage + '</td>';
-    html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
-    html += '<td>' + (t.frais||0) + ' F</td>';
-    html += '<td>' + statut + '</td>';
-    html += '<td>' + (t.status === 'validee' ? '<button class="btn-annuler" onclick="annulerTx(\''+t._id+'\')">Annuler</button>' : '-') + '</td>';
-    html += '</tr>';
-  });
-  
-  html += '</table>';
-  document.getElementById('content').innerHTML = html;
-}
-    function renderTablee(transactions) {
-      if (!transactions || transactions.length === 0) {
-        document.getElementById('content').innerHTML = 'Aucune transaction';
-        return;
-      }
-      
-      let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Tél Exp.</th><th>Solde Exp.</th><th>Destinataire</th><th>Tél Dest.</th><th>Solde Dest.</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
-      
-      transactions.forEach(t => {
-        if (!t.expediteur || !t.destinataire) return;
-        
-        const date = new Date(t.createdAt).toLocaleString('fr-FR');
-        const peutAnnuler = !t.annulee && t.status === 'validee';
-        
-        let statut = '<span class="badge-ok">VALIDÉE</span>';
-        let rowClass = '';
-        
-        if (t.annulee) {
-          statut = t.montantAnnule < t.montant ? '<span class="badge-partiel">ANNULÉE PARTIELLE</span>' : '<span class="badge-ko">ANNULÉE</span>';
-          rowClass = t.montantAnnule < t.montant ? ' class="partielle"' : ' class="annulee"';
-        }
-        
-        let bouton = '-';
-        if (peutAnnuler) {
-          bouton = '<button class="btn-annuler" onclick="annulerTx(\\'' + t._id + '\\')">Annuler</button>';
-        }
-        
-        html += '<tr' + rowClass + '>';
-        html += '<td>' + date + '</td>';
-        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
-        html += '<td>' + t.expediteur.telephone + '</td>';
-        html += '<td class="solde-apres">' + (t.soldeExpediteurApres?.toLocaleString() || '0') + ' FCFA</td>';
-        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
-        html += '<td>' + t.destinataire.telephone + '</td>';
-        html += '<td class="solde-apres">' + (t.soldeDestinataireApres?.toLocaleString() || '0') + ' FCFA</td>';
-        html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA';
-        if (t.annulee && t.montantAnnule < t.montant) {
-          html += '<br><small>Annulé: ' + t.montantAnnule.toLocaleString() + ' FCFA</small>';
-        }
-        html += '</td>';
-        html += '<td>' + (t.motif || '-') + '</td>';
-        html += '<td>' + statut + '</td>';
-        html += '<td>' + bouton + '</td>';
-        html += '</tr>';
-      });
-      
-      html += '</table>';
-      document.getElementById('content').innerHTML = html;
+   function renderTable(transactions) {
+  console.log('renderTable appelé avec', transactions?.length, 'tx');
+  const contentDiv = document.getElementById('content');
+
+  try {
+    if (!transactions || transactions.length === 0) {
+      contentDiv.innerHTML = 'Aucune transaction';
+      return;
     }
+
+    let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
+
+    transactions.forEach(t => {
+      if (!t.expediteur) return;
+
+      // ✅ Sécurise toutes les valeurs
+      const date = t.createdAt? new Date(t.createdAt).toLocaleString('fr-FR') : '-';
+      const type = t.type || '-';
+      const montant = (t.montant || 0).toLocaleString();
+      const frais = (t.frais || 0).toLocaleString();
+      const soldeApres = (t.soldeExpediteurApres || 0).toLocaleString();
+
+      const estRetrait = type === 'retrait';
+      const estRecharge = type === 'recharge';
+
+      let typeBadge = type;
+      if (estRetrait) typeBadge = 'Retrait ' + (t.operateur || '');
+      if (estRecharge) typeBadge = 'Recharge ' + (t.operateur || '');
+
+      let destAffichage = '-';
+      if (estRetrait) destAffichage = (t.numeroDestination || '-') + ' (' + (t.operateur || '') + ')';
+      else if (estRecharge) destAffichage = t.numeroSource || t.operateur || '-';
+      else if (t.destinataire) destAffichage = (t.destinataire.prenom || '') + ' ' + (t.destinataire.nom || '') + '<br>' + (t.destinataire.telephone || '');
+
+      let statut = t.status || '-';
+      if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
+      if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
+      if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">'+(t.status||'').toUpperCase()+'</span>';
+
+      const expPrenom = t.expediteur.prenom || '';
+      const expNom = t.expediteur.nom || '';
+      const expTel = t.expediteur.telephone || '';
+
+      html += '<tr>';
+      html += '<td>' + date + '</td>';
+      html += '<td>' + typeBadge + '</td>';
+      html += '<td>' + expPrenom + ' ' + expNom + '<br><small>' + expTel + '</small><br><small class="solde-apres">Solde: ' + soldeApres + '</small></td>';
+      html += '<td>' + destAffichage + '</td>';
+      html += '<td class="montant">' + montant + ' FCFA</td>';
+      html += '<td>' + frais + ' F</td>';
+      html += '<td>' + statut + '</td>';
+      html += '<td>' + (t.status === 'validee'? '<button class="btn-annuler" onclick="annulerTx(\''+t._id+'\')">Annuler</button>' : '-') + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</table>';
+    contentDiv.innerHTML = html;
+    console.log('✅ Tableau rendu');
+
+  } catch (err) {
+    console.error('❌ Erreur renderTable:', err);
+    contentDiv.innerHTML = '<div style="color:red">Erreur rendu: ' + err.message + '<br><pre>' + err.stack + '</pre></div>';
+  }
+}
     
     async function annulerTx(id) {
       if (!confirm('Confirmer l\\'annulation ? Si le solde est insuffisant, le solde disponible sera annulé.')) return;
