@@ -551,7 +551,7 @@ router.get('/data', authUser, async (req, res) => {
 // ==================== ROUTES HTML pour tableau de bor de ladministrateur====================
 
 // GET /api/transactions/top-clients - Top expéditeurs/destinataires
-router.get('/top-clients', verifyAdmin, async (req, res) => {
+router.get('/top-clientss', verifyAdmin, async (req, res) => {
   try {
     const jours = parseInt(req.query.jours) || 30;
     const limit = parseInt(req.query.limit) || 10;
@@ -611,7 +611,100 @@ router.get('/top-clients', verifyAdmin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// GET /api/transactions/stats - Stats dashboard CORRIGÉ
+router.get('/stats', authUser, async (req, res) => {
+  try {
+    const jours = parseInt(req.query.jours) || 30;
+    const dateDebut = new Date();
+    dateDebut.setDate(dateDebut.getDate() - jours);
 
+    // ✅ Utilise createdAt et status, pas date et annulee
+    const transactions = await Transaction.find({
+      createdAt: { $gte: dateDebut },
+      status: { $in: ['validee', 'reussie'] }
+    }).lean();
+
+    const totalTx = transactions.length;
+    const volumeTotal = transactions.reduce((sum, t) => sum + (t.montant || 0), 0);
+    const moyenne = totalTx > 0? volumeTotal / totalTx : 0;
+
+    const clientsSet = new Set();
+    transactions.forEach(t => {
+      if (t.expediteur) clientsSet.add(t.expediteur.toString());
+      if (t.destinataire) clientsSet.add(t.destinataire.toString());
+    });
+
+    const parJour = {};
+    for (let i = 0; i < jours; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      parJour[key] = { date: key, volume: 0, count: 0 };
+    }
+
+    transactions.forEach(t => {
+      const key = new Date(t.createdAt).toISOString().split('T')[0]; // ✅ createdAt
+      if (parJour[key]) {
+        parJour[key].volume += t.montant || 0;
+        parJour[key].count += 1;
+      }
+    });
+
+    res.json({
+      totalTx,
+      volumeTotal,
+      moyenne,
+      clientsActifs: clientsSet.size,
+      parJour: Object.values(parJour).reverse()
+    });
+  } catch (error) {
+    console.error('stats error', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/transactions/top-clients - Top expéditeurs / destinataires CORRIGÉ
+router.get('/top-clients', authUser, async (req, res) => {
+  try {
+    const jours = parseInt(req.query.jours) || 30;
+    const limit = parseInt(req.query.limit) || 10;
+    const dateDebut = new Date();
+    dateDebut.setDate(dateDebut.getDate() - jours);
+
+    const txs = await Transaction.find({
+      createdAt: { $gte: dateDebut },
+      status: { $in: ['validee', 'reussie'] }
+    }).populate('expediteur destinataire', 'nom prenom telephone').lean();
+
+    const mapExp = {};
+    const mapDest = {};
+
+    txs.forEach(t => {
+      if (t.expediteur && t.expediteur._id) {
+        const id = t.expediteur._id.toString();
+        if (!mapExp[id]) mapExp[id] = { _id: id, nom: `${t.expediteur.prenom} ${t.expediteur.nom}`, telephone: t.expediteur.telephone, volume: 0, nbTx: 0 };
+        mapExp[id].volume += t.montant || 0;
+        mapExp[id].nbTx += 1;
+      }
+      // Pour les retraits/recharges, il n'y a pas de destinataire -> on ne les compte pas en top destinataires
+      if (t.destinataire && t.destinataire._id) {
+        const id = t.destinataire._id.toString();
+        if (!mapDest[id]) mapDest[id] = { _id: id, nom: `${t.destinataire.prenom} ${t.destinataire.nom}`, telephone: t.destinataire.telephone, volume: 0, nbTx: 0 };
+        mapDest[id].volume += t.montant || 0;
+        mapDest[id].nbTx += 1;
+      }
+    });
+
+    const topExpediteurs = Object.values(mapExp).sort((a,b) => b.volume - a.volume).slice(0, limit);
+    const topDestinataires = Object.values(mapDest).sort((a,b) => b.volume - a.volume).slice(0, limit);
+
+    res.json({ topExpediteurs, topDestinataires });
+
+  } catch (err) {
+    console.error('top-clients error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // POST /api/transactions/send - Un client envoie à un autre
 router.post('/send', async (req, res) => {
   try {
