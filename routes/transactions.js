@@ -554,74 +554,6 @@ router.get('/data', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/dataa', async (req, res) => {
-  try {
-    const { client, debut, fin, q, montantMin, montantMax } = req.query;
-    let query = {};
-    
-    // Filtre par client depuis select
-    if (client) {
-      query = { $or: [{ expediteur: client }, { destinataire: client }] };
-    }
-    
-    // Filtre par date - utilise createdAt, pas date
-    if (debut || fin) {
-      query.createdAt = {}; // ✅ createdAt au lieu de date
-      if (debut) query.createdAt.$gte = new Date(debut);
-      if (fin) query.createdAt.$lte = new Date(fin + 'T23:59:59');
-    }
-    
-    // Filtre par montant
-    if (montantMin || montantMax) {
-      query.montant = {};
-      if (montantMin) query.montant.$gte = Number(montantMin);
-      if (montantMax) query.montant.$lte = Number(montantMax);
-    }
-    
-    let transactions = await Transaction.find(query)
-     .populate('expediteur', 'nom prenom telephone')
-     .populate('destinataire', 'nom prenom telephone') // Ne crash pas si null
-     .sort({ createdAt: -1 }) // ✅ createdAt au lieu de date
-     .lean();
-    
-    // ❌ SUPPRIME CETTE LIGNE - elle vire les retraits
-    // transactions = transactions.filter(t => t.expediteur && t.destinataire);
-    
-    // ✅ Garde seulement les tx où expediteur existe
-    transactions = transactions.filter(t => t.expediteur);
-    
-    // Recherche texte : nom, téléphone, opérateur, numéro destination
-    if (q && q.trim() !== '') {
-      const search = q.toLowerCase();
-      transactions = transactions.filter(t => {
-        const expNom = `${t.expediteur?.prenom || ''} ${t.expediteur?.nom || ''}`.toLowerCase();
-        const destNom = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''}`.toLowerCase();
-        const expTel = t.expediteur?.telephone || '';
-        const destTel = t.destinataire?.telephone || '';
-        const operateur = t.operateur || '';
-        const numDest = t.numeroDestination || '';
-        
-        return expNom.includes(search) || destNom.includes(search) || 
-               expTel.includes(search) || destTel.includes(search) ||
-               operateur.toLowerCase().includes(search) || // ✅ Cherche opérateur
-               numDest.includes(search); // ✅ Cherche numéro retrait
-      });
-    }
-    
-    const volumeTotal = transactions
-      .filter(t => t.status !== 'annulee') // ✅ utilise status au lieu de annulee
-      .reduce((sum, t) => sum + t.montant, 0);
-    
-    res.json({ 
-      transactions, 
-      stats: { total: transactions.length, volumeTotal } 
-    });
-  } catch (error) {
-    console.error('Erreur /data:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // GET /api/transactions/stats - Stats dashboard
 router.get('/stats',verifyAdmin, async (req, res) => {
@@ -1093,8 +1025,52 @@ router.get('/', async (req, res) => {
     function renderStats(stats) {
       document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
     }
-    
+
     function renderTable(transactions) {
+  if (!transactions || transactions.length === 0) {
+    document.getElementById('content').innerHTML = 'Aucune transaction';
+    return;
+  }
+  
+  let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
+  
+  transactions.forEach(t => {
+    if (!t.expediteur) return; // garde seulement ce check
+    
+    const date = new Date(t.createdAt).toLocaleString('fr-FR');
+    const estRetrait = t.type === 'retrait';
+    const estRecharge = t.type === 'recharge';
+    
+    let typeBadge = t.type;
+    if (estRetrait) typeBadge = 'Retrait ' + (t.operateur || '');
+    if (estRecharge) typeBadge = 'Recharge ' + (t.operateur || '');
+    
+    let destAffichage = '-';
+    if (estRetrait) destAffichage = t.numeroDestination + ' (' + t.operateur + ')';
+    else if (estRecharge) destAffichage = t.numeroSource || t.operateur;
+    else if (t.destinataire) destAffichage = t.destinataire.prenom + ' ' + t.destinataire.nom + '<br>' + t.destinataire.telephone;
+    
+    let statut = t.status;
+    if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
+    if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
+    if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">'+t.status.toUpperCase()+'</span>';
+    
+    html += '<tr>';
+    html += '<td>' + date + '</td>';
+    html += '<td>' + typeBadge + '</td>';
+    html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + t.expediteur.telephone + '</small><br><small class="solde-apres">Solde: ' + (t.soldeExpediteurApres||0).toLocaleString() + '</small></td>';
+    html += '<td>' + destAffichage + '</td>';
+    html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
+    html += '<td>' + (t.frais||0) + ' F</td>';
+    html += '<td>' + statut + '</td>';
+    html += '<td>' + (t.status === 'validee' ? '<button class="btn-annuler" onclick="annulerTx(\''+t._id+'\')">Annuler</button>' : '-') + '</td>';
+    html += '</tr>';
+  });
+  
+  html += '</table>';
+  document.getElementById('content').innerHTML = html;
+}
+    function renderTablee(transactions) {
       if (!transactions || transactions.length === 0) {
         document.getElementById('content').innerHTML = 'Aucune transaction';
         return;
