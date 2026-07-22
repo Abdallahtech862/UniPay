@@ -361,7 +361,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     res.json({
       success: true,
       message: 'Demande de retrait envoyée, en attente validation admin',
-      transactionId: transaction._id,
+     // transactionId: transaction._id,
       montantRetire: parseFloat(montant),
       frais,
       totalDebite: total
