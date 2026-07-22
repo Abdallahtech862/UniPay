@@ -796,9 +796,26 @@ app.get('/health', (req, res) => res.status(200).json({
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL || process.env.MONGODB_URI;
 
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ Mongo connecté:', MONGO_URI.substring(0,20)+'...'))
-  .catch(err => console.error('❌ Mongo erreur:', err));
+console.log('--- ENV CHECK ---');
+console.log('MONGO_URI présente:', !!process.env.MONGO_URI);
+console.log('MONGO_URL présente:', !!process.env.MONGO_URL);
+console.log('URI utilisée:', MONGO_URI ? MONGO_URI.split('@').pop() : 'AUCUNE !');
+console.log('-----------------');
+
+if (!MONGO_URI) {
+  console.error('❌ AUCUNE URI MONGO TROUVÉE - Arrêt');
+  process.exit(1);
+}
+
+mongoose.connect(MONGO_URI, {
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+})
+.then(() => console.log('✅ Mongo connecté'))
+.catch(err => {
+  console.error('❌ Mongo erreur:', err.message);
+  console.error(err.reason || err);
+});
 
 //mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 app.use('/api/legal', require('./routes/legal'));
