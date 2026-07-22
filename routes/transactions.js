@@ -998,7 +998,12 @@ router.get('/', async (req, res) => {
         const montant = document.getElementById('filterMontant').value;
         const dateDebut = document.getElementById('dateDebut').value;
         const dateFin = document.getElementById('dateFin').value;
-        
+
+        const data = await res.json();
+        console.log('Data reçue:', data);
+        console.log('Première tx:', data.transactions[0]);
+        currentTransactions = data.transactions || [];
+
         let url = '/api/transactions/data?';
         if (clientId) url += 'client=' + clientId + '&';
         if (numero) url += 'numero=' + numero + '&';
