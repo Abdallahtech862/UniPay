@@ -921,7 +921,99 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
-function renderTable(transactions) {
+router.get('/', async (req, res) => {
+  try {
+    const clients = await Client.find().select('nom prenom').lean();
+    let optionsClients = '<option value="">Tous les clients</option>';
+    clients.forEach(c => {
+      optionsClients += `<option value="${c._id}">${c.prenom} ${c.nom}</option>`;
+    });
+
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Historique Transactions</title>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #007bff; color: white; }
+    tr:nth-child(even) { background: #f2f2f2; }
+    tr.annulee { opacity: 0.5; background: #ffe6e6; }
+    tr.partielle { background: #fff3cd; }
+   .montant { color: #28a745; font-weight: bold; }
+   .solde-apres { color: #6c757d; font-size: 12px; }
+   .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    select, input, button { padding: 8px; }
+   .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
+   .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
+   .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
+   .badge-ok { color: #28a745; font-weight: bold; }
+   .badge-ko { color: #dc3545; font-weight: bold; }
+   .badge-partiel { color: #f59e0b; font-weight: bold; }
+    @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
+  </style>
+</head>
+<body>
+  <h2>Historique des transactions</h2>
+  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a>| <a href="/api/transactions/pending-view">Transactions en attente</a>
+  
+  <div class="filtres">
+    <select id="filterClient">${optionsClients}</select>
+    <input type="text" id="filterNumero" placeholder="Rechercher par numéro">
+    <input type="number" id="filterMontant" placeholder="Montant exact">
+    <input type="date" id="dateDebut">
+    <input type="date" id="dateFin">
+    <button onclick="loadTransactions()">Filtrer</button>
+    <button onclick="resetFiltres()">Reset</button>
+  </div>
+
+  <div class="actions">
+    <button class="print" onclick="window.print()">Imprimer</button>
+    <button class="csv" onclick="exportCSV()">Export CSV</button>
+    <button class="pdf" onclick="exportPDF()">Export PDF</button>
+  </div>
+  <div id="stats"></div>
+  <div id="content">Chargement...</div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/api/auth/login';
+    let currentTransactions = [];
+    
+    async function loadTransactions() {
+      try {
+        const clientId = document.getElementById('filterClient').value;
+        const numero = document.getElementById('filterNumero').value;
+        const montant = document.getElementById('filterMontant').value;
+        const dateDebut = document.getElementById('dateDebut').value;
+        const dateFin = document.getElementById('dateFin').value;
+        
+        let url = '/api/transactions/data?';
+        if (clientId) url += 'client=' + clientId + '&';
+        if (numero) url += 'numero=' + numero + '&';
+        if (montant) url += 'montant=' + montant + '&';
+        if (dateDebut) url += 'debut=' + dateDebut + '&';
+        if (dateFin) url += 'fin=' + dateFin;
+        
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('token');
+          window.location.href = '/api/auth/login';
+          return;
+        }
+        
+        const data = await res.json();
+        currentTransactions = data.transactions;
+        renderTable(data.transactions);
+        renderStats(data.stats);
+      } catch (err) {
+        document.getElementById('content').innerHTML = 'Erreur: ' + err.message;
+      }
+    }
+    function renderTable(transactions) {
   if (!transactions || transactions.length === 0) {
     document.getElementById('content').innerHTML = 'Aucune transaction';
     return;
@@ -965,7 +1057,7 @@ function renderTable(transactions) {
   html += '</table>';
   document.getElementById('content').innerHTML = html;
 }
-  
+    
     async function annulerTx(id) {
       if (!confirm('Confirmer l\\'annulation ? Si le solde est insuffisant, le solde disponible sera annulé.')) return;
       const res = await fetch('/api/transactions/' + id + '/cancel', {
@@ -1038,7 +1130,6 @@ function renderTable(transactions) {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-
 // ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
 
 router.post('/', authUser, async (req, res) => {
