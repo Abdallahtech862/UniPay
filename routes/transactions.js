@@ -460,6 +460,7 @@ router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici a
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
+// GET /api/transactions/data - Données pour le tableau avec recherche historique
 router.get('/data', authUser, async (req, res) => {
   try {
     const { client, debut, fin, q, montantMin, montantMax, numero, montant } = req.query;
@@ -534,20 +535,6 @@ router.get('/data', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-    const volumeTotal = transactions
-      .filter(t => t.status !== 'annulee') // ✅ utilise status au lieu de annulee
-      .reduce((sum, t) => sum + t.montant, 0);
-    
-    res.json({ 
-      transactions, 
-      stats: { total: transactions.length, volumeTotal } 
-    });
-  } catch (error) {
-    console.error('Erreur /data:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // GET /api/transactions/stats - Stats dashboard
 router.get('/stats',verifyAdmin, async (req, res) => {
   try {
@@ -921,6 +908,7 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
+
 router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
@@ -1013,7 +1001,12 @@ router.get('/', async (req, res) => {
         document.getElementById('content').innerHTML = 'Erreur: ' + err.message;
       }
     }
-    function renderTable(transactions) {
+    
+    function renderStats(stats) {
+      document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
+    }
+    
+   function renderTable(transactions) {
   if (!transactions || transactions.length === 0) {
     document.getElementById('content').innerHTML = 'Aucune transaction';
     return;
@@ -1130,6 +1123,7 @@ router.get('/', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
+
 // ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
 
 router.post('/', authUser, async (req, res) => {
