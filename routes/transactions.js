@@ -482,23 +482,18 @@ router.get('/pending-view', async (req, res) => {
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
 router.get('/data', authUser, async (req, res) => {
   try {
-    const { client, debut, fin, q, montantMin, montantMax, numero, montant } = req.query;
+    const { client, debut, fin, q, numero, montant } = req.query;
     let query = {};
-    
+
+    // filtre client
     if (client) {
-      query = { $or: [{ expediteur: client }, { destinataire: client }] };
+      query.$or = [{ expediteur: client }, { destinataire: client }];
     }
-    
+
     if (debut || fin) {
       query.createdAt = {};
       if (debut) query.createdAt.$gte = new Date(debut);
       if (fin) query.createdAt.$lte = new Date(fin + 'T23:59:59');
-    }
-    
-    if (montantMin || montantMax) {
-      query.montant = {};
-      if (montantMin) query.montant.$gte = Number(montantMin);
-      if (montantMax) query.montant.$lte = Number(montantMax);
     }
 
     if (montant) {
@@ -506,42 +501,40 @@ router.get('/data', authUser, async (req, res) => {
     }
 
     if (numero) {
-      query.$or = [
-        { numeroDestination: { $regex: numero, $options: 'i' } },
-        { numeroSource: { $regex: numero, $options: 'i' } }
-      ];
+      // si on cherche par numéro, on écrase pas le filtre client
+      const numQuery = {
+        $or: [
+          { numeroDestination: { $regex: numero, $options: 'i' } },
+          { numeroSource: { $regex: numero, $options: 'i' } },
+          { operateur: { $regex: numero, $options: 'i' } }
+        ]
+      };
+      query = Object.keys(query).length ? { $and: [query, numQuery] } : numQuery;
     }
-    
+
     let transactions = await Transaction.find(query)
-     .populate('expediteur', 'nom prenom telephone')
-     .populate('destinataire', 'nom prenom telephone')
-     .sort({ createdAt: -1 })
-     .lean();
-    
-    // ✅ Garde seulement si expediteur existe (retrait/recharge n'ont pas de destinataire)
+      .populate('expediteur', 'nom prenom telephone')
+      .populate('destinataire', 'nom prenom telephone')
+      .sort({ createdAt: -1 })
+      .lean();
+
     transactions = transactions.filter(t => t.expediteur);
-    
-    // Recherche texte
+
     if (q && q.trim() !== '') {
       const search = q.toLowerCase();
       transactions = transactions.filter(t => {
-        const expNom = `${t.expediteur?.prenom || ''} ${t.expediteur?.nom || ''}`.toLowerCase();
-        const destNom = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''}`.toLowerCase();
-        const expTel = t.expediteur?.telephone || '';
-        const destTel = t.destinataire?.telephone || '';
-        
-        return expNom.includes(search) || destNom.includes(search) || 
-               expTel.includes(search) || destTel.includes(search) ||
-               (t.operateur || '').toLowerCase().includes(search) ||
-               (t.numeroDestination || '').includes(search) ||
-               (t.numeroSource || '').includes(search);
+        const exp = `${t.expediteur?.prenom || ''} ${t.expediteur?.nom || ''} ${t.expediteur?.telephone || ''}`.toLowerCase();
+        const dest = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''} ${t.destinataire?.telephone || ''}`.toLowerCase();
+        return exp.includes(search) || dest.includes(search) ||
+          (t.operateur || '').toLowerCase().includes(search) ||
+          (t.numeroDestination || '').includes(search) ||
+          (t.numeroSource || '').includes(search);
       });
     }
 
-    // ✅ Stats qui comptent TOUS les types
     const stats = {
       total: transactions.length,
-      volumeTotal: transactions.reduce((sum, t) => sum + (t.montant || 0), 0),
+      volumeTotal: transactions.reduce((s, t) => s + (t.montant || 0), 0),
       totalRetraits: transactions.filter(t => t.type === 'retrait').length,
       totalRecharges: transactions.filter(t => t.type === 'recharge').length,
       totalTransferts: transactions.filter(t => t.type === 'envoi').length
@@ -552,56 +545,6 @@ router.get('/data', authUser, async (req, res) => {
   } catch (err) {
     console.error('Erreur /data:', err);
     res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/transactions/stats - Stats dashboard
-router.get('/stats',verifyAdmin, async (req, res) => {
-  try {
-    const jours = parseInt(req.query.jours) || 30;
-    const dateDebut = new Date();
-    dateDebut.setDate(dateDebut.getDate() - jours);
-    
-    const transactions = await Transaction.find({ 
-      date: { $gte: dateDebut },
-      annulee: { $ne: true }
-    }).lean();
-    
-    const totalTx = transactions.length;
-    const volumeTotal = transactions.reduce((sum, t) => sum + t.montant, 0);
-    const moyenne = totalTx > 0 ? volumeTotal / totalTx : 0;
-    
-    const clientsSet = new Set();
-    transactions.forEach(t => {
-      if (t.expediteur) clientsSet.add(t.expediteur.toString());
-      if (t.destinataire) clientsSet.add(t.destinataire.toString());
-    });
-    
-    const parJour = {};
-    for (let i = 0; i < jours; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      parJour[key] = { date: key, volume: 0, count: 0 };
-    }
-    
-    transactions.forEach(t => {
-      const key = new Date(t.date).toISOString().split('T')[0];
-      if (parJour[key]) {
-        parJour[key].volume += t.montant;
-        parJour[key].count += 1;
-      }
-    });
-    
-    res.json({ 
-      totalTx, 
-      volumeTotal, 
-      moyenne, 
-      clientsActifs: clientsSet.size, 
-      parJour: Object.values(parJour).reverse() 
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 
@@ -945,21 +888,18 @@ router.get('/', async (req, res) => {
   <style>
     body { font-family: Arial; padding: 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size:13px; }
     th { background: #007bff; color: white; }
     tr:nth-child(even) { background: #f2f2f2; }
-    tr.annulee { opacity: 0.5; background: #ffe6e6; }
-    tr.partielle { background: #fff3cd; }
-   .montant { color: #28a745; font-weight: bold; }
-   .solde-apres { color: #6c757d; font-size: 12px; }
-   .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .montant { color: #28a745; font-weight: bold; }
+    .solde-apres { color: #6c757d; font-size: 11px; }
+    .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     select, input, button { padding: 8px; }
-   .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
-   .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
-   .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
-   .badge-ok { color: #28a745; font-weight: bold; }
-   .badge-ko { color: #dc3545; font-weight: bold; }
-   .badge-partiel { color: #f59e0b; font-weight: bold; }
+    .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
+    .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
+    .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
+    .badge-ok { color: #28a745; font-weight: bold; }
+    .badge-ko { color: #dc3545; font-weight: bold; }
     @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
   </style>
 </head>
@@ -969,7 +909,7 @@ router.get('/', async (req, res) => {
   
   <div class="filtres">
     <select id="filterClient">${optionsClients}</select>
-    <input type="text" id="filterNumero" placeholder="Rechercher par numéro">
+    <input type="text" id="filterNumero" placeholder="Rechercher par numéro / opérateur">
     <input type="number" id="filterMontant" placeholder="Montant exact">
     <input type="date" id="dateDebut">
     <input type="date" id="dateFin">
@@ -999,11 +939,6 @@ router.get('/', async (req, res) => {
         const dateDebut = document.getElementById('dateDebut').value;
         const dateFin = document.getElementById('dateFin').value;
 
-        const data = await res.json();
-        console.log('Data reçue:', data);
-        console.log('Première tx:', data.transactions[0]);
-        currentTransactions = data.transactions || [];
-
         let url = '/api/transactions/data?';
         if (clientId) url += 'client=' + clientId + '&';
         if (numero) url += 'numero=' + numero + '&';
@@ -1019,89 +954,47 @@ router.get('/', async (req, res) => {
         }
         
         const data = await res.json();
-        currentTransactions = data.transactions;
-        renderTable(data.transactions);
+        console.log('Data:', data.transactions.length, 'tx, première:', data.transactions[0]);
+        currentTransactions = data.transactions || [];
+        renderTable(currentTransactions);
         renderStats(data.stats);
       } catch (err) {
+        console.error(err);
         document.getElementById('content').innerHTML = 'Erreur: ' + err.message;
       }
     }
     
     function renderStats(stats) {
-      document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
+      document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA | Retraits: ' + stats.totalRetraits + ' | Recharges: ' + stats.totalRecharges + '</p>';
     }
 
-   function renderTable(transactions) {
-  console.log('renderTable appelé avec', transactions?.length, 'tx');
-  const contentDiv = document.getElementById('content');
-
-  try {
-    if (!transactions || transactions.length === 0) {
-      contentDiv.innerHTML = 'Aucune transaction';
-      return;
+    function renderTable(transactions) {
+      if (!transactions || transactions.length === 0) {
+        document.getElementById('content').innerHTML = 'Aucune transaction';
+        return;
+      }
+      let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
+      transactions.forEach(t => {
+        if (!t.expediteur) return;
+        const date = t.createdAt ? new Date(t.createdAt).toLocaleString('fr-FR') : '-';
+        let typeBadge = t.type + (t.operateur ? ' ' + t.operateur : '');
+        let dest = '-';
+        if (t.type === 'retrait') dest = (t.numeroDestination || '-') + '<br><small>' + (t.operateur||'') + '</small>';
+        else if (t.type === 'recharge') dest = (t.numeroSource || t.operateur || '-');
+        else if (t.destinataire) dest = t.destinataire.prenom + ' ' + t.destinataire.nom + '<br><small>' + t.destinataire.telephone + '</small>';
+        let statut = t.status;
+        if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
+        if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
+        if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">' + t.status.toUpperCase() + '</span>';
+        html += '<tr><td>' + date + '</td><td>' + typeBadge + '</td><td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + t.expediteur.telephone + '</small><br><small class="solde-apres">Solde: ' + (t.soldeExpediteurApres||0).toLocaleString() + '</small></td><td>' + dest + '</td><td class="montant">' + (t.montant||0).toLocaleString() + ' FCFA</td><td>' + (t.frais||0) + ' F</td><td>' + statut + '</td><td>' + (t.status === 'validee' ? '<button class="btn-annuler" onclick="annulerTx(\\'' + t._id + '\\')">Annuler</button>' : '-') + '</td></tr>';
+      });
+      html += '</table>';
+      document.getElementById('content').innerHTML = html;
     }
-
-    let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
-
-    transactions.forEach(t => {
-      if (!t.expediteur) return;
-
-      // ✅ Sécurise toutes les valeurs
-      const date = t.createdAt? new Date(t.createdAt).toLocaleString('fr-FR') : '-';
-      const type = t.type || '-';
-      const montant = (t.montant || 0).toLocaleString();
-      const frais = (t.frais || 0).toLocaleString();
-      const soldeApres = (t.soldeExpediteurApres || 0).toLocaleString();
-
-      const estRetrait = type === 'retrait';
-      const estRecharge = type === 'recharge';
-
-      let typeBadge = type;
-      if (estRetrait) typeBadge = 'Retrait ' + (t.operateur || '');
-      if (estRecharge) typeBadge = 'Recharge ' + (t.operateur || '');
-
-      let destAffichage = '-';
-      if (estRetrait) destAffichage = (t.numeroDestination || '-') + ' (' + (t.operateur || '') + ')';
-      else if (estRecharge) destAffichage = t.numeroSource || t.operateur || '-';
-      else if (t.destinataire) destAffichage = (t.destinataire.prenom || '') + ' ' + (t.destinataire.nom || '') + '<br>' + (t.destinataire.telephone || '');
-
-      let statut = t.status || '-';
-      if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
-      if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
-      if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">'+(t.status||'').toUpperCase()+'</span>';
-
-      const expPrenom = t.expediteur.prenom || '';
-      const expNom = t.expediteur.nom || '';
-      const expTel = t.expediteur.telephone || '';
-
-      html += '<tr>';
-      html += '<td>' + date + '</td>';
-      html += '<td>' + typeBadge + '</td>';
-      html += '<td>' + expPrenom + ' ' + expNom + '<br><small>' + expTel + '</small><br><small class="solde-apres">Solde: ' + soldeApres + '</small></td>';
-      html += '<td>' + destAffichage + '</td>';
-      html += '<td class="montant">' + montant + ' FCFA</td>';
-      html += '<td>' + frais + ' F</td>';
-      html += '<td>' + statut + '</td>';
-      html += '<td>' + (t.status === 'validee'? '<button class="btn-annuler" onclick="annulerTx(\''+t._id+'\')">Annuler</button>' : '-') + '</td>';
-      html += '</tr>';
-    });
-
-    html += '</table>';
-    contentDiv.innerHTML = html;
-    console.log('✅ Tableau rendu');
-
-  } catch (err) {
-    console.error('❌ Erreur renderTable:', err);
-    contentDiv.innerHTML = '<div style="color:red">Erreur rendu: ' + err.message + '<br><pre>' + err.stack + '</pre></div>';
-  }
-}
     
     async function annulerTx(id) {
-      if (!confirm('Confirmer l\\'annulation ? Si le solde est insuffisant, le solde disponible sera annulé.')) return;
-      const res = await fetch('/api/transactions/' + id + '/cancel', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
+      if (!confirm('Confirmer annulation ?')) return;
+      const res = await fetch('/api/transactions/' + id + '/cancel', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
       const data = await res.json();
       alert(data.message || data.error);
       loadTransactions();
@@ -1109,13 +1002,11 @@ router.get('/', async (req, res) => {
     
     function exportCSV() {
       if (!currentTransactions.length) { alert('Aucune donnée'); return; }
-      let csv = 'Date,Expéditeur,Tél Exp,Solde Exp Après,Destinataire,Tél Dest,Solde Dest Après,Montant,Montant Annulé,Motif,Statut\\n';
+      let csv = 'Date,Type,Expediteur,Tel,Destinataire,Numero,Montant,Frais,Statut\\n';
       currentTransactions.forEach(t => {
-        if (!t.expediteur || !t.destinataire) return;
         const date = new Date(t.createdAt).toLocaleString('fr-FR');
-        let statut = 'Validée';
-        if (t.annulee) statut = t.montantAnnule < t.montant ? 'Annulée partielle' : 'Annulée';
-        csv += '"' + date + '","' + t.expediteur.prenom + ' ' + t.expediteur.nom + '","' + t.expediteur.telephone + '",' + (t.soldeExpediteurApres || 0) + ',"' + t.destinataire.prenom + ' ' + t.destinataire.nom + '","' + t.destinataire.telephone + '",' + (t.soldeDestinataireApres || 0) + ',' + t.montant + ',' + (t.montantAnnule || 0) + ',"' + (t.motif || '') + '","' + statut + '"\\n';
+        const dest = t.destinataire ? t.destinataire.prenom + ' ' + t.destinataire.nom : (t.numeroDestination || t.numeroSource || '');
+        csv += '"' + date + '","' + (t.type||'') + ' ' + (t.operateur||'') + '","' + (t.expediteur.prenom + ' ' + t.expediteur.nom) + '","' + t.expediteur.telephone + '","' + dest + '","' + (t.numeroDestination||t.numeroSource||'') + '",' + t.montant + ',' + (t.frais||0) + ',"' + t.status + '"\\n';
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       const link = document.createElement('a');
@@ -1128,26 +1019,17 @@ router.get('/', async (req, res) => {
       if (!currentTransactions.length) { alert('Aucune donnée'); return; }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF('l');
-      doc.setFontSize(16);
       doc.text('Historique Transactions UniPay', 14, 15);
-      const tableData = currentTransactions.filter(t => t.expediteur && t.destinataire).map(t => [
+      const tableData = currentTransactions.map(t => [
         new Date(t.createdAt).toLocaleString('fr-FR'),
+        t.type + ' ' + (t.operateur||''),
         t.expediteur.prenom + ' ' + t.expediteur.nom,
-        t.expediteur.telephone,
-        (t.soldeExpediteurApres || 0).toLocaleString() + ' FCFA',
-        t.destinataire.prenom + ' ' + t.destinataire.nom,
-        t.destinataire.telephone,
-        (t.soldeDestinataireApres || 0).toLocaleString() + ' FCFA',
+        t.destinataire ? t.destinataire.telephone : (t.numeroDestination||t.numeroSource||''),
         t.montant.toLocaleString() + ' FCFA',
-        t.motif || '-',
-        t.annulee ? (t.montantAnnule < t.montant ? 'Annulée partielle' : 'Annulée') : 'Validée'
+        (t.frais||0) + ' F',
+        t.status
       ]);
-      doc.autoTable({
-        head: [['Date', 'Expéditeur', 'Tél Exp', 'Solde Exp', 'Destinataire', 'Tél Dest', 'Solde Dest', 'Montant', 'Motif', 'Statut']],
-        body: tableData,
-        startY: 25,
-        styles: { fontSize: 6 }
-      });
+      doc.autoTable({ head: [['Date','Type','Exp','Dest/Num','Montant','Frais','Statut']], body: tableData, startY: 25, styles: { fontSize: 7 } });
       doc.save('transactions.pdf');
     }
     
