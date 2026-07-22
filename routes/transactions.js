@@ -109,6 +109,126 @@ router.get('/search', authUser, async (req, res) => {
 });
 // ==================== ROUTES des transfert unipay a mobil money ====================
 
+
+// POST /api/transactions/withdraw/preview - Calcule les frais seulement
+router.post('/withdraw/preview', authUser, async (req, res) => {
+  try {
+    const { montant, operateur, numero } = req.body;
+    const userId = req.user.id;
+
+    if (!montant || montant <= 0 ||!operateur ||!numero) {
+      return res.status(400).json({ error: 'Données manquantes' });
+    }
+
+    const user = await Client.findById(userId);
+
+    if (user.bloque) {
+      return res.status(403).json({
+        error: 'Compte suspendu. Impossible d’effectuer un retrait.'
+      });
+    }
+
+    if (user.solde < montant) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    const FRAIS = {
+      'Telecel Money': 0.01,
+      'Orange Money': 0.01,
+      'Moov Money': 0.01,
+      'SankMoney': 0.01,
+      'Coris Money': 0.01,
+      'Wave': 0.01,
+      'XpresCash': 0.01,
+      'Carte Visa': 0.025
+    };
+
+    const tauxFrais = FRAIS[operateur] + 100 || 0.01 + 100;
+    const frais = Math.ceil(montant * tauxFrais);
+    const total = montant + frais;
+
+    if (user.solde < total) {
+      return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
+    }
+
+    // ✅ Ne crée rien, retourne juste les données
+    res.json({
+      montant,
+      frais,
+      total,
+      operateur,
+      numero,
+      soldeRestant: user.solde - total
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/transactions/withdraw/confirm - Crée et débite après auth
+router.post('/withdraw/confirm', authUser, async (req, res) => {
+  try {
+    const { montant, operateur, numero } = req.body; // ← Reçoit les params, pas transactionId
+    const userId = req.user.id;
+
+    const user = await Client.findById(userId);
+
+    if (user.bloque) {
+      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
+    }
+
+    const FRAIS = {
+      'MTN Money': 0.01,
+      'Orange Money': 0.01,
+      'Moov Money': 0.015,
+      'SankMoney': 0.005,
+      'Coris Money': 0.01,
+      'Wave': 0.01,
+      'XpresCash': 0.02,
+      'Carte Visa': 0.025
+    };
+
+    const tauxFrais = FRAIS[operateur] || 0.01;
+    const frais = Math.ceil(montant * tauxFrais);
+    const total = montant + frais;
+
+    if (user.solde < total) {
+      return res.status(400).json({ error: 'Solde insuffisant' });
+    }
+
+    const nouveauSolde = user.solde;// - total;
+
+    // ✅ Crée la transaction et débite en même temps
+    const transaction = await Transaction.create({
+      expediteur: userId,
+      type: 'retrait',
+      montant,
+      frais,
+      operateur,
+      numeroDestination: numero,
+      status: 'en_attente', // ✅ Direct validée car auth OK
+      soldeExpediteurAvant: user.solde,
+      soldeExpediteurApres: nouveauSolde,
+      motif: `Retrait ${operateur}`,
+      dateValidation: new Date()
+    });
+
+    await Client.findByIdAndUpdate(userId, { solde: nouveauSolde });
+
+    res.json({
+      success: true,
+      message: 'Retrait confirmé',
+      transactionId: transaction._id,
+      nouveauSolde,
+      montantRetire: montant,
+      frais
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // GET /api/transactions/pending - Admin voit les retraits/transferts en attente
 router.get('/pending', authUser, async (req, res) => {
   try {
@@ -136,6 +256,97 @@ router.get('/pending', authUser, async (req, res) => {
   }
 });
 
+// POST /api/transactions/:id/validate - Valider un retrait/transfert
+router.post('/:id/validate', authUser, async (req, res) => { // ← authUser obligatoire
+  try {
+    // Check admin
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
+
+    const tx = await Transaction.findById(req.params.id)
+      .populate('expediteur');
+
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaction introuvable' });
+    }
+
+    if (tx.status !== 'en_attente') {
+      return res.status(400).json({ error: 'Transaction déjà traitée' });
+    }
+
+    // Vérif solde encore suffisant
+    const total = tx.montant + (tx.frais || 0);
+    if (tx.expediteur.solde < total) {
+      await Transaction.findByIdAndUpdate(req.params.id, { 
+        status: 'annulee',
+        motifAnnulation: 'Solde insuffisant au moment de la validation'
+      });
+      return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
+    }
+
+    // Vérif client pas bloqué entre-temps
+    if (tx.expediteur.bloque) {
+      await Transaction.findByIdAndUpdate(req.params.id, { 
+        status: 'annulee',
+        motifAnnulation: 'Client suspendu'
+      });
+      return res.status(403).json({ error: 'Client suspendu. Transaction annulée.' });
+    }
+
+    const nouveauSolde = tx.expediteur.solde - total;
+
+    await Promise.all([
+      Transaction.findByIdAndUpdate(req.params.id, {
+        status: 'validee',
+        soldeExpediteurApres: nouveauSolde,
+        dateValidation: new Date()
+      }),
+      Client.findByIdAndUpdate(tx.expediteur._id, { solde: nouveauSolde })
+    ]);
+
+    res.json({ 
+      success: true, 
+      message: 'Transaction validée',
+      nouveauSolde
+    });
+
+  } catch (err) {
+    console.error('Erreur /validate:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+// POST /api/transactions/:id/reject - Refuser une transaction
+router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici aussi
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
+
+    const { motif } = req.body;
+
+    const tx = await Transaction.findByIdAndUpdate(
+      req.params.id,
+      { 
+        status: 'annulee',
+        motifAnnulation: motif || 'Refusé par admin',
+        dateAnnulation: new Date()
+      },
+      { new: true }
+    );
+
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+
+    res.json({ 
+      success: true, 
+      message: 'Transaction refusée',
+      transaction: tx
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // le code pour voir les transactions en attent
 router.get('/pending-view', async (req, res) => {
   res.send(`
@@ -267,242 +478,46 @@ router.get('/pending-view', async (req, res) => {
   `);
 });
 
-// POST /api/transactions/withdraw/preview - Calcule les frais seulement
-router.post('/withdraw/preview', authUser, async (req, res) => {
-  try {
-    const { montant, operateur, numero } = req.body;
-    const userId = req.user.id;
-
-    if (!montant || montant <= 0 ||!operateur ||!numero) {
-      return res.status(400).json({ error: 'Données manquantes' });
-    }
-
-    const user = await Client.findById(userId);
-
-    if (user.bloque) {
-      return res.status(403).json({
-        error: 'Compte suspendu. Impossible d’effectuer un retrait.'
-      });
-    }
-
-    if (user.solde < montant) {
-      return res.status(400).json({ error: 'Solde insuffisant' });
-    }
-
-    const FRAIS = {
-      'Telecel Money': 0.01,
-      'Orange Money': 0.01,
-      'Moov Money': 0.01,
-      'SankMoney': 0.01,
-      'Coris Money': 0.01,
-      'Wave': 0.01,
-      'XpresCash': 0.01,
-      'Carte Visa': 0.025
-    };
-
-    const tauxFrais = FRAIS[operateur] || 0.01;
-    const frais = Math.ceil(montant * tauxFrais) + 100;
-    const total = montant + frais;
-
-    if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
-    }
-
-    // ✅ Ne crée rien, retourne juste les données
-    res.json({
-      montant,
-      frais,
-      total,
-      operateur,
-      numero,
-      soldeRestant: user.solde - total
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// POST /api/transactions/withdraw/confirm - Crée en attente SEULEMENT
-router.post('/withdraw/confirm', authUser, async (req, res) => {
-  try {
-    const { montant, operateur, numero } = req.body;
-    const userId = req.user.id;
-
-    const user = await Client.findById(userId);
-    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
-
-    const tauxFrais = 0.01; // 1%
-    const frais = Math.ceil(parseFloat(montant) * tauxFrais) + 100; // 1% + 100
-    const total = parseFloat(montant) + frais;
-
-    if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Besoin de ${total}F dont ${frais}F de frais` });
-    }
-
-    // ✅ On ne débite PAS, on crée juste en attente
-    const transaction = await Transaction.create({
-      expediteur: userId,
-      type: 'retrait',
-      montant: parseFloat(montant),
-      frais,
-      operateur,
-      numeroDestination: numero,
-      status: 'en_attente',
-      soldeExpediteurAvant: req.user.solde,
-      motif: `Retrait ${operateur} vers ${numero}`,
-      date: new Date()
-    });
-
-    console.log(`🕒 Retrait en attente: ${montant}F + ${frais}F de ${user.telephone}`);
-
-    res.json({
-      success: true,
-      message: 'Demande de retrait envoyée, en attente validation admin',
-     // transactionId: transaction._id,
-      montantRetire: parseFloat(montant),
-      frais,
-      totalDebite: total
-    });
-
-  } catch (err) {
-    console.error('withdraw error', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/transactions/:id/validate - Admin valide et là on débite/crédite
-router.post('/:id/validate', authUser, async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Accès réservé aux admins' });
-    }
-
-    const tx = await Transaction.findById(req.params.id).populate('expediteur');
-    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Déjà traitée' });
-
-    const user = tx.expediteur;
-    if (user.bloque) {
-      await Transaction.findByIdAndUpdate(tx._id, { status: 'annulee', motif: 'Client suspendu' });
-      return res.status(403).json({ error: 'Client suspendu' });
-    }
-
-    const total = tx.montant + (tx.frais || 0);
-    if (user.solde < total) {
-      await Transaction.findByIdAndUpdate(tx._id, { status: 'annulee', motif: 'Solde insuffisant' });
-      return res.status(400).json({ error: 'Solde insuffisant' });
-    }
-
-    // Comptes qui reçoivent
-    const COMPTE_RETRAIT = '22670879425';
-    const COMPTE_FRAIS = '70000000'; // ou 7000000000
-
-    const compteRetrait = await Client.findOne({ telephone: { $regex: COMPTE_RETRAIT } });
-    const compteFrais = await Client.findOne({ telephone: { $regex: COMPTE_FRAIS } });
-
-    const nouveauSolde = user.solde - total;
-
-    // ✅ Débite user + crédite les 2 comptes SEULEMENT à la validation
-    await Promise.all([
-      Transaction.findByIdAndUpdate(tx._id, {
-        status: 'validee',
-        soldeExpediteurApres: nouveauSolde,
-        dateValidation: new Date()
-      }),
-      Client.findByIdAndUpdate(user._id, { solde: nouveauSolde }),
-      compteRetrait ? Client.findByIdAndUpdate(compteRetrait._id, { $inc: { solde: tx.montant } }) : null,
-      compteFrais ? Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: tx.frais } }) : null
-    ]);
-
-    console.log(`✅ Validé: User -${total}F | ${COMPTE_RETRAIT} +${tx.montant}F | ${COMPTE_FRAIS} +${tx.frais}F`);
-
-    res.json({ success: true, message: 'Retrait validé et comptes crédités', nouveauSolde });
-
-  } catch (err) {
-    console.error('validate error', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-// POST /api/transactions/:id/reject - Refuser une transaction
-router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici aussi
-  try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Accès réservé aux admins' });
-    }
-
-    const { motif } = req.body;
-
-    const tx = await Transaction.findByIdAndUpdate(
-      req.params.id,
-      { 
-        status: 'annulee',
-        motifAnnulation: motif || 'Refusé par admin',
-        dateAnnulation: new Date()
-      },
-      { new: true }
-    );
-
-    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-
-    res.json({ 
-      success: true, 
-      message: 'Transaction refusée',
-      transaction: tx
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-// GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data', authUser, async (req, res) => {
+router.get('/data', async (req, res) => {
   try {
-    const { client, debut, fin, q, montantMin, montantMax, numero, montant } = req.query;
+    const { client, debut, fin, q, montantMin, montantMax } = req.query;
     let query = {};
     
+    // Filtre par client depuis select
     if (client) {
       query = { $or: [{ expediteur: client }, { destinataire: client }] };
     }
     
+    // Filtre par date - utilise createdAt, pas date
     if (debut || fin) {
-      query.createdAt = {};
+      query.createdAt = {}; // ✅ createdAt au lieu de date
       if (debut) query.createdAt.$gte = new Date(debut);
       if (fin) query.createdAt.$lte = new Date(fin + 'T23:59:59');
     }
     
+    // Filtre par montant
     if (montantMin || montantMax) {
       query.montant = {};
       if (montantMin) query.montant.$gte = Number(montantMin);
       if (montantMax) query.montant.$lte = Number(montantMax);
     }
-
-    if (montant) {
-      query.montant = Number(montant);
-    }
-
-    if (numero) {
-      query.$or = [
-        { numeroDestination: { $regex: numero, $options: 'i' } },
-        { numeroSource: { $regex: numero, $options: 'i' } }
-      ];
-    }
     
     let transactions = await Transaction.find(query)
      .populate('expediteur', 'nom prenom telephone')
-     .populate('destinataire', 'nom prenom telephone')
-     .sort({ createdAt: -1 })
+     .populate('destinataire', 'nom prenom telephone') // Ne crash pas si null
+     .sort({ createdAt: -1 }) // ✅ createdAt au lieu de date
      .lean();
     
-    // ✅ Garde seulement si expediteur existe (retrait/recharge n'ont pas de destinataire)
+    // ❌ SUPPRIME CETTE LIGNE - elle vire les retraits
+    // transactions = transactions.filter(t => t.expediteur && t.destinataire);
+    
+    // ✅ Garde seulement les tx où expediteur existe
     transactions = transactions.filter(t => t.expediteur);
     
-    // Recherche texte
+    // Recherche texte : nom, téléphone, opérateur, numéro destination
     if (q && q.trim() !== '') {
       const search = q.toLowerCase();
       transactions = transactions.filter(t => {
@@ -510,31 +525,30 @@ router.get('/data', authUser, async (req, res) => {
         const destNom = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''}`.toLowerCase();
         const expTel = t.expediteur?.telephone || '';
         const destTel = t.destinataire?.telephone || '';
+        const operateur = t.operateur || '';
+        const numDest = t.numeroDestination || '';
         
         return expNom.includes(search) || destNom.includes(search) || 
                expTel.includes(search) || destTel.includes(search) ||
-               (t.operateur || '').toLowerCase().includes(search) ||
-               (t.numeroDestination || '').includes(search) ||
-               (t.numeroSource || '').includes(search);
+               operateur.toLowerCase().includes(search) || // ✅ Cherche opérateur
+               numDest.includes(search); // ✅ Cherche numéro retrait
       });
     }
-
-    // ✅ Stats qui comptent TOUS les types
-    const stats = {
-      total: transactions.length,
-      volumeTotal: transactions.reduce((sum, t) => sum + (t.montant || 0), 0),
-      totalRetraits: transactions.filter(t => t.type === 'retrait').length,
-      totalRecharges: transactions.filter(t => t.type === 'recharge').length,
-      totalTransferts: transactions.filter(t => t.type === 'envoi').length
-    };
-
-    res.json({ transactions, stats });
-
-  } catch (err) {
-    console.error('Erreur /data:', err);
-    res.status(500).json({ error: err.message });
+    
+    const volumeTotal = transactions
+      .filter(t => t.status !== 'annulee') // ✅ utilise status au lieu de annulee
+      .reduce((sum, t) => sum + t.montant, 0);
+    
+    res.json({ 
+      transactions, 
+      stats: { total: transactions.length, volumeTotal } 
+    });
+  } catch (error) {
+    console.error('Erreur /data:', error);
+    res.status(500).json({ error: error.message });
   }
 });
+
 // GET /api/transactions/stats - Stats dashboard
 router.get('/stats',verifyAdmin, async (req, res) => {
   try {
@@ -1006,50 +1020,55 @@ router.get('/', async (req, res) => {
       document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
     }
     
-   function renderTable(transactions) {
-  if (!transactions || transactions.length === 0) {
-    document.getElementById('content').innerHTML = 'Aucune transaction';
-    return;
-  }
-  
-  let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
-  
-  transactions.forEach(t => {
-    if (!t.expediteur) return; // garde seulement ce check
-    
-    const date = new Date(t.createdAt).toLocaleString('fr-FR');
-    const estRetrait = t.type === 'retrait';
-    const estRecharge = t.type === 'recharge';
-    
-    let typeBadge = t.type;
-    if (estRetrait) typeBadge = 'Retrait ' + (t.operateur || '');
-    if (estRecharge) typeBadge = 'Recharge ' + (t.operateur || '');
-    
-    let destAffichage = '-';
-    if (estRetrait) destAffichage = t.numeroDestination + ' (' + t.operateur + ')';
-    else if (estRecharge) destAffichage = t.numeroSource || t.operateur;
-    else if (t.destinataire) destAffichage = t.destinataire.prenom + ' ' + t.destinataire.nom + '<br>' + t.destinataire.telephone;
-    
-    let statut = t.status;
-    if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
-    if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
-    if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">'+t.status.toUpperCase()+'</span>';
-    
-    html += '<tr>';
-    html += '<td>' + date + '</td>';
-    html += '<td>' + typeBadge + '</td>';
-    html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + t.expediteur.telephone + '</small><br><small class="solde-apres">Solde: ' + (t.soldeExpediteurApres||0).toLocaleString() + '</small></td>';
-    html += '<td>' + destAffichage + '</td>';
-    html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
-    html += '<td>' + (t.frais||0) + ' F</td>';
-    html += '<td>' + statut + '</td>';
-    html += '<td>' + (t.status === 'validee' ? '<button class="btn-annuler" onclick="annulerTx(\''+t._id+'\')">Annuler</button>' : '-') + '</td>';
-    html += '</tr>';
-  });
-  
-  html += '</table>';
-  document.getElementById('content').innerHTML = html;
-}
+    function renderTable(transactions) {
+      if (!transactions || transactions.length === 0) {
+        document.getElementById('content').innerHTML = 'Aucune transaction';
+        return;
+      }
+      
+      let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Tél Exp.</th><th>Solde Exp.</th><th>Destinataire</th><th>Tél Dest.</th><th>Solde Dest.</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
+      
+      transactions.forEach(t => {
+        if (!t.expediteur || !t.destinataire) return;
+        
+        const date = new Date(t.createdAt).toLocaleString('fr-FR');
+        const peutAnnuler = !t.annulee && t.status === 'validee';
+        
+        let statut = '<span class="badge-ok">VALIDÉE</span>';
+        let rowClass = '';
+        
+        if (t.annulee) {
+          statut = t.montantAnnule < t.montant ? '<span class="badge-partiel">ANNULÉE PARTIELLE</span>' : '<span class="badge-ko">ANNULÉE</span>';
+          rowClass = t.montantAnnule < t.montant ? ' class="partielle"' : ' class="annulee"';
+        }
+        
+        let bouton = '-';
+        if (peutAnnuler) {
+          bouton = '<button class="btn-annuler" onclick="annulerTx(\\'' + t._id + '\\')">Annuler</button>';
+        }
+        
+        html += '<tr' + rowClass + '>';
+        html += '<td>' + date + '</td>';
+        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
+        html += '<td>' + t.expediteur.telephone + '</td>';
+        html += '<td class="solde-apres">' + (t.soldeExpediteurApres?.toLocaleString() || '0') + ' FCFA</td>';
+        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
+        html += '<td>' + t.destinataire.telephone + '</td>';
+        html += '<td class="solde-apres">' + (t.soldeDestinataireApres?.toLocaleString() || '0') + ' FCFA</td>';
+        html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA';
+        if (t.annulee && t.montantAnnule < t.montant) {
+          html += '<br><small>Annulé: ' + t.montantAnnule.toLocaleString() + ' FCFA</small>';
+        }
+        html += '</td>';
+        html += '<td>' + (t.motif || '-') + '</td>';
+        html += '<td>' + statut + '</td>';
+        html += '<td>' + bouton + '</td>';
+        html += '</tr>';
+      });
+      
+      html += '</table>';
+      document.getElementById('content').innerHTML = html;
+    }
     
     async function annulerTx(id) {
       if (!confirm('Confirmer l\\'annulation ? Si le solde est insuffisant, le solde disponible sera annulé.')) return;
