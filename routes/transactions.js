@@ -479,9 +479,83 @@ router.get('/pending-view', async (req, res) => {
 });
 
 // ==================== ROUTES HTML pour voir toutes les transaction====================
-
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data', async (req, res) => {
+router.get('/data', authUser, async (req, res) => {
+  try {
+    const { client, debut, fin, q, montantMin, montantMax, numero, montant } = req.query;
+    let query = {};
+    
+    if (client) {
+      query = { $or: [{ expediteur: client }, { destinataire: client }] };
+    }
+    
+    if (debut || fin) {
+      query.createdAt = {};
+      if (debut) query.createdAt.$gte = new Date(debut);
+      if (fin) query.createdAt.$lte = new Date(fin + 'T23:59:59');
+    }
+    
+    if (montantMin || montantMax) {
+      query.montant = {};
+      if (montantMin) query.montant.$gte = Number(montantMin);
+      if (montantMax) query.montant.$lte = Number(montantMax);
+    }
+
+    if (montant) {
+      query.montant = Number(montant);
+    }
+
+    if (numero) {
+      query.$or = [
+        { numeroDestination: { $regex: numero, $options: 'i' } },
+        { numeroSource: { $regex: numero, $options: 'i' } }
+      ];
+    }
+    
+    let transactions = await Transaction.find(query)
+     .populate('expediteur', 'nom prenom telephone')
+     .populate('destinataire', 'nom prenom telephone')
+     .sort({ createdAt: -1 })
+     .lean();
+    
+    // ✅ Garde seulement si expediteur existe (retrait/recharge n'ont pas de destinataire)
+    transactions = transactions.filter(t => t.expediteur);
+    
+    // Recherche texte
+    if (q && q.trim() !== '') {
+      const search = q.toLowerCase();
+      transactions = transactions.filter(t => {
+        const expNom = `${t.expediteur?.prenom || ''} ${t.expediteur?.nom || ''}`.toLowerCase();
+        const destNom = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''}`.toLowerCase();
+        const expTel = t.expediteur?.telephone || '';
+        const destTel = t.destinataire?.telephone || '';
+        
+        return expNom.includes(search) || destNom.includes(search) || 
+               expTel.includes(search) || destTel.includes(search) ||
+               (t.operateur || '').toLowerCase().includes(search) ||
+               (t.numeroDestination || '').includes(search) ||
+               (t.numeroSource || '').includes(search);
+      });
+    }
+
+    // ✅ Stats qui comptent TOUS les types
+    const stats = {
+      total: transactions.length,
+      volumeTotal: transactions.reduce((sum, t) => sum + (t.montant || 0), 0),
+      totalRetraits: transactions.filter(t => t.type === 'retrait').length,
+      totalRecharges: transactions.filter(t => t.type === 'recharge').length,
+      totalTransferts: transactions.filter(t => t.type === 'envoi').length
+    };
+
+    res.json({ transactions, stats });
+
+  } catch (err) {
+    console.error('Erreur /data:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+// GET /api/transactions/data - Données pour le tableau avec recherche historique
+router.get('/dataa', async (req, res) => {
   try {
     const { client, debut, fin, q, montantMin, montantMax } = req.query;
     let query = {};
