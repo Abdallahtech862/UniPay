@@ -794,29 +794,23 @@ app.get('/health', (req, res) => res.status(200).json({
 }));
 
 
-const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL || process.env.MONGODB_URI;
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL;
 
-console.log('--- ENV CHECK ---');
-console.log('MONGO_URI présente:', !!process.env.MONGO_URI);
-console.log('MONGO_URL présente:', !!process.env.MONGO_URL);
-console.log('URI utilisée:', MONGO_URI ? MONGO_URI.split('@').pop() : 'AUCUNE !');
-console.log('-----------------');
-
-if (!MONGO_URI) {
-  console.error('❌ AUCUNE URI MONGO TROUVÉE - Arrêt');
-  process.exit(1);
-}
+console.log('Tentative connexion à:', MONGO_URI.replace(/:.*@/, ':****@'));
 
 mongoose.connect(MONGO_URI, {
-  serverSelectionTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
+  serverSelectionTimeoutMS: 5000,
+  directConnection: true,
+  authSource: 'admin'
 })
 .then(() => console.log('✅ Mongo connecté'))
 .catch(err => {
   console.error('❌ Mongo erreur:', err.message);
-  console.error(err.reason || err);
+  console.error('Code:', err.code);
+  setTimeout(() => process.exit(1), 2000);
 });
 
+mongoose.connection.on('error', e => console.error('Mongo event error:', e.message));
 //mongoose.connect(process.env.MONGO_URL).catch(err => console.error('Mongo error:', err.message));
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
