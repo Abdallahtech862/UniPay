@@ -460,43 +460,48 @@ router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici a
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data', async (req, res) => {
+router.get('/data', authUser, async (req, res) => {
   try {
-    const { client, debut, fin, q, montantMin, montantMax } = req.query;
+    const { client, debut, fin, q, montantMin, montantMax, numero, montant } = req.query;
     let query = {};
     
-    // Filtre par client depuis select
     if (client) {
       query = { $or: [{ expediteur: client }, { destinataire: client }] };
     }
     
-    // Filtre par date - utilise createdAt, pas date
     if (debut || fin) {
-      query.createdAt = {}; // ✅ createdAt au lieu de date
+      query.createdAt = {};
       if (debut) query.createdAt.$gte = new Date(debut);
       if (fin) query.createdAt.$lte = new Date(fin + 'T23:59:59');
     }
     
-    // Filtre par montant
     if (montantMin || montantMax) {
       query.montant = {};
       if (montantMin) query.montant.$gte = Number(montantMin);
       if (montantMax) query.montant.$lte = Number(montantMax);
     }
+
+    if (montant) {
+      query.montant = Number(montant);
+    }
+
+    if (numero) {
+      query.$or = [
+        { numeroDestination: { $regex: numero, $options: 'i' } },
+        { numeroSource: { $regex: numero, $options: 'i' } }
+      ];
+    }
     
     let transactions = await Transaction.find(query)
      .populate('expediteur', 'nom prenom telephone')
-     .populate('destinataire', 'nom prenom telephone') // Ne crash pas si null
-     .sort({ createdAt: -1 }) // ✅ createdAt au lieu de date
+     .populate('destinataire', 'nom prenom telephone')
+     .sort({ createdAt: -1 })
      .lean();
     
-    // ❌ SUPPRIME CETTE LIGNE - elle vire les retraits
-    // transactions = transactions.filter(t => t.expediteur && t.destinataire);
-    
-    // ✅ Garde seulement les tx où expediteur existe
+    // ✅ Garde seulement si expediteur existe (retrait/recharge n'ont pas de destinataire)
     transactions = transactions.filter(t => t.expediteur);
     
-    // Recherche texte : nom, téléphone, opérateur, numéro destination
+    // Recherche texte
     if (q && q.trim() !== '') {
       const search = q.toLowerCase();
       transactions = transactions.filter(t => {
@@ -504,16 +509,31 @@ router.get('/data', async (req, res) => {
         const destNom = `${t.destinataire?.prenom || ''} ${t.destinataire?.nom || ''}`.toLowerCase();
         const expTel = t.expediteur?.telephone || '';
         const destTel = t.destinataire?.telephone || '';
-        const operateur = t.operateur || '';
-        const numDest = t.numeroDestination || '';
         
         return expNom.includes(search) || destNom.includes(search) || 
                expTel.includes(search) || destTel.includes(search) ||
-               operateur.toLowerCase().includes(search) || // ✅ Cherche opérateur
-               numDest.includes(search); // ✅ Cherche numéro retrait
+               (t.operateur || '').toLowerCase().includes(search) ||
+               (t.numeroDestination || '').includes(search) ||
+               (t.numeroSource || '').includes(search);
       });
     }
-    
+
+    // ✅ Stats qui comptent TOUS les types
+    const stats = {
+      total: transactions.length,
+      volumeTotal: transactions.reduce((sum, t) => sum + (t.montant || 0), 0),
+      totalRetraits: transactions.filter(t => t.type === 'retrait').length,
+      totalRecharges: transactions.filter(t => t.type === 'recharge').length,
+      totalTransferts: transactions.filter(t => t.type === 'envoi').length
+    };
+
+    res.json({ transactions, stats });
+
+  } catch (err) {
+    console.error('Erreur /data:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
     const volumeTotal = transactions
       .filter(t => t.status !== 'annulee') // ✅ utilise status au lieu de annulee
       .reduce((sum, t) => sum + t.montant, 0);
@@ -901,154 +921,51 @@ router.get('/dashboard', async (req, res) => {
 </body>
 </html>`);
 });
-
-router.get('/', async (req, res) => {
-  try {
-    const clients = await Client.find().select('nom prenom').lean();
-    let optionsClients = '<option value="">Tous les clients</option>';
-    clients.forEach(c => {
-      optionsClients += `<option value="${c._id}">${c.prenom} ${c.nom}</option>`;
-    });
-
-    res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Historique Transactions</title>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: Arial; padding: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #007bff; color: white; }
-    tr:nth-child(even) { background: #f2f2f2; }
-    tr.annulee { opacity: 0.5; background: #ffe6e6; }
-    tr.partielle { background: #fff3cd; }
-   .montant { color: #28a745; font-weight: bold; }
-   .solde-apres { color: #6c757d; font-size: 12px; }
-   .filtres { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    select, input, button { padding: 8px; }
-   .actions button { margin: 5px; color: white; border: none; cursor: pointer; }
-   .print { background: #6c757d; }.csv { background: #17a2b8; }.pdf { background: #dc3545; }
-   .btn-annuler { background: #dc3545; padding: 5px 10px; border-radius: 3px; color: white; border: none; cursor: pointer; }
-   .badge-ok { color: #28a745; font-weight: bold; }
-   .badge-ko { color: #dc3545; font-weight: bold; }
-   .badge-partiel { color: #f59e0b; font-weight: bold; }
-    @media print {.filtres,.actions, a, .btn-annuler { display: none; } }
-  </style>
-</head>
-<body>
-  <h2>Historique des transactions</h2>
-  <a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a>| <a href="/api/transactions/pending-view">Transactions en attente</a>
+function renderTable(transactions) {
+  if (!transactions || transactions.length === 0) {
+    document.getElementById('content').innerHTML = 'Aucune transaction';
+    return;
+  }
   
-  <div class="filtres">
-    <select id="filterClient">${optionsClients}</select>
-    <input type="text" id="filterNumero" placeholder="Rechercher par numéro">
-    <input type="number" id="filterMontant" placeholder="Montant exact">
-    <input type="date" id="dateDebut">
-    <input type="date" id="dateFin">
-    <button onclick="loadTransactions()">Filtrer</button>
-    <button onclick="resetFiltres()">Reset</button>
-  </div>
-
-  <div class="actions">
-    <button class="print" onclick="window.print()">Imprimer</button>
-    <button class="csv" onclick="exportCSV()">Export CSV</button>
-    <button class="pdf" onclick="exportPDF()">Export PDF</button>
-  </div>
-  <div id="stats"></div>
-  <div id="content">Chargement...</div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-  <script>
-    const token = localStorage.getItem('token');
-    if (!token) window.location.href = '/api/auth/login';
-    let currentTransactions = [];
+  let html = '<table><tr><th>Date</th><th>Type</th><th>Expéditeur</th><th>Destinataire / Numéro</th><th>Montant</th><th>Frais</th><th>Statut</th><th>Action</th></tr>';
+  
+  transactions.forEach(t => {
+    if (!t.expediteur) return; // garde seulement ce check
     
-    async function loadTransactions() {
-      try {
-        const clientId = document.getElementById('filterClient').value;
-        const numero = document.getElementById('filterNumero').value;
-        const montant = document.getElementById('filterMontant').value;
-        const dateDebut = document.getElementById('dateDebut').value;
-        const dateFin = document.getElementById('dateFin').value;
-        
-        let url = '/api/transactions/data?';
-        if (clientId) url += 'client=' + clientId + '&';
-        if (numero) url += 'numero=' + numero + '&';
-        if (montant) url += 'montant=' + montant + '&';
-        if (dateDebut) url += 'debut=' + dateDebut + '&';
-        if (dateFin) url += 'fin=' + dateFin;
-        
-        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-        if (res.status === 401 || res.status === 403) {
-          localStorage.removeItem('token');
-          window.location.href = '/api/auth/login';
-          return;
-        }
-        
-        const data = await res.json();
-        currentTransactions = data.transactions;
-        renderTable(data.transactions);
-        renderStats(data.stats);
-      } catch (err) {
-        document.getElementById('content').innerHTML = 'Erreur: ' + err.message;
-      }
-    }
+    const date = new Date(t.createdAt).toLocaleString('fr-FR');
+    const estRetrait = t.type === 'retrait';
+    const estRecharge = t.type === 'recharge';
     
-    function renderStats(stats) {
-      document.getElementById('stats').innerHTML = '<p><b>Total:</b> ' + stats.total + ' | <b>Volume:</b> ' + stats.volumeTotal.toLocaleString() + ' FCFA</p>';
-    }
+    let typeBadge = t.type;
+    if (estRetrait) typeBadge = 'Retrait ' + (t.operateur || '');
+    if (estRecharge) typeBadge = 'Recharge ' + (t.operateur || '');
     
-    function renderTable(transactions) {
-      if (!transactions || transactions.length === 0) {
-        document.getElementById('content').innerHTML = 'Aucune transaction';
-        return;
-      }
-      
-      let html = '<table><tr><th>Date</th><th>Expéditeur</th><th>Tél Exp.</th><th>Solde Exp.</th><th>Destinataire</th><th>Tél Dest.</th><th>Solde Dest.</th><th>Montant</th><th>Motif</th><th>Statut</th><th>Action</th></tr>';
-      
-      transactions.forEach(t => {
-        if (!t.expediteur || !t.destinataire) return;
-        
-        const date = new Date(t.createdAt).toLocaleString('fr-FR');
-        const peutAnnuler = !t.annulee && t.status === 'validee';
-        
-        let statut = '<span class="badge-ok">VALIDÉE</span>';
-        let rowClass = '';
-        
-        if (t.annulee) {
-          statut = t.montantAnnule < t.montant ? '<span class="badge-partiel">ANNULÉE PARTIELLE</span>' : '<span class="badge-ko">ANNULÉE</span>';
-          rowClass = t.montantAnnule < t.montant ? ' class="partielle"' : ' class="annulee"';
-        }
-        
-        let bouton = '-';
-        if (peutAnnuler) {
-          bouton = '<button class="btn-annuler" onclick="annulerTx(\\'' + t._id + '\\')">Annuler</button>';
-        }
-        
-        html += '<tr' + rowClass + '>';
-        html += '<td>' + date + '</td>';
-        html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '</td>';
-        html += '<td>' + t.expediteur.telephone + '</td>';
-        html += '<td class="solde-apres">' + (t.soldeExpediteurApres?.toLocaleString() || '0') + ' FCFA</td>';
-        html += '<td>' + t.destinataire.prenom + ' ' + t.destinataire.nom + '</td>';
-        html += '<td>' + t.destinataire.telephone + '</td>';
-        html += '<td class="solde-apres">' + (t.soldeDestinataireApres?.toLocaleString() || '0') + ' FCFA</td>';
-        html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA';
-        if (t.annulee && t.montantAnnule < t.montant) {
-          html += '<br><small>Annulé: ' + t.montantAnnule.toLocaleString() + ' FCFA</small>';
-        }
-        html += '</td>';
-        html += '<td>' + (t.motif || '-') + '</td>';
-        html += '<td>' + statut + '</td>';
-        html += '<td>' + bouton + '</td>';
-        html += '</tr>';
-      });
-      
-      html += '</table>';
-      document.getElementById('content').innerHTML = html;
-    }
+    let destAffichage = '-';
+    if (estRetrait) destAffichage = t.numeroDestination + ' (' + t.operateur + ')';
+    else if (estRecharge) destAffichage = t.numeroSource || t.operateur;
+    else if (t.destinataire) destAffichage = t.destinataire.prenom + ' ' + t.destinataire.nom + '<br>' + t.destinataire.telephone;
     
+    let statut = t.status;
+    if (t.status === 'validee' || t.status === 'reussie') statut = '<span class="badge-ok">VALIDÉE</span>';
+    if (t.status === 'en_attente') statut = '<span style="color:orange">EN ATTENTE</span>';
+    if (t.status === 'annulee' || t.status === 'echouee') statut = '<span class="badge-ko">'+t.status.toUpperCase()+'</span>';
+    
+    html += '<tr>';
+    html += '<td>' + date + '</td>';
+    html += '<td>' + typeBadge + '</td>';
+    html += '<td>' + t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><small>' + t.expediteur.telephone + '</small><br><small class="solde-apres">Solde: ' + (t.soldeExpediteurApres||0).toLocaleString() + '</small></td>';
+    html += '<td>' + destAffichage + '</td>';
+    html += '<td class="montant">' + t.montant.toLocaleString() + ' FCFA</td>';
+    html += '<td>' + (t.frais||0) + ' F</td>';
+    html += '<td>' + statut + '</td>';
+    html += '<td>' + (t.status === 'validee' ? '<button class="btn-annuler" onclick="annulerTx(\''+t._id+'\')">Annuler</button>' : '-') + '</td>';
+    html += '</tr>';
+  });
+  
+  html += '</table>';
+  document.getElementById('content').innerHTML = html;
+}
+  
     async function annulerTx(id) {
       if (!confirm('Confirmer l\\'annulation ? Si le solde est insuffisant, le solde disponible sera annulé.')) return;
       const res = await fetch('/api/transactions/' + id + '/cancel', {
