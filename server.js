@@ -923,5 +923,6 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // Export io pour l'utiliser dans tes routes
-module.exports.io = io;
-module.exports.onlineUsers = onlineUsers;
+//module.exports.io = io;
+//module.exports.onlineUsers = onlineUsers;
+module.exports = { app, server, io, onlineUsers };
