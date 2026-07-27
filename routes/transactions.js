@@ -1285,7 +1285,7 @@ router.post('/', authUser, async (req, res) => {
         tx: {
          ...tx._doc,
           type: 'reception',
-          contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone }
+          contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil }
         }
       };
 
@@ -1301,7 +1301,7 @@ router.post('/', authUser, async (req, res) => {
         tx: {
          ...tx._doc,
           type: 'envoi',
-          contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone }
+          contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil }
         }
       };
 
@@ -1322,9 +1322,9 @@ router.post('/', authUser, async (req, res) => {
       console.error('Erreur notif socket pdf:', e.message, e.stack);
     }
 
-    res.json(tx);
+   // res.json(tx);
     //fin
-    await session.commitTransaction();
+    //await session.commitTransaction();
 
     // 9. NOTIFS HORS TX
     if (exp.expoPushToken) {
@@ -1358,7 +1358,7 @@ router.post('/', authUser, async (req, res) => {
     });
 
   } catch (err) {
-    await session.abortTransaction();
+    //await session.abortTransaction();
     console.error('Erreur transfert:', err.message);
     res.status(400).json({ error: err.message });
   } finally {
