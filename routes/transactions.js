@@ -1285,7 +1285,7 @@ router.post('/', authUser, async (req, res) => {
         tx: {
          ...tx._doc,
           type: 'reception',
-          contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone,photoProfil: exp.photoProfil  }
+          contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone }
         }
       };
 
@@ -1301,7 +1301,7 @@ router.post('/', authUser, async (req, res) => {
         tx: {
          ...tx._doc,
           type: 'envoi',
-          contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone,photoProfil: dest.photoProfil  }
+          contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone }
         }
       };
 
