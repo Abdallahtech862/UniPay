@@ -1148,6 +1148,10 @@ router.get('/', async (req, res) => {
 
 router.post('/', authUser, async (req, res) => {
   const session = await mongoose.startSession();
+  //
+  const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
+  const Message = require('../models/Message'); 
+  //
   session.startTransaction();
 
   try {
@@ -1262,7 +1266,69 @@ router.post('/', authUser, async (req, res) => {
       soldeDestinataireApres: dest.solde,
       volumeRecuMoisApres: dest.totalRecuMois
     }], { session });
-
+    // Notification du chat
+    try {
+      const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    
+      // 1. REÇU POUR LE DESTINATAIRE (type: reception)
+      const recuDestinataire = {
+        id: transaction._id.toString() + '_dest',
+        type: 'pdf',
+        name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
+        size: `${(Math.random()*100+50).toFixed(0)} KB`,
+        from: transaction.expediteurId, // c'est l'expediteur qui envoie
+        to: transaction.destinataireId,
+        time,
+        status: 'delivered',
+        tx: {
+          ...transaction._doc,
+          type: 'reception', // important pour ton filtre dans loadChat
+          contact: { _id: transaction.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
+        }
+      };
+    
+      // 2. REÇU POUR L'EXPEDITEUR (type: envoi)
+      const recuExpediteur = {
+        id: transaction._id.toString() + '_exp',
+        type: 'pdf',
+        name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
+        size: `${(Math.random()*100+50).toFixed(0)} KB`,
+        from: transaction.expediteurId,
+        to: transaction.destinataireId,
+        time,
+        status: 'read', // pour l'expediteur c'est déjà lu
+        tx: {
+          ...transaction._doc,
+          type: 'envoi',
+          contact: { _id: transaction.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
+        }
+      };
+    
+      // SAUVEGARDE EN BASE POUR HISTORIQUE (optionnel mais recommandé)
+      await Message.create([recuDestinataire, recuExpediteur]);
+    
+      // ENVOI SOCKET TEMPS REEL
+      const destSocketId = onlineUsers.get(transaction.destinataireId);
+      const expSocketId = onlineUsers.get(transaction.expediteurId);
+    
+      if (destSocketId) {
+        io.to(destSocketId).emit('new_message', recuDestinataire);
+        console.log(`📄 Reçu envoyé à destinataire ${transaction.destinataireId}`);
+      }
+    
+      if (expSocketId) {
+        io.to(expSocketId).emit('new_message', recuExpediteur);
+        console.log(`📄 Reçu envoyé à expéditeur ${transaction.expediteurId}`);
+      }
+    
+      // Si l'utilisateur est hors ligne, il le verra au prochain loadChat via userHistorique + Message
+    
+    } catch (e) {
+      console.error('Erreur notif socket pdf:', e.message);
+    }
+    
+    res.json(transaction);
+    //fin
     await session.commitTransaction();
 
     // 9. NOTIFS HORS TX
