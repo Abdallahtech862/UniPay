@@ -1150,7 +1150,7 @@ router.post('/', authUser, async (req, res) => {
   const session = await mongoose.startSession();
   //
   const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
-  const Message = require('../models/Message'); 
+  //const Message = require('../models/Message'); 
   //
   session.startTransaction();
 
@@ -1305,7 +1305,7 @@ router.post('/', authUser, async (req, res) => {
       };
     
       // SAUVEGARDE EN BASE POUR HISTORIQUE (optionnel mais recommandé)
-      await Message.create([recuDestinataire, recuExpediteur]);
+     // await Message.create([recuDestinataire, recuExpediteur]);
     
       // ENVOI SOCKET TEMPS REEL
       const destSocketId = onlineUsers.get(transaction.destinataireId);
