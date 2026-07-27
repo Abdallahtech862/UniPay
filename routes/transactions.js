@@ -1249,7 +1249,7 @@ router.post('/', authUser, async (req, res) => {
     if (fraisDestinataire > 0) await admin.save({ session });
 
         // 8. TRANSACTION AUDIT
-    const [tx] = await Transaction.create([{
+        const [tx] = await Transaction.create([{
       expediteur: exp._id,
       destinataire: dest._id,
       montant: montantInt,
@@ -1267,64 +1267,60 @@ router.post('/', authUser, async (req, res) => {
       volumeRecuMoisApres: dest.totalRecuMois
     }], { session });
 
-    // Notification du chat - CORRIGE
+    await session.commitTransaction();
+    //session.endSession();
+
+    // NOTIF APRES COMMIT
     try {
       const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const now = Date.now();
+      const iso = new Date().toISOString();
       const expediteurId = tx.expediteur.toString();
       const destinataireId = tx.destinataire.toString();
 
       const recuDestinataire = {
         id: tx._id.toString() + '_dest',
         type: 'pdf',
-        name: `Reception_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
+        name: `Reception_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
         from: expediteurId,
         to: destinataireId,
-        time,
+        time, timestamp: now, createdAt: iso,
         status: 'delivered',
-        tx: {
-         ...tx._doc,
-          type: 'reception',
-          contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil }
-        }
+        contactMeta: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
+        tx: {...tx._doc, type: 'reception', contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
       };
 
       const recuExpediteur = {
         id: tx._id.toString() + '_exp',
         type: 'pdf',
-        name: `Envoi_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
+        name: `Envoi_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
         from: expediteurId,
         to: destinataireId,
-        time,
+        time, timestamp: now, createdAt: iso,
         status: 'read',
-        tx: {
-         ...tx._doc,
-          type: 'envoi',
-          contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil }
-        }
+        contactMeta: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
+        tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
       };
 
       const destSocketId = onlineUsers.get(destinataireId);
       const expSocketId = onlineUsers.get(expediteurId);
 
-      if (destSocketId) {
-        io.to(destSocketId).emit('new_message', recuDestinataire);
-        console.log(`📄 Reçu envoyé à destinataire ${destinataireId}`);
-      }
+      console.log('ONLINE USERS:', Array.from(onlineUsers.keys()), 'dest:', destinataireId, 'exp:', expediteurId);
+      console.log('SOCKETS:', destSocketId, expSocketId);
 
-      if (expSocketId) {
-        io.to(expSocketId).emit('new_message', recuExpediteur);
-        console.log(`📄 Reçu envoyé à expéditeur ${expediteurId}`);
-      }
+      if (destSocketId) io.to(destSocketId).emit('new_message', recuDestinataire);
+      if (expSocketId) io.to(expSocketId).emit('new_message', recuExpediteur);
 
-    } catch (e) {
-      console.error('Erreur notif socket pdf:', e.message, e.stack);
-    }
+    } catch (e) { console.error('Erreur notif:', e.message); }
 
-   // res.json(tx);
-    //fin
-    //await session.commitTransaction();
+    return res.json(tx);
+  } catch (err) {
+    if (session.inTransaction()) await session.abortTransaction();
+    session.endSession();
+    return res.status(400).json({ error: err.message });
+  }
 
     // 9. NOTIFS HORS TX
     if (exp.expoPushToken) {
