@@ -1322,7 +1322,7 @@ router.post('/', authUser, async (req, res) => {
       console.error('Erreur notif socket pdf:', e.message, e.stack);
     }
 
-    //res.json(tx);
+    res.json(tx);
     //fin
     await session.commitTransaction();
 
