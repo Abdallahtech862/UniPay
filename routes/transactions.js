@@ -1291,7 +1291,7 @@ router.post('/', authUser, async (req, res) => {
       const recuExpediteur = {
         id: tx._id.toString() + '_exp',
         type: 'pdf',
-        name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
+        name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
         from: tx.expediteur,
         to: tx.destinataire,
