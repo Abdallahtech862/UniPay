@@ -1310,9 +1310,11 @@ router.post('/', authUser, async (req, res) => {
       // ENVOI SOCKET TEMPS REEL
       const destSocketId = onlineUsers.get(tx.destinataire);
       const expSocketId = onlineUsers.get(tx.expeditaur);
+      
       console.log('expeditaireID',tx.expediteur);
       console.log('destinataireID',tx.destinataire);
       console.log('expSocketId',expSocketId);
+      console.log('destSocketId',destSocketId);
       if (destSocketId) {
         io.to(destSocketId).emit('new_message', recuDestinataire);
         console.log(`📄 Reçu envoyé à destinataire ${tx.destinataire}`);
