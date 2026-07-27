@@ -1272,35 +1272,35 @@ router.post('/', authUser, async (req, res) => {
     
       // 1. REÇU POUR LE DESTINATAIRE (type: reception)
       const recuDestinataire = {
-        id: transaction._id.toString() + '_dest',
+        id: Transaction._id.toString() + '_dest',
         type: 'pdf',
-        name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
+        name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${Transaction.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: transaction.expediteurId, // c'est l'expediteur qui envoie
-        to: transaction.destinataireId,
+        from: Transaction.expediteurId, // c'est l'expediteur qui envoie
+        to: Transaction.destinataireId,
         time,
         status: 'delivered',
         tx: {
-          ...transaction._doc,
+          ...Transaction._doc,
           type: 'reception', // important pour ton filtre dans loadChat
-          contact: { _id: transaction.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
+          contact: { _id: Transaction.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
         }
       };
     
       // 2. REÇU POUR L'EXPEDITEUR (type: envoi)
       const recuExpediteur = {
-        id: transaction._id.toString() + '_exp',
+        id: Transaction._id.toString() + '_exp',
         type: 'pdf',
-        name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
+        name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${Transaction.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: transaction.expediteurId,
-        to: transaction.destinataireId,
+        from: Transaction.expediteurId,
+        to: Transaction.destinataireId,
         time,
         status: 'read', // pour l'expediteur c'est déjà lu
         tx: {
-          ...transaction._doc,
+          ...Transaction._doc,
           type: 'envoi',
-          contact: { _id: transaction.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
+          contact: { _id: Transaction.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
         }
       };
     
@@ -1313,12 +1313,12 @@ router.post('/', authUser, async (req, res) => {
     
       if (destSocketId) {
         io.to(destSocketId).emit('new_message', recuDestinataire);
-        console.log(`📄 Reçu envoyé à destinataire ${transaction.destinataireId}`);
+        console.log(`📄 Reçu envoyé à destinataire ${Transaction.destinataireId}`);
       }
     
       if (expSocketId) {
         io.to(expSocketId).emit('new_message', recuExpediteur);
-        console.log(`📄 Reçu envoyé à expéditeur ${transaction.expediteurId}`);
+        console.log(`📄 Reçu envoyé à expéditeur $Ttransaction.expediteurId}`);
       }
     
       // Si l'utilisateur est hors ligne, il le verra au prochain loadChat via userHistorique + Message
@@ -1327,7 +1327,7 @@ router.post('/', authUser, async (req, res) => {
       console.error('Erreur notif socket pdf:', e.message);
     }
     
-    res.json(transaction);
+    res.json(Transaction);
     //fin
     await session.commitTransaction();
 
