@@ -16,6 +16,15 @@ process.on('uncaughtException', (err) => {
   console.error('FATAL:', err.message);
 });
 
+// ================== TES ROUTES EXISTANTES ==================
+app.use('/api/legal', require('./routes/legal'));
+app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/cards', require('./routes/cards'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
+app.use('/api/pawapay', require('./routes/pawapay'));
 
 // ================== NOUVEAUX MODELS POUR CHAT ==================
 const MessageSchema = new mongoose.Schema({
@@ -27,7 +36,9 @@ const MessageSchema = new mongoose.Schema({
   image: String,
   audio: String,
   status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  // Optionnel : Permet de stocker la structure complète pour les reçus PDF de transactions
+  tx: { type: Object } 
 });
 const Message = mongoose.model('Message', MessageSchema);
 
@@ -38,57 +49,109 @@ const io = new Server(server, {
   maxHttpBufferSize: 10e6 // 10MB pour audio/image
 });
 
-// En mémoire pour le temps réel (rapide)
-const onlineUsers = new Map(); // userId -> Set<socketId>
-module.exports = { app, server, io, onlineUsers };
+// Partage dans le scope global pour que vos fichiers de routes y accèdent directement
+global.io = io;
+global.onlineUsers = new Map(); // userId -> socketId
 
 io.on('connection', (socket) => {
   console.log('Socket connecté:', socket.id);
 
-  // 1. USER EN LIGNE
-    socket.on('user_online', async ({ userId }) => {
-    const uid = userId.toString(); // FIX ICI
-    onlineUsers.set(uid, socket.id);
-    socket.userId = uid;
-    console.log(`✓ ${uid} en ligne | TOTAL: ${onlineUsers.size}`);
+  // 1. USER EN LIGNE + LIVRAISON DES MESSAGES EN ATTENTE (Text, Audio, Image, PDF)
+  socket.on('user_online', async ({ userId }) => {
+    if (!userId) return;
+    
+    global.onlineUsers.set(userId, socket.id);
+    socket.userId = userId;
+    console.log(`✓ ${userId} en ligne`);
+    
+    // Notifie ses contacts qu'il est online
+    socket.broadcast.emit('user_status', { userId, status: 'online' });
+    
+    try {
+      // Récupérer TOUS les messages non livrés destinés à cet utilisateur
+      const undelivered = await Message.find({ to: userId, status: 'sent' });
+      
+      for (const msg of undelivered) {
+        // Envoi du message (qu'il soit du texte, une image, un audio ou un pdf)
+        io.to(socket.id).emit('new_message', msg);
+        
+        // Mise à jour du statut dans la base de données
+        msg.status = 'delivered';
+        await msg.save();
+        
+        // Notifier l'expéditeur d'origine si lui aussi est en ligne (Passage à la double coche grise)
+        const fromSocketId = global.onlineUsers.get(msg.from);
+        if (fromSocketId) {
+          io.to(fromSocketId).emit('message_status', { messageId: msg.id, status: 'delivered' });
+        }
+      }
+    } catch (err) {
+      console.error('Erreur lors de la distribution des messages hors-ligne:', err.message);
+    }
   });
 
   // 2. TYPING / RECORDING AUDIO
   socket.on('typing', ({ to, state }) => {
-  const toSocketId = onlineUsers.get(to.toString()); // FIX
-  if (toSocketId) io.to(toSocketId).emit('typing', { from: socket.userId, state });
-});
+    const toSocketId = global.onlineUsers.get(to);
+    if (toSocketId) {
+      io.to(toSocketId).emit('typing', { from: socket.userId, state });
+    }
+  });
 
   // 3. ENVOI MESSAGE + TRANSFERT PDF
   socket.on('send_message', async (data) => {
-  const toId = data.to.toString();
-  const fromId = data.from.toString();
-  const toSocketId = onlineUsers.get(toId);
-  // ...
-});
-  // 4. DOUBLE COCHE BLEUE
-  socket.on('message_read', async ({ from, messageId }) => {
-    await Message.updateOne({ id: messageId }, { status: 'read' });
-    const fromSocketId = onlineUsers.get(from);
-    if (fromSocketId) {
-      io.to(fromSocketId).emit('message_status', { messageId, status: 'read' });
+    // data: { id, from, to, type, content, image, audio, time, tx }
+    try {
+      // Sauvegarde systématique dans MongoDB (Garantit la persistence si le destinataire dort)
+      const msg = await Message.create({
+        ...data,
+        status: 'sent'
+      });
+
+      const toSocketId = global.onlineUsers.get(data.to);
+
+      // Confirmation immédiate à l'expéditeur (1 coche grise)
+      socket.emit('message_status', { messageId: data.id, status: 'sent' });
+
+      // Si le destinataire est connecté, on lui transmet en direct
+      if (toSocketId) {
+        io.to(toSocketId).emit('new_message', msg);
+        msg.status = 'delivered';
+        await msg.save();
+        
+        // Confirmation immédiate de réception à l'expéditeur (Double coche grise)
+        socket.emit('message_status', { messageId: data.id, status: 'delivered' });
+      }
+    } catch (e) { 
+      console.error('Erreur send_message:', e.message); 
     }
+  });
+
+  // 4. DOUBLE COCHE BLEUE (LU)
+  socket.on('message_read', async ({ from, messageId }) => {
+    try {
+      await Message.updateOne({ id: messageId }, { status: 'read' });
+      const fromSocketId = global.onlineUsers.get(from);
+      if (fromSocketId) {
+        io.to(fromSocketId).emit('message_status', { messageId, status: 'read' });
+      }
+    } catch (e) { console.error(e); }
   });
 
   socket.on('message_delivered', async ({ from, messageId }) => {
-    await Message.updateOne({ id: messageId }, { status: 'delivered' });
-    const fromSocketId = onlineUsers.get(from);
-    if (fromSocketId) {
-      io.to(fromSocketId).emit('message_status', { messageId, status: 'delivered' });
-    }
+    try {
+      await Message.updateOne({ id: messageId }, { status: 'delivered' });
+      const fromSocketId = global.onlineUsers.get(from);
+      if (fromSocketId) {
+        io.to(fromSocketId).emit('message_status', { messageId, status: 'delivered' });
+      }
+    } catch (e) { console.error(e); }
   });
 
   // 5. TRANSFERT D'ARGENT EN TEMPS REEL
-  // Tu peux appeler ça depuis ta route /api/transactions
   socket.on('transfer_done', ({ to, transaction }) => {
-    const toSocketId = onlineUsers.get(to);
+    const toSocketId = global.onlineUsers.get(to);
     if (toSocketId) {
-      // Envoie le reçu PDF directement dans le chat
       io.to(toSocketId).emit('new_message', {
         id: transaction.id,
         type: 'pdf',
@@ -102,7 +165,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (socket.userId) {
-      onlineUsers.delete(socket.userId);
+      global.onlineUsers.delete(socket.userId);
       socket.broadcast.emit('user_status', { 
         userId: socket.userId, 
         status: 'offline', 
@@ -112,7 +175,6 @@ io.on('connection', (socket) => {
     }
   });
 });
-module.exports = { app, server, io, onlineUsers };
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -876,28 +938,26 @@ const html = `<!DOCTYPE html>
 </body>
 </html>`;
 app.get('/', (req, res) => { res.set('Content-Type', 'text/html'); res.send(html); });
-app.get('/health', (req, res) => res.status(200).json({ status: 'OK', online: onlineUsers.size, db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected' }));
+
+app.get('/health', (req, res) => 
+  res.status(200).json({ 
+    status: 'OK', 
+    online: global.onlineUsers ? global.onlineUsers.size : 0, 
+    db: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected' 
+  })
+);
 
 // ================== CONNEXION MONGO + LANCEMENT ==================
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGO_URL;
-mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 }).then(() => console.log('✅ Mongo connecté')).catch(err => console.error('❌ Mongo erreur:', err.message));
+mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 })
+  .then(() => console.log('✅ Mongo connecté'))
+  .catch(err => console.error('❌ Mongo erreur:', err.message));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 UniPay Server + Socket sur port ${PORT}`);
 });
 
-// ================== TES ROUTES EXISTANTES ==================
-app.use('/api/legal', require('./routes/legal'));
-app.use('/api/transactions', require('./routes/transactions'));
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/wallet', require('./routes/wallet'));
-app.use('/api/cards', require('./routes/cards'));
-app.use('/api/clients', require('./routes/clients'));
-app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
-app.use('/api/pawapay', require('./routes/pawapay'));
-
-// Export io pour l'utiliser dans tes routes
-//module.exports.io = io;
-//module.exports.onlineUsers = onlineUsers;
-
+// Exports de secours pour la rétrocompatibilité
+module.exports.io = io;
+module.exports.onlineUsers = global.onlineUsers;
