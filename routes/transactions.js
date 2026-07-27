@@ -1152,7 +1152,7 @@ router.post('/', authUser, async (req, res) => {
   const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
   //const Message = require('../models/Message'); 
   //
-  session.startTransaction();
+  //session.startTransaction();
 
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
@@ -1276,31 +1276,31 @@ router.post('/', authUser, async (req, res) => {
         type: 'pdf',
         name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: tx.expediteurId, // c'est l'expediteur qui envoie
-        to: transaction.destinataireId,
+        from: tx.expediteur, // c'est l'expediteur qui envoie
+        to: tx.destinataire,
         time,
         status: 'delivered',
         tx: {
           ...tx._doc,
           type: 'reception', // important pour ton filtre dans loadChat
-          contact: { _id: tx.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
+          contact: { _id: tx.expediteur, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
         }
       };
     
       // 2. REÇU POUR L'EXPEDITEUR (type: envoi)
       const recuExpediteur = {
-        id: transaction._id.toString() + '_exp',
+        id: tx._id.toString() + '_exp',
         type: 'pdf',
         name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: transaction.expediteurId,
-        to: tx.destinataireId,
+        from: tx.expediteur,
+        to: tx.destinataire,
         time,
         status: 'read', // pour l'expediteur c'est déjà lu
         tx: {
-          ...transaction._doc,
+          ...tx._doc,
           type: 'envoi',
-          contact: { _id: tx.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
+          contact: { _id: tx.destinataire, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
         }
       };
     
@@ -1308,17 +1308,17 @@ router.post('/', authUser, async (req, res) => {
      // await Message.create([recuDestinataire, recuExpediteur]);
     
       // ENVOI SOCKET TEMPS REEL
-      const destSocketId = onlineUsers.get(tx.destinataireId);
-      const expSocketId = onlineUsers.get(tx.expediteurId);
+      const destSocketId = onlineUsers.get(tx.destinataire);
+      const expSocketId = onlineUsers.get(tx.expediteur);
     
       if (destSocketId) {
         io.to(destSocketId).emit('new_message', recuDestinataire);
-        console.log(`📄 Reçu envoyé à destinataire ${tx.destinataireId}`);
+        console.log(`📄 Reçu envoyé à destinataire ${tx.destinataire}`);
       }
     
       if (expSocketId) {
         io.to(expSocketId).emit('new_message', recuExpediteur);
-        console.log(`📄 Reçu envoyé à expéditeur ${tx.expediteurId}`);
+        console.log(`📄 Reçu envoyé à expéditeur ${tx.expediteur}`);
       }
     
       // Si l'utilisateur est hors ligne, il le verra au prochain loadChat via userHistorique + Message
