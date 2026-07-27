@@ -1144,21 +1144,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ==================== ROUTES pour effectuer des transfert B2B avec lapplication====================
+// ==================== ROUTE TRANSFERT B2B CORRIGEE ====================
+const { io, onlineUsers } = require('../server'); // METS LE EN HAUT DU FICHIER, pas dans la route
 
 router.post('/', authUser, async (req, res) => {
   const session = await mongoose.startSession();
-  //
-  const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
-  //const Message = require('../models/Message'); 
-  //
   session.startTransaction();
 
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
     const montantInt = Number(montant);
 
-    // 1. VALIDATION DE BASE
+    // 1. VALIDATION
     if (!Number.isInteger(montantInt) || montantInt <= 0) throw new Error('Montant invalide');
     if (montantInt > 2000000) throw new Error('Plafond de 2 000 000 FCFA dépassé');
     if (req.user.id !== expediteur) throw new Error('Tu ne peux transférer que depuis ton compte');
@@ -1168,76 +1165,57 @@ router.post('/', authUser, async (req, res) => {
     const [exp, dest, admin] = await Promise.all([
       Client.findById(expediteur).session(session),
       Client.findById(destinataire).session(session),
-      Client.findOne({ telephone: '+22670000000' }).session(session) // COMPTE ADMIN
+      Client.findOne({ telephone: '+22670000000' }).session(session)
     ]);
 
     if (!exp) throw new Error('Compte expéditeur introuvable');
     if (!dest) throw new Error('Compte destinataire introuvable');
-    if (!admin) throw new Error('Compte destinataire +22670000000 introuvable');
-    if (exp.bloque) throw new Error('Compte suspendu. Contacte le support');
+    if (!admin) throw new Error('Compte admin +22670000000 introuvable');
+    if (exp.bloque) throw new Error('Compte suspendu');
     if (dest.bloque) throw new Error('Destinataire suspendu');
 
     // 3. KYC
     if (!exp.isVerified || exp.verificationStatus !== 'verifie') {
-      if (montantInt > 50000) {
-        throw new Error('KYC non vérifié : tu ne peux envoyer que 50 000 FCFA max. Envoie ta CNIB dans Profil pour débloquer 2M');
-      }
+      if (montantInt > 50000) throw new Error('KYC non vérifié : max 50 000 FCFA');
     }
-    if (dest.verificationStatus === 'rejete') throw new Error('Destinataire rejeté KYC, transfert impossible');
 
     // 4. RESET LIMITES
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const isNewMonth = !exp.dernierResetJour || exp.dernierResetJour.getMonth() !== now.getMonth() || exp.dernierResetJour.getFullYear() !== now.getFullYear();
 
-    if (!exp.dernierResetJour || exp.dernierResetJour < todayStart) {
-      exp.totalDepotJour = 0;
-    }
-    if (isNewMonth) {
-      exp.totalDepotMois = 0;
-      exp.dernierResetJour = now;
-    }
-    // Reset réception destinataire
+    if (!exp.dernierResetJour || exp.dernierResetJour < todayStart) exp.totalDepotJour = 0;
+    if (isNewMonth) { exp.totalDepotMois = 0; exp.dernierResetJour = now; }
+    
     const isNewMonthDest = !dest.dernierResetRecuMois || dest.dernierResetRecuMois.getMonth() !== now.getMonth() || dest.dernierResetRecuMois.getFullYear() !== now.getFullYear();
-    if (isNewMonthDest) {
-      dest.totalRecuMois = 0;
-      dest.dernierResetRecuMois = now;
-    }
+    if (isNewMonthDest) { dest.totalRecuMois = 0; dest.dernierResetRecuMois = now; }
 
-    // 5. CALCUL FRAIS - NOUVELLE LOGIQUE UNIPAY
+    // 5. FRAIS
     const SEUIL_GRATUIT_RECEPTION = 200000;
-    const TAUX_FRAIS_RECEPTION = 0.005; // 0.5%
-
-    let fraisExpediteur = 0;
+    const TAUX_FRAIS_RECEPTION = 0.005;
     let fraisDestinataire = 0;
-
-    // On vérifie si le destinataire a déjà dépassé le seuil
     const volumeApres = (dest.totalRecuMois || 0) + montantInt;
 
     if (volumeApres > SEUIL_GRATUIT_RECEPTION) {
       if (dest.totalRecuMois >= SEUIL_GRATUIT_RECEPTION) {
-        // Déjà au dessus : frais sur tout le montant
         fraisDestinataire = Math.round(montantInt * TAUX_FRAIS_RECEPTION);
       } else {
-        // C'est ce transfert qui fait dépasser : frais seulement sur le dépassement
         const depassement = volumeApres - SEUIL_GRATUIT_RECEPTION;
         fraisDestinataire = Math.round(depassement * TAUX_FRAIS_RECEPTION);
       }
     }
-
-    const totalDebitExp = montantInt + fraisExpediteur; // = montantInt car 0%
+    const fraisExpediteur = 0;
     const montantNetRecu = montantInt - fraisDestinataire;
 
-    // 6. CHECKS SOLDE ET LIMITES ENVOI
-    if (exp.solde < totalDebitExp) throw new Error(`Solde insuffisant. Solde: ${exp.solde.toLocaleString()} FCFA`);
-    if ((exp.totalDepotJour + montantInt) > exp.limiteJournaliere) throw new Error(`Limite journalière dépassée. Restant: ${(exp.limiteJournaliere - exp.totalDepotJour).toLocaleString()} FCFA`);
-    if ((exp.totalDepotMois + montantInt) > exp.limiteMensuelle) throw new Error(`Limite mensuelle dépassée. Restant: ${(exp.limiteMensuelle - exp.totalDepotMois).toLocaleString()} FCFA`);
+    // 6. CHECKS SOLDE
+    if (exp.solde < montantInt) throw new Error(`Solde insuffisant: ${exp.solde} FCFA`);
+    if ((exp.totalDepotJour + montantInt) > exp.limiteJournaliere) throw new Error('Limite journalière dépassée');
+    if ((exp.totalDepotMois + montantInt) > exp.limiteMensuelle) throw new Error('Limite mensuelle dépassée');
 
-    // 7. MOUVEMENTS DE FONDS
-    exp.solde -= totalDebitExp;
+    // 7. MOUVEMENTS
+    exp.solde -= montantInt;
     dest.solde += montantNetRecu;
-    admin.solde += fraisDestinataire; // Reversement auto
-
+    admin.solde += fraisDestinataire;
     exp.totalDepotJour += montantInt;
     exp.totalDepotMois += montantInt;
     dest.totalRecuMois = volumeApres;
@@ -1248,8 +1226,8 @@ router.post('/', authUser, async (req, res) => {
     await dest.save({ session });
     if (fraisDestinataire > 0) await admin.save({ session });
 
-        // 8. TRANSACTION AUDIT
-        const [tx] = await Transaction.create([{
+    // 8. TRANSACTION AUDIT
+    const [tx] = await Transaction.create([{
       expediteur: exp._id,
       destinataire: dest._id,
       montant: montantInt,
@@ -1268,97 +1246,68 @@ router.post('/', authUser, async (req, res) => {
     }], { session });
 
     await session.commitTransaction();
-    //session.endSession();
-
-    // NOTIF APRES COMMIT
-    try {
-      const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const now = Date.now();
-      const iso = new Date().toISOString();
-      const expediteurId = tx.expediteur.toString();
-      const destinataireId = tx.destinataire.toString();
-
-      const recuDestinataire = {
-        id: tx._id.toString() + '_dest',
-        type: 'pdf',
-        name: `Reception_${tx.montant}.pdf`,
-        size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: expediteurId,
-        to: destinataireId,
-        time, timestamp: now, createdAt: iso,
-        status: 'delivered',
-        contactMeta: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
-        tx: {...tx._doc, type: 'reception', contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
-      };
-
-      const recuExpediteur = {
-        id: tx._id.toString() + '_exp',
-        type: 'pdf',
-        name: `Envoi_${tx.montant}.pdf`,
-        size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: expediteurId,
-        to: destinataireId,
-        time, timestamp: now, createdAt: iso,
-        status: 'read',
-        contactMeta: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
-        tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
-      };
-
-      const destSocketId = onlineUsers.get(destinataireId);
-      const expSocketId = onlineUsers.get(expediteurId);
-
-      console.log('ONLINE USERS:', Array.from(onlineUsers.keys()), 'dest:', destinataireId, 'exp:', expediteurId);
-      console.log('SOCKETS:', destSocketId, expSocketId);
-
-      if (destSocketId) io.to(destSocketId).emit('new_message', recuDestinataire);
-      if (expSocketId) io.to(expSocketId).emit('new_message', recuExpediteur);
-
-    } catch (e) { console.error('Erreur notif:', e.message); }
-
-    return res.json(tx);
-  } catch (err) {
-    if (session.inTransaction()) await session.abortTransaction();
     session.endSession();
-    return res.status(400).json({ error: err.message });
-  }
 
-    // 9. NOTIFS HORS TX
-    if (exp.expoPushToken) {
-      sendPushNotification(exp.expoPushToken, 'Transfert envoyé', `Tu as envoyé ${montantInt.toLocaleString()} FCFA à ${dest.prenom} (0 FCFA de frais)`, { type: 'transfert', transactionId: tx._id }).catch(()=>{});
-    }
-    if (dest.expoPushToken) {
-      const msgFrais = fraisDestinataire > 0 ? ` (frais réception 0.5%: ${fraisDestinataire.toLocaleString()} FCFA)` : ' (gratuit)';
-      sendPushNotification(dest.expoPushToken, 'Argent reçu', `Tu as reçu ${montantNetRecu.toLocaleString()} FCFA de ${exp.prenom}${msgFrais}`, { type: 'reception', transactionId: tx._id }).catch(()=>{});
-    }
+    // 9. NOTIF SOCKET + PUSH (APRES COMMIT, HORS TRANSACTION)
+    setImmediate(async () => {
+      try {
+        const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const timestamp = Date.now();
+        const iso = new Date().toISOString();
+        const expediteurId = tx.expediteur.toString();
+        const destinataireId = tx.destinataire.toString();
 
-    res.json({
+        const recuDestinataire = {
+          id: tx._id.toString() + '_dest',
+          type: 'pdf',
+          name: `Reception_${tx.montant}.pdf`,
+          from: expediteurId,
+          to: destinataireId,
+          time, timestamp, createdAt: iso,
+          status: 'delivered',
+          contactMeta: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
+          tx: {...tx._doc, type: 'reception', contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
+        };
+
+        const recuExpediteur = {
+          id: tx._id.toString() + '_exp',
+          type: 'pdf',
+          name: `Envoi_${tx.montant}.pdf`,
+          from: expediteurId,
+          to: destinataireId,
+          time, timestamp, createdAt: iso,
+          status: 'read',
+          contactMeta: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
+          tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
+        };
+
+        const destSocketId = onlineUsers.get(destinataireId);
+        const expSocketId = onlineUsers.get(expediteurId);
+
+        if (destSocketId) io.to(destSocketId).emit('new_message', recuDestinataire);
+        if (expSocketId) io.to(expSocketId).emit('new_message', recuExpediteur);
+
+        if (exp.expoPushToken) sendPushNotification(exp.expoPushToken, 'Transfert envoyé', `Tu as envoyé ${montantInt} FCFA à ${dest.prenom}`, { type: 'transfert' }).catch(()=>{});
+        if (dest.expoPushToken) sendPushNotification(dest.expoPushToken, 'Argent reçu', `Tu as reçu ${montantNetRecu} FCFA`, { type: 'reception' }).catch(()=>{});
+
+      } catch (e) { console.error('Erreur notif hors tx:', e.message); }
+    });
+
+    return res.json({
       message: 'Transfert effectué',
       nouveauSolde: exp.solde,
       transactionId: tx._id,
-      detailFrais: {
-        montantEnvoye: montantInt,
-        fraisExpediteur: 0,
-        fraisDestinataire,
-        montantRecu: montantNetRecu,
-        seuilGratuit: SEUIL_GRATUIT_RECEPTION,
-        volumeRecuMoisDest: dest.totalRecuMois
-      },
-      limites: {
-        journaliere: exp.limiteJournaliere,
-        utiliseJour: exp.totalDepotJour,
-        restantJour: exp.limiteJournaliere - exp.totalDepotJour,
-        mensuelle: exp.limiteMensuelle,
-        utiliseMois: exp.totalDepotMois,
-        restantMois: exp.limiteMensuelle - exp.totalDepotMois
-      }
+      detailFrais: { montantEnvoye: montantInt, fraisDestinataire, montantRecu: montantNetRecu },
+      transaction: tx
     });
 
   } catch (err) {
-    //await session.abortTransaction();
-    console.error('Erreur transfert:', err.message);
-    res.status(400).json({ error: err.message });
-  } finally {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     session.endSession();
+    console.error('Erreur transfert:', err.message);
+    return res.status(400).json({ error: err.message });
   }
 });
 
