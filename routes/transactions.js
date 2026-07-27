@@ -1152,7 +1152,7 @@ router.post('/', authUser, async (req, res) => {
   const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
   //const Message = require('../models/Message'); 
   //
-  //session.startTransaction();
+  session.startTransaction();
 
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
@@ -1336,7 +1336,7 @@ router.post('/', authUser, async (req, res) => {
       console.error('Erreur notif socket pdf:', e.message);
     }
     
-    res.json(tx);
+    //res.json(tx);
     //fin
     await session.commitTransaction();
 
