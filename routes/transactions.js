@@ -1308,13 +1308,18 @@ router.post('/', authUser, async (req, res) => {
      // await Message.create([recuDestinataire, recuExpediteur]);
     
       // ENVOI SOCKET TEMPS REEL
-      const destSocketId = onlineUsers.get(tx.destinataire);
-      const expSocketId = onlineUsers.get(tx.expeditaur);
+      const expediteurIdStr = tx.expediteur.toString();
+      const destinataireIdStr = tx.destinataire.toString();
+
+      const destSocketId = onlineUsers.get(destinataireIdStr);
+      const expSocketId = onlineUsers.get(expediteurIdStr);
       
-      console.log('expeditaireID',tx.expediteur);
-      console.log('destinataireID',tx.destinataire);
-      console.log('expSocketId',expSocketId);
-      console.log('destSocketId',destSocketId);
+      console.log('expediteurID', expediteurIdStr);
+      console.log('destinataireID', destinataireIdStr);
+      console.log('expSocketId', expSocketId);
+      console.log('destSocketId', destSocketId);
+      console.log('ONLINE KEYS:', Array.from(onlineUsers.keys()));
+
       if (destSocketId) {
         io.to(destSocketId).emit('new_message', recuDestinataire);
         console.log(`📄 Reçu envoyé à destinataire ${tx.destinataire}`);
