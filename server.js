@@ -16,71 +16,70 @@ process.on('uncaughtException', (err) => {
   console.error('FATAL:', err.message);
 });
 
+// ================== SOCKET.IO CORRIGE ==================
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" },
+  maxHttpBufferSize: 10e6
+});
 
-// ================== NOUVEAUX MODELS POUR CHAT ==================
+const onlineUsers = new Map();
+module.exports = { app, server, io, onlineUsers }; // <-- EXPORTE TOUT DE SUITE AVANT LES ROUTES
+
 const MessageSchema = new mongoose.Schema({
-  id: String, // id du message côté client
+  id: String,
   from: { type: String, required: true },
   to: { type: String, required: true },
   type: { type: String, enum: ['text','image','audio','pdf'], default: 'text' },
-  content: String, // texte ou uri
-  image: String,
-  audio: String,
+  content: String,
+  name: String, // pour PDF
+  size: String,
+  time: String,
+  timestamp: Number,
+  tx: Object, // IMPORTANT pour PDF
+  contactMeta: Object,
   status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
   createdAt: { type: Date, default: Date.now }
 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// ================== SOCKET.IO ==================
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" },
-  maxHttpBufferSize: 10e6 // 10MB pour audio/image
-});
-
-// En mémoire pour le temps réel (rapide)
-const onlineUsers = new Map(); // userId -> socketId
-
 io.on('connection', (socket) => {
   console.log('Socket connecté:', socket.id);
 
-  // 1. USER EN LIGNE
   socket.on('user_online', async ({ userId }) => {
-    onlineUsers.set(userId, socket.id);
-    socket.userId = userId;
-    console.log(`✓ ${userId} en ligne`);
+    if(!userId) return;
+    const uid = userId.toString(); // FIX: toujours string
+    onlineUsers.set(uid, socket.id);
+    socket.userId = uid;
+    console.log(`✓ ${uid} en ligne -> ${socket.id} | ONLINE:`, Array.from(onlineUsers.keys()));
     
-    // Notifie ses contacts qu'il est online
-    socket.broadcast.emit('user_status', { userId, status: 'online' });
+    socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
     
-    // Envoie les messages non livrés
-    const undelivered = await Message.find({ to: userId, status: 'sent' });
-    undelivered.forEach(msg => {
+    // Envoie les non livrés (y compris PDF)
+    const undelivered = await Message.find({ to: uid, status: { $in: ['sent','delivered'] } }).sort({ createdAt: 1 });
+    for(const msg of undelivered) {
       io.to(socket.id).emit('new_message', msg);
-      socket.emit('message_status', { messageId: msg.id, status: 'delivered' });
-    });
-  });
-
-  // 2. TYPING / RECORDING AUDIO
-  socket.on('typing', ({ to, state }) => {
-    const toSocketId = onlineUsers.get(to);
-    if (toSocketId) {
-      io.to(toSocketId).emit('typing', { from: socket.userId, state });
     }
   });
 
-  // 3. ENVOI MESSAGE + TRANSFERT PDF
+  socket.on('typing', ({ to, state }) => {
+    if(!to) return;
+    const toSocketId = onlineUsers.get(to.toString());
+    if (toSocketId) io.to(toSocketId).emit('typing', { from: socket.userId, state });
+  });
+
   socket.on('send_message', async (data) => {
-    // data: { id, from, to, type, content, image, audio, time }
     try {
-      const msg = await Message.create({
+      const msgData = {
         ...data,
+        from: data.from.toString(),
+        to: data.to.toString(),
+        timestamp: data.timestamp || Date.now(),
         status: 'sent'
-      });
+      };
+      const msg = await Message.create(msgData);
+      const toSocketId = onlineUsers.get(data.to.toString());
 
-      const toSocketId = onlineUsers.get(data.to);
-
-      // 1 coche
       socket.emit('message_status', { messageId: data.id, status: 'sent' });
 
       if (toSocketId) {
@@ -89,56 +88,42 @@ io.on('connection', (socket) => {
         await msg.save();
         socket.emit('message_status', { messageId: data.id, status: 'delivered' });
       }
-    } catch (e) { console.error(e); }
+      // Renvoie aussi à l'expéditeur pour qu'il le sauve
+      io.to(socket.id).emit('new_message', msg);
+    } catch (e) { console.error('send_message error:', e); }
   });
 
-  // 4. DOUBLE COCHE BLEUE
+  // FIX PDF TRANSFERT : fonction que tu peux appeler depuis ta route
+  socket.on('save_pdf_message', async (data) => {
+    try {
+      await Message.create(data);
+      const toSocketId = onlineUsers.get(data.to.toString());
+      const fromSocketId = onlineUsers.get(data.from.toString());
+      if(toSocketId) io.to(toSocketId).emit('new_message', data);
+      if(fromSocketId) io.to(fromSocketId).emit('new_message', data);
+    } catch(e){ console.error(e); }
+  });
+
   socket.on('message_read', async ({ from, messageId }) => {
     await Message.updateOne({ id: messageId }, { status: 'read' });
-    const fromSocketId = onlineUsers.get(from);
-    if (fromSocketId) {
-      io.to(fromSocketId).emit('message_status', { messageId, status: 'read' });
-    }
+    const fromSocketId = onlineUsers.get(from?.toString());
+    if (fromSocketId) io.to(fromSocketId).emit('message_status', { messageId, status: 'read' });
   });
 
   socket.on('message_delivered', async ({ from, messageId }) => {
     await Message.updateOne({ id: messageId }, { status: 'delivered' });
-    const fromSocketId = onlineUsers.get(from);
-    if (fromSocketId) {
-      io.to(fromSocketId).emit('message_status', { messageId, status: 'delivered' });
-    }
-  });
-
-  // 5. TRANSFERT D'ARGENT EN TEMPS REEL
-  // Tu peux appeler ça depuis ta route /api/transactions
-  socket.on('transfer_done', ({ to, transaction }) => {
-    const toSocketId = onlineUsers.get(to);
-    if (toSocketId) {
-      // Envoie le reçu PDF directement dans le chat
-      io.to(toSocketId).emit('new_message', {
-        id: transaction.id,
-        type: 'pdf',
-        from: transaction.expediteur,
-        to: to,
-        tx: transaction,
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-      });
-    }
+    const fromSocketId = onlineUsers.get(from?.toString());
+    if (fromSocketId) io.to(fromSocketId).emit('message_status', { messageId, status: 'delivered' });
   });
 
   socket.on('disconnect', () => {
     if (socket.userId) {
       onlineUsers.delete(socket.userId);
-      socket.broadcast.emit('user_status', { 
-        userId: socket.userId, 
-        status: 'offline', 
-        lastSeen: new Date().toISOString() 
-      });
+      socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
       console.log(`✗ ${socket.userId} hors ligne`);
     }
   });
 });
-module.exports = { app, server, io, onlineUsers };
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
