@@ -45,53 +45,26 @@ io.on('connection', (socket) => {
   console.log('Socket connecté:', socket.id);
 
   // 1. USER EN LIGNE
-  socket.on('user_online', async ({ userId }) => {
-    onlineUsers.set(userId, socket.id);
-    socket.userId = userId;
-    console.log(`✓ ${userId} en ligne`);
-    
-    // Notifie ses contacts qu'il est online
-    socket.broadcast.emit('user_status', { userId, status: 'online' });
-    
-    // Envoie les messages non livrés
-    const undelivered = await Message.find({ to: userId, status: 'sent' });
-    undelivered.forEach(msg => {
-      io.to(socket.id).emit('new_message', msg);
-      socket.emit('message_status', { messageId: msg.id, status: 'delivered' });
-    });
+    socket.on('user_online', async ({ userId }) => {
+    const uid = userId.toString(); // FIX ICI
+    onlineUsers.set(uid, socket.id);
+    socket.userId = uid;
+    console.log(`✓ ${uid} en ligne | TOTAL: ${onlineUsers.size}`);
   });
 
   // 2. TYPING / RECORDING AUDIO
   socket.on('typing', ({ to, state }) => {
-    const toSocketId = onlineUsers.get(to);
-    if (toSocketId) {
-      io.to(toSocketId).emit('typing', { from: socket.userId, state });
-    }
-  });
+  const toSocketId = onlineUsers.get(to.toString()); // FIX
+  if (toSocketId) io.to(toSocketId).emit('typing', { from: socket.userId, state });
+});
 
   // 3. ENVOI MESSAGE + TRANSFERT PDF
   socket.on('send_message', async (data) => {
-    // data: { id, from, to, type, content, image, audio, time }
-    try {
-      const msg = await Message.create({
-        ...data,
-        status: 'sent'
-      });
-
-      const toSocketId = onlineUsers.get(data.to);
-
-      // 1 coche
-      socket.emit('message_status', { messageId: data.id, status: 'sent' });
-
-      if (toSocketId) {
-        io.to(toSocketId).emit('new_message', msg);
-        msg.status = 'delivered';
-        await msg.save();
-        socket.emit('message_status', { messageId: data.id, status: 'delivered' });
-      }
-    } catch (e) { console.error(e); }
-  });
-
+  const toId = data.to.toString();
+  const fromId = data.from.toString();
+  const toSocketId = onlineUsers.get(toId);
+  // ...
+});
   // 4. DOUBLE COCHE BLEUE
   socket.on('message_read', async ({ from, messageId }) => {
     await Message.updateOne({ id: messageId }, { status: 'read' });
