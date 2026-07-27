@@ -1146,6 +1146,13 @@ router.get('/', async (req, res) => {
 });
 
 // ==================== ROUTE TRANSFERT B2B CORRIGEE ====================
+router.post('/', authUser, async (req, res) => {
+  const session = await mongoose.startSession();
+  //
+  const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
+  const Message = require('../models/Message'); 
+  //
+  session.startTransaction();
 
   try {
     const { expediteur, destinataire, montant, motif } = req.body;
@@ -1265,18 +1272,18 @@ router.get('/', async (req, res) => {
     
       // 1. REÇU POUR LE DESTINATAIRE (type: reception)
       const recuDestinataire = {
-        id: transaction._id.toString() + '_dest',
+        id: tx._id.toString() + '_dest',
         type: 'pdf',
-        name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
+        name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: transaction.expediteurId, // c'est l'expediteur qui envoie
+        from: tx.expediteurId, // c'est l'expediteur qui envoie
         to: transaction.destinataireId,
         time,
         status: 'delivered',
         tx: {
-          ...transaction._doc,
+          ...tx._doc,
           type: 'reception', // important pour ton filtre dans loadChat
-          contact: { _id: transaction.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
+          contact: { _id: tx.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
         }
       };
     
@@ -1287,13 +1294,13 @@ router.get('/', async (req, res) => {
         name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${transaction.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
         from: transaction.expediteurId,
-        to: transaction.destinataireId,
+        to: tx.destinataireId,
         time,
         status: 'read', // pour l'expediteur c'est déjà lu
         tx: {
           ...transaction._doc,
           type: 'envoi',
-          contact: { _id: transaction.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
+          contact: { _id: tx.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
         }
       };
     
@@ -1301,17 +1308,17 @@ router.get('/', async (req, res) => {
      // await Message.create([recuDestinataire, recuExpediteur]);
     
       // ENVOI SOCKET TEMPS REEL
-      const destSocketId = onlineUsers.get(transaction.destinataireId);
-      const expSocketId = onlineUsers.get(transaction.expediteurId);
+      const destSocketId = onlineUsers.get(tx.destinataireId);
+      const expSocketId = onlineUsers.get(tx.expediteurId);
     
       if (destSocketId) {
         io.to(destSocketId).emit('new_message', recuDestinataire);
-        console.log(`📄 Reçu envoyé à destinataire ${transaction.destinataireId}`);
+        console.log(`📄 Reçu envoyé à destinataire ${tx.destinataireId}`);
       }
     
       if (expSocketId) {
         io.to(expSocketId).emit('new_message', recuExpediteur);
-        console.log(`📄 Reçu envoyé à expéditeur ${transaction.expediteurId}`);
+        console.log(`📄 Reçu envoyé à expéditeur ${tx.expediteurId}`);
       }
     
       // Si l'utilisateur est hors ligne, il le verra au prochain loadChat via userHistorique + Message
@@ -1320,7 +1327,7 @@ router.get('/', async (req, res) => {
       console.error('Erreur notif socket pdf:', e.message);
     }
     
-    res.json(transaction);
+    res.json(tx);
     //fin
     await session.commitTransaction();
 
