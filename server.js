@@ -45,47 +45,74 @@ module.exports = { app, server, io, onlineUsers };
 io.on('connection', (socket) => {
   console.log('Socket connecté:', socket.id);
 
-  socket.on('user_online', async ({ userId }) => {
-    try {
-      const uid = userId.toString();
-      socket.userId = uid;
-
-      if (!onlineUsers.has(uid)) onlineUsers.set(uid, new Set());
-      onlineUsers.get(uid).add(socket.id);
-
-      console.log(`✓ ${uid} en ligne -> ${socket.id} | TOTAL users: ${onlineUsers.size} | Sockets de ${uid}: ${onlineUsers.get(uid).size}`);
-
-      socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
-    } catch(e) { console.log('user_online error', e.message); }
+  // 1. USER EN LIGNE
+    socket.on('user_online', async ({ userId }) => {
+    const uid = userId.toString(); // FIX ICI
+    onlineUsers.set(uid, socket.id);
+    socket.userId = uid;
+    console.log(`✓ ${uid} en ligne | TOTAL: ${onlineUsers.size}`);
   });
 
-  socket.on('disconnect', () => {
-    if (socket.userId && onlineUsers.has(socket.userId)) {
-      const set = onlineUsers.get(socket.userId);
-      set.delete(socket.id);
-      if (set.size === 0) {
-        onlineUsers.delete(socket.userId);
-        socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
-        console.log(`✗ ${socket.userId} hors ligne (dernier socket) | TOTAL: ${onlineUsers.size}`);
-      } else {
-        console.log(`Socket ${socket.id} de ${socket.userId} déconnecté, reste ${set.size} socket(s)`);
-      }
+  // 2. TYPING / RECORDING AUDIO
+  socket.on('typing', ({ to, state }) => {
+  const toSocketId = onlineUsers.get(to.toString()); // FIX
+  if (toSocketId) io.to(toSocketId).emit('typing', { from: socket.userId, state });
+});
+
+  // 3. ENVOI MESSAGE + TRANSFERT PDF
+  socket.on('send_message', async (data) => {
+  const toId = data.to.toString();
+  const fromId = data.from.toString();
+  const toSocketId = onlineUsers.get(toId);
+  // ...
+});
+  // 4. DOUBLE COCHE BLEUE
+  socket.on('message_read', async ({ from, messageId }) => {
+    await Message.updateOne({ id: messageId }, { status: 'read' });
+    const fromSocketId = onlineUsers.get(from);
+    if (fromSocketId) {
+      io.to(fromSocketId).emit('message_status', { messageId, status: 'read' });
     }
   });
 
-  // Helper pour récupérer un socketId valide
-  const getSocketId = (userId) => {
-    const set = onlineUsers.get(userId.toString());
-    if (!set || set.size === 0) return null;
-    return Array.from(set)[0]; // prend le premier
-  };
+  socket.on('message_delivered', async ({ from, messageId }) => {
+    await Message.updateOne({ id: messageId }, { status: 'delivered' });
+    const fromSocketId = onlineUsers.get(from);
+    if (fromSocketId) {
+      io.to(fromSocketId).emit('message_status', { messageId, status: 'delivered' });
+    }
+  });
 
-  // Expose globalement pour tes routes
-  global.getSocketId = getSocketId;
-  global.io = io;
-  global.onlineUsers = onlineUsers;
+  // 5. TRANSFERT D'ARGENT EN TEMPS REEL
+  // Tu peux appeler ça depuis ta route /api/transactions
+  socket.on('transfer_done', ({ to, transaction }) => {
+    const toSocketId = onlineUsers.get(to);
+    if (toSocketId) {
+      // Envoie le reçu PDF directement dans le chat
+      io.to(toSocketId).emit('new_message', {
+        id: transaction.id,
+        type: 'pdf',
+        from: transaction.expediteur,
+        to: to,
+        tx: transaction,
+        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.userId) {
+      onlineUsers.delete(socket.userId);
+      socket.broadcast.emit('user_status', { 
+        userId: socket.userId, 
+        status: 'offline', 
+        lastSeen: new Date().toISOString() 
+      });
+      console.log(`✗ ${socket.userId} hors ligne`);
+    }
+  });
 });
-//module.exports = { app, server, io, onlineUsers };
+module.exports = { app, server, io, onlineUsers };
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
