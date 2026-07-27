@@ -4,7 +4,7 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 const { sendPushNotification } = require('../utils/sendPushNotification');
-//const { io, onlineUsers } = require('../server'); // METS LE EN HAUT DU FICHIER, pas dans la route
+const { io, onlineUsers } = require('../server'); // METS LE EN HAUT DU FICHIER, pas dans la route
 
 const mongoose = require('mongoose');
 
@@ -1149,7 +1149,7 @@ router.get('/', async (req, res) => {
 router.post('/', authUser, async (req, res) => {
   const session = await mongoose.startSession();
   //
-  const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
+  //const { io, onlineUsers } = require('../server'); // ou '../index' selon ton fichier principal
   //const Message = require('../models/Message'); 
   //
   session.startTransaction();
