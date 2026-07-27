@@ -1250,6 +1250,7 @@ router.post('/', authUser, async (req, res) => {
     // 9. NOTIF SOCKET + PUSH (APRES COMMIT, HORS TRANSACTION)
     setImmediate(async () => {
       try {
+        console.log('ok');
         const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         const timestamp = Date.now();
         const iso = new Date().toISOString();
@@ -1279,13 +1280,14 @@ router.post('/', authUser, async (req, res) => {
           contactMeta: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
           tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
         };
-
+         console.log('okexp',recuExpediteur);
+         console.log('okdes', recuDestinataire);
         const destSocketId = onlineUsers.get(destinataireId);
         const expSocketId = onlineUsers.get(expediteurId);
 
         if (destSocketId) io.to(destSocketId).emit('new_message', recuDestinataire);
         if (expSocketId) io.to(expSocketId).emit('new_message', recuExpediteur);
-
+           console.log('okok');
         if (exp.expoPushToken) sendPushNotification(exp.expoPushToken, 'Transfert envoyé', `Tu as envoyé ${montantInt} FCFA à ${dest.prenom}`, { type: 'transfert' }).catch(()=>{});
         if (dest.expoPushToken) sendPushNotification(dest.expoPushToken, 'Argent reçu', `Tu as reçu ${montantNetRecu} FCFA`, { type: 'reception' }).catch(()=>{});
 
