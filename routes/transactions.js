@@ -1248,13 +1248,13 @@ router.post('/', authUser, async (req, res) => {
     await dest.save({ session });
     if (fraisDestinataire > 0) await admin.save({ session });
 
-    // 8. TRANSACTION AUDIT
+        // 8. TRANSACTION AUDIT
     const [tx] = await Transaction.create([{
       expediteur: exp._id,
       destinataire: dest._id,
       montant: montantInt,
       montantNetRecu,
-      frais: fraisDestinataire, // pour compatibilité ancienne app
+      frais: fraisDestinataire,
       fraisExpediteur,
       fraisDestinataire,
       fraisReversesAdmin: fraisDestinataire,
@@ -1266,68 +1266,63 @@ router.post('/', authUser, async (req, res) => {
       soldeDestinataireApres: dest.solde,
       volumeRecuMoisApres: dest.totalRecuMois
     }], { session });
-    // Notification du chat
+
+    // Notification du chat - CORRIGE
     try {
       const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    
-      // 1. REÇU POUR LE DESTINATAIRE (type: reception)
+      const expediteurId = tx.expediteur.toString();
+      const destinataireId = tx.destinataire.toString();
+
       const recuDestinataire = {
-        id: Transaction._id.toString() + '_dest',
+        id: tx._id.toString() + '_dest',
         type: 'pdf',
-        name: `Reception_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${Transaction.montant}.pdf`,
+        name: `Reception_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: Transaction.expediteurId, // c'est l'expediteur qui envoie
-        to: Transaction.destinataireId,
+        from: expediteurId,
+        to: destinataireId,
         time,
         status: 'delivered',
         tx: {
-          ...Transaction._doc,
-          type: 'reception', // important pour ton filtre dans loadChat
-          contact: { _id: Transaction.expediteurId, prenom: expediteur.prenom, nom: expediteur.nom, telephone: expediteur.telephone }
+         ...tx._doc,
+          type: 'reception',
+          contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone }
         }
       };
-    
-      // 2. REÇU POUR L'EXPEDITEUR (type: envoi)
+
       const recuExpediteur = {
-        id: Transaction._id.toString() + '_exp',
+        id: tx._id.toString() + '_exp',
         type: 'pdf',
-        name: `Envoi_Reçu_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${Transaction.montant}.pdf`,
+        name: `Envoi_${new Date().toLocaleDateString('fr-FR').replaceAll('/','')}_${tx.montant}.pdf`,
         size: `${(Math.random()*100+50).toFixed(0)} KB`,
-        from: Transaction.expediteurId,
-        to: Transaction.destinataireId,
+        from: expediteurId,
+        to: destinataireId,
         time,
-        status: 'read', // pour l'expediteur c'est déjà lu
+        status: 'read',
         tx: {
-          ...Transaction._doc,
+         ...tx._doc,
           type: 'envoi',
-          contact: { _id: Transaction.destinataireId, prenom: destinataire.prenom, nom: destinataire.nom, telephone: destinataire.telephone }
+          contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone }
         }
       };
-    
-      // SAUVEGARDE EN BASE POUR HISTORIQUE (optionnel mais recommandé)
-     // await Message.create([recuDestinataire, recuExpediteur]);
-    
-      // ENVOI SOCKET TEMPS REEL
-      const destSocketId = onlineUsers.get(transaction.destinataireId);
-      const expSocketId = onlineUsers.get(transaction.expediteurId);
-    
+
+      const destSocketId = onlineUsers.get(destinataireId);
+      const expSocketId = onlineUsers.get(expediteurId);
+
       if (destSocketId) {
         io.to(destSocketId).emit('new_message', recuDestinataire);
-        console.log(`📄 Reçu envoyé à destinataire ${Transaction.destinataireId}`);
+        console.log(`📄 Reçu envoyé à destinataire ${destinataireId}`);
       }
-    
+
       if (expSocketId) {
         io.to(expSocketId).emit('new_message', recuExpediteur);
-        console.log(`📄 Reçu envoyé à expéditeur $Ttransaction.expediteurId}`);
+        console.log(`📄 Reçu envoyé à expéditeur ${expediteurId}`);
       }
-    
-      // Si l'utilisateur est hors ligne, il le verra au prochain loadChat via userHistorique + Message
-    
+
     } catch (e) {
-      console.error('Erreur notif socket pdf:', e.message);
+      console.error('Erreur notif socket pdf:', e.message, e.stack);
     }
-    
-    res.json(Transaction);
+
+    //res.json(tx);
     //fin
     await session.commitTransaction();
 
