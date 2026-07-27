@@ -4,6 +4,7 @@ const Client = require('../models/Client');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 const { sendPushNotification } = require('../utils/sendPushNotification');
+const { io, onlineUsers } = require('../server'); // METS LE EN HAUT DU FICHIER, pas dans la route
 
 const mongoose = require('mongoose');
 
@@ -1145,8 +1146,6 @@ router.get('/', async (req, res) => {
 });
 
 // ==================== ROUTE TRANSFERT B2B CORRIGEE ====================
-const { io, onlineUsers } = require('../server'); // METS LE EN HAUT DU FICHIER, pas dans la route
-
 router.post('/', authUser, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
