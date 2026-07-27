@@ -25,6 +25,19 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
+
+// routes/clients.js
+router.get('/searche', async (req,res)=>{
+  const { query } = req.query;
+  const users = await Client.find({
+    $or: [
+      { nom: { $regex: query, $options: 'i' } },
+      { prenom: { $regex: query, $options: 'i' } },
+      { telephone: { $regex: query, $options: 'i' } },
+    ]
+  }).limit(10);
+  res.json(users);
+});
 // ==================== CLIENT CONNECTÉ ====================
 
 router.get('/me', authUser, async (req, res) => {
