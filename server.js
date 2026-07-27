@@ -46,12 +46,11 @@ io.on('connection', (socket) => {
 
   // 1. USER EN LIGNE
     socket.on('user_online', async ({ userId }) => {
-    const uid = userId.toString(); // FIX ICI
+    const uid = userId.toString();
     onlineUsers.set(uid, socket.id);
     socket.userId = uid;
-    console.log(`✓ ${uid} en ligne | TOTAL: ${onlineUsers.size}`);
+    console.log(`✓ ${uid} en ligne -> ${socket.id} | TOTAL: ${onlineUsers.size} | KEYS:`, Array.from(onlineUsers.keys()));
   });
-
   // 2. TYPING / RECORDING AUDIO
   socket.on('typing', ({ to, state }) => {
   const toSocketId = onlineUsers.get(to.toString()); // FIX
@@ -99,15 +98,21 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
+    socket.on('disconnect', () => {
     if (socket.userId) {
-      onlineUsers.delete(socket.userId);
-      socket.broadcast.emit('user_status', { 
-        userId: socket.userId, 
-        status: 'offline', 
-        lastSeen: new Date().toISOString() 
-      });
-      console.log(`✗ ${socket.userId} hors ligne`);
+      // FIX: supprime seulement si c'est bien ce socket qui est stocké
+      const storedId = onlineUsers.get(socket.userId);
+      if (storedId === socket.id) {
+        onlineUsers.delete(socket.userId);
+        socket.broadcast.emit('user_status', { 
+          userId: socket.userId, 
+          status: 'offline',
+          lastSeen: new Date().toISOString()
+        });
+        console.log(`✗ ${socket.userId} hors ligne | TOTAL: ${onlineUsers.size}`);
+      } else {
+        console.log(`Socket ${socket.id} déconnecté mais ${socket.userId} reste en ligne avec ${storedId}`);
+      }
     }
   });
 });
