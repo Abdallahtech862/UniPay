@@ -16,15 +16,6 @@ process.on('uncaughtException', (err) => {
   console.error('FATAL:', err.message);
 });
 
-// ================== TES ROUTES EXISTANTES ==================
-app.use('/api/legal', require('./routes/legal'));
-app.use('/api/transactions', require('./routes/transactions'));
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/wallet', require('./routes/wallet'));
-app.use('/api/cards', require('./routes/cards'));
-app.use('/api/clients', require('./routes/clients'));
-app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
-app.use('/api/pawapay', require('./routes/pawapay'));
 
 // ================== NOUVEAUX MODELS POUR CHAT ==================
 const MessageSchema = new mongoose.Schema({
@@ -147,7 +138,7 @@ io.on('connection', (socket) => {
     }
   });
 });
-
+module.exports = { app, server, io, onlineUsers };
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -922,7 +913,17 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 UniPay Server + Socket sur port ${PORT}`);
 });
 
+// ================== TES ROUTES EXISTANTES ==================
+app.use('/api/legal', require('./routes/legal'));
+app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/cards', require('./routes/cards'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
+app.use('/api/pawapay', require('./routes/pawapay'));
+
 // Export io pour l'utiliser dans tes routes
 //module.exports.io = io;
 //module.exports.onlineUsers = onlineUsers;
-module.exports = { app, server, io, onlineUsers };
+
