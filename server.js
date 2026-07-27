@@ -138,7 +138,7 @@ io.on('connection', (socket) => {
     }
   });
 });
-
+module.exports = { app, server, io, onlineUsers };
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -927,4 +927,4 @@ app.use('/api/pawapay', require('./routes/pawapay'));
 // Export io pour l'utiliser dans tes routes
 //module.exports.io = io;
 //module.exports.onlineUsers = onlineUsers;
-module.exports = { app, server, io, onlineUsers };
+//module.exports = { app, server, io, onlineUsers };
