@@ -1286,12 +1286,12 @@ router.post('/', authUser, async (req, res) => {
           id: tx._id.toString() + '_dest',
           type: 'pdf',
           name: `Reception_${tx.montant}.pdf`,
-          from: expediteurId,
-          to: destinataireId,
+          from: expediteurIdStr,
+          to: destinataireIdStr,
           time, timestamp, createdAt: iso,
           status: 'delivered',
-          contactMeta: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
-          tx: {...tx._doc, type: 'reception', contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
+          contactMeta: { _id: expediteurIStrd, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
+          tx: {...tx._doc, type: 'reception', contact: { _id: expediteurIdStr, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
         };
 
         // 2. REÇU POUR L'EXPEDITEUR (type: pdf / tx.type: envoi)
@@ -1299,12 +1299,12 @@ router.post('/', authUser, async (req, res) => {
           id: tx._id.toString() + '_exp',
           type: 'pdf',
           name: `Envoi_${tx.montant}.pdf`,
-          from: expediteurId,
-          to: destinataireId,
+          from: expediteurIdStr,
+          to: destinataireIdStr,
           time, timestamp, createdAt: iso,
           status: 'read',
-          contactMeta: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
-          tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
+          contactMeta: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
+          tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
         };
 
       
