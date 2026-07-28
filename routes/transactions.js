@@ -1288,7 +1288,7 @@ router.post('/', authUser, async (req, res) => {
           name: `Reception_${tx.montant}.pdf`,
           from: expediteurIdStr,
           to: destinataireIdStr,
-          time, timestamp, createdAt: iso,
+          time, //timestamp, createdAt: iso,
           status: 'delivered',
           contactMeta: { _id: expediteurIStrd, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
           tx: {...tx._doc, type: 'reception', contact: { _id: expediteurIdStr, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
@@ -1301,7 +1301,7 @@ router.post('/', authUser, async (req, res) => {
           name: `Envoi_${tx.montant}.pdf`,
           from: expediteurIdStr,
           to: destinataireIdStr,
-          time, timestamp, createdAt: iso,
+          time, //timestamp, createdAt: iso,
           status: 'read',
           contactMeta: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
           tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
