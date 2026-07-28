@@ -1285,36 +1285,29 @@ router.post('/', authUser, async (req, res) => {
         const recuDestinataire = {
           id: tx._id.toString() + '_dest',
           type: 'pdf',
-          name: `Reception_Reçu_${dateStr}_${tx.montant}.pdf`,
-          size: `${(Math.random() * 100 + 50).toFixed(0)} KB`,
-          from: expediteurIdStr,
-          to: destinataireIdStr,
-          time,
-          status: initialDestStatus,
-          tx: {
-            ...tx._doc,
-            type: 'reception',
-            contact: { _id: expediteurIdStr, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone }
-          }
+          name: `Reception_${tx.montant}.pdf`,
+          from: expediteurId,
+          to: destinataireId,
+          time, timestamp, createdAt: iso,
+          status: 'delivered',
+          contactMeta: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
+          tx: {...tx._doc, type: 'reception', contact: { _id: expediteurId, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
         };
 
         // 2. REÇU POUR L'EXPEDITEUR (type: pdf / tx.type: envoi)
         const recuExpediteur = {
           id: tx._id.toString() + '_exp',
           type: 'pdf',
-          name: `Envoi_Reçu_${dateStr}_${tx.montant}.pdf`,
-          size: `${(Math.random() * 100 + 50).toFixed(0)} KB`,
-          from: expediteurIdStr,
-          to: destinataireIdStr,
-          time,
-          status: 'read', // Déjà vu par l'expéditeur qui initie l'action
-          tx: {
-            ...tx._doc,
-            type: 'envoi',
-            contact: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone }
-          }
+          name: `Envoi_${tx.montant}.pdf`,
+          from: expediteurId,
+          to: destinataireId,
+          time, timestamp, createdAt: iso,
+          status: 'read',
+          contactMeta: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
+          tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireId, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
         };
 
+      
         // SAUVEGARDE STRICTE EN BASE POUR HISTORIQUE (Garantit la livraison future si hors-ligne)
         // Note: Assurez-vous que le modèle 'Message' est importé ou accessible dans ce fichier
         if (typeof Message !== 'undefined') {
