@@ -1325,6 +1325,7 @@ router.post('/', authUser, async (req, res) => {
         if (global.io) {
           destSockets.forEach(sid => global.io.to(sid).emit('new_message', recuDestinataire));
           expSockets.forEach(sid => global.io.to(sid).emit('new_message', recuExpediteur));
+          
           console.log(`📄 Dest ${destinataireIdStr}: ${destSockets.length} socket(s) | Exp ${expediteurIdStr}: ${expSockets.length} socket(s)`);
           console.log('ONLINE:', Array.from(global.onlineUsers?.keys() || []));
         }
