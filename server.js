@@ -27,183 +27,99 @@ app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
 app.use('/api/pawapay', require('./routes/pawapay'));
 
 // ================== NOUVEAUX MODELS POUR CHAT ==================
-// ================== NOUVEAUX MODELS POUR CHAT ==================
 const MessageSchema = new mongoose.Schema({
-  id: String, // id du message côté client
+  id: String,
   from: { type: String, required: true },
   to: { type: String, required: true },
   type: { type: String, enum: ['text','image','audio','pdf'], default: 'text' },
-  content: String, // texte ou uri
+  text: String,
+  content: String,
   image: String,
   audio: String,
   status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
   createdAt: { type: Date, default: Date.now },
-  tx: { type: Object } 
+  tx: { type: Object },
+  contactMeta: { type: Object } // <-- MANQUAIT
 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// ================== SOCKET.IO ==================
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" },
-  maxHttpBufferSize: 10e6 // 10MB pour audio/image
-});
-
-// Partage dans le scope global
+const io = new Server(server, { cors: { origin: "*" }, maxHttpBufferSize: 10e6 });
 global.io = io;
-global.onlineUsers = new Map(); // userId -> Set(socketId, socketId...)
+global.onlineUsers = new Map();
 
-// FONCTION UTILITAIRE : Permet d'envoyer un message à TOUTES les sockets d'un utilisateur spécifique
-const emitToUser = (userId, eventName, data) => {
-  if (!userId || !global.onlineUsers) return;
+const emitToUser = (userId, event, data) => {
+  if (!userId) return;
   const sockets = global.onlineUsers.get(userId.toString());
   if (!sockets) return;
-  
-  if (sockets instanceof Set) {
-    sockets.forEach(sid => global.io.to(sid).emit(eventName, data));
-  } else if (typeof sockets === 'string') {
-    global.io.to(sockets).emit(eventName, data);
-  }
+  if (sockets instanceof Set) sockets.forEach(sid => global.io.to(sid).emit(event, data));
+  else global.io.to(sockets).emit(event, data);
 };
 
 io.on('connection', (socket) => {
-  console.log('Socket connecté:', socket.id);
-
-  // 1. USER EN LIGNE + LIVRAISON DES MESSAGES EN ATTENTE
   socket.on('user_online', async ({ userId }) => {
     if (!userId) return;
     const uid = userId.toString();
-
-    // Gestion propre du multi-socket (Set)
-    if (!global.onlineUsers.has(uid)) {
-      global.onlineUsers.set(uid, new Set());
-    }
-    
-    const existing = global.onlineUsers.get(uid);
-    if (typeof existing === 'string') {
-      global.onlineUsers.set(uid, new Set([existing]));
-    }
-    
+    if (!global.onlineUsers.has(uid)) global.onlineUsers.set(uid, new Set());
+    const ex = global.onlineUsers.get(uid);
+    if (typeof ex === 'string') global.onlineUsers.set(uid, new Set([ex]));
     global.onlineUsers.get(uid).add(socket.id);
     socket.userId = uid;
-    
-    console.log(`✓ ${uid} en ligne -> ${socket.id} | total appareils connectés pour lui: ${global.onlineUsers.get(uid).size}`);
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
-
-    // Livraison sécurisée des messages en attente vers l'appareil qui vient de se connecter
     try {
       const undelivered = await Message.find({ to: uid, status: 'sent' });
       for (const msg of undelivered) {
-        socket.emit('new_message', msg); // On envoie uniquement à CE socket d'appareil
-        msg.status = 'delivered'; 
-        await msg.save();
-        
-        // On informe l'expéditeur initial sur tous ses appareils
+        socket.emit('new_message', msg);
+        msg.status = 'delivered'; await msg.save();
         emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
       }
-    } catch (e) {
-      console.error('Erreur livraison offline:', e.message);
-    }
+    } catch {}
   });
 
-  // 2. TYPING / RECORDING AUDIO (CORRIGÉ POUR MULTI-SOCKET)
-  socket.on('typing', ({ to, state }) => {
-    if (to) {
-      emitToUser(to, 'typing', { from: socket.userId, state });
-    }
-  });
+  socket.on('typing', ({ to, state }) => { if (to) emitToUser(to, 'typing', { from: socket.userId, state }); });
 
-  // 3. ENVOI MESSAGE + TRANSFERT PDF (UNIFORMISÉ ET SÉCURISÉ)
   socket.on('send_message', async (data) => {
     try {
       const msg = await Message.create({
-        ...data,
         id: data.id,
         from: data.from?.toString(),
         to: data.to?.toString(),
+        type: data.type || 'text',
+        text: data.text || data.content || '',
+        content: data.content || data.text || '',
+        image: data.image || '',
+        audio: data.audio || '',
         status: 'sent',
-        contactMeta: data.contactMeta || null,
-        createdAt: new Date()
+        contactMeta: data.contactMeta || null, // = infos de l'expéditeur pour le destinataire
       });
-
-      // 1 coche sur tous les appareils de l'expéditeur
       emitToUser(data.from, 'message_status', { messageId: data.id, status: 'sent' });
-
-      // Vérification si le destinataire a des appareils en ligne
       const destSockets = global.onlineUsers.get(data.to?.toString());
-      const hasDestOnline = destSockets && (destSockets instanceof Set ? destSockets.size > 0 : !!destSockets);
-
-      if (hasDestOnline) {
-        // Envoi aux appareils du destinataire
+      const hasOnline = destSockets && (destSockets instanceof Set? destSockets.size>0 :!!destSockets);
+      if (hasOnline) {
         emitToUser(data.to, 'new_message', msg);
-        
-        // Passage direct en livré
-        msg.status = 'delivered';
-        await msg.save();
-        
-        // Double coche grise notifiée à l'expéditeur
+        msg.status = 'delivered'; await msg.save();
         emitToUser(data.from, 'message_status', { messageId: data.id, status: 'delivered' });
       }
-    } catch (e) { 
-      console.error('Erreur send_message:', e.message); 
-    }
+    } catch (e) { console.error(e.message); }
   });
 
-  // 4. DOUBLE COCHE BLEUE / GRISE (CORRIGÉ POUR MULTI-SOCKET)
   socket.on('message_read', async ({ from, messageId }) => {
-    try {
-      await Message.updateOne({ id: messageId }, { status: 'read' });
-      emitToUser(from, 'message_status', { messageId, status: 'read' });
-    } catch (e) { console.error(e); }
+    await Message.updateOne({ id: messageId }, { status: 'read' });
+    emitToUser(from, 'message_status', { messageId, status: 'read' });
   });
-
   socket.on('message_delivered', async ({ from, messageId }) => {
-    try {
-      await Message.updateOne({ id: messageId }, { status: 'delivered' });
-      emitToUser(from, 'message_status', { messageId, status: 'delivered' });
-    } catch (e) { console.error(e); }
+    await Message.updateOne({ id: messageId }, { status: 'delivered' });
+    emitToUser(from, 'message_status', { messageId, status: 'delivered' });
   });
 
-  // 5. TRANSFERT D'ARGENT EN TEMPS REEL (CORRIGÉ POUR MULTI-SOCKET)
-  socket.on('transfer_done', ({ to, transaction }) => {
-    if (to && transaction) {
-      const receipt = {
-        id: transaction.id || Math.random().toString(36).substring(7),
-        type: 'pdf',
-        from: transaction.expediteur,
-        to: to,
-        tx: transaction,
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-      };
-      emitToUser(to, 'new_message', receipt);
-    }
-  });
-
-  // GESTION DE LA DÉCONNEXION D'UN APPAREIL UNIQUE
   socket.on('disconnect', () => {
-    if (socket.userId && global.onlineUsers.has(socket.userId)) {
-      const set = global.onlineUsers.get(socket.userId);
-      
-      if (set instanceof Set) {
-        set.delete(socket.id); // Retire uniquement cet appareil/onglet
-        if (set.size === 0) {
-          global.onlineUsers.delete(socket.userId);
-        }
-      } else {
-        if (set === socket.id) global.onlineUsers.delete(socket.userId);
-      }
-      
-      // L'utilisateur n'est considéré offline QUE si plus AUCUN appareil n'est connecté
-      if (!global.onlineUsers.has(socket.userId)) {
-        socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline', lastSeen: new Date().toISOString() });
-        console.log(`✗ ${socket.userId} est totalement hors ligne (aucun appareil actif)`);
-      } else {
-        console.log(`- 1 appareil déconnecté pour ${socket.userId}. Reste : ${global.onlineUsers.get(socket.userId).size} appareil(s)`);
-      }
-    }
+    if (!socket.userId) return;
+    const set = global.onlineUsers.get(socket.userId);
+    if (set instanceof Set) { set.delete(socket.id); if (set.size===0) global.onlineUsers.delete(socket.userId); }
+    else global.onlineUsers.delete(socket.userId);
+    if (!global.onlineUsers.has(socket.userId)) socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
   });
 });
-
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
