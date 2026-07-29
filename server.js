@@ -93,32 +93,35 @@ io.on('connection', (socket) => {
   });
 
   // 3. ENVOI MESSAGE + TRANSFERT PDF
-  socket.on('send_message', async (data) => {
-    // data: { id, from, to, type, content, image, audio, time, tx }
+    socket.on('send_message', async (data) => {
     try {
-      // Sauvegarde systématique dans MongoDB (Garantit la persistence si le destinataire dort)
+      // data contient déjà from, to, type, content, text, image, audio
       const msg = await Message.create({
-        ...data,
-        status: 'sent'
+       ...data,
+        id: data.id,
+        from: data.from?.toString(),
+        to: data.to?.toString(),
+        status: 'sent',
+        contactMeta: data.contactMeta || null, // <-- IMPORTANT
+        createdAt: new Date()
       });
 
-      const toSocketId = global.onlineUsers.get(data.to);
+      const getSockets = (uid) => {
+        const v = global.onlineUsers?.get(uid?.toString());
+        if(!v) return [];
+        return v instanceof Set? Array.from(v) : [v];
+      };
 
-      // Confirmation immédiate à l'expéditeur (1 coche grise)
       socket.emit('message_status', { messageId: data.id, status: 'sent' });
 
-      // Si le destinataire est connecté, on lui transmet en direct
-      if (toSocketId) {
-        io.to(toSocketId).emit('new_message', msg);
+      const destSockets = getSockets(data.to);
+      if (destSockets.length > 0) {
+        destSockets.forEach(sid => io.to(sid).emit('new_message', msg));
         msg.status = 'delivered';
         await msg.save();
-        
-        // Confirmation immédiate de réception à l'expéditeur (Double coche grise)
         socket.emit('message_status', { messageId: data.id, status: 'delivered' });
       }
-    } catch (e) { 
-      console.error('Erreur send_message:', e.message); 
-    }
+    } catch (e) { console.error('send_message', e.message); }
   });
 
   // 4. DOUBLE COCHE BLEUE (LU)
