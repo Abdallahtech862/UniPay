@@ -57,37 +57,31 @@ io.on('connection', (socket) => {
   console.log('Socket connecté:', socket.id);
 
   // 1. USER EN LIGNE + LIVRAISON DES MESSAGES EN ATTENTE (Text, Audio, Image, PDF)
-  socket.on('user_online', async ({ userId }) => {
+   socket.on('user_online', async ({ userId }) => {
     if (!userId) return;
-    
-    global.onlineUsers.set(userId, socket.id);
-    socket.userId = userId;
-    console.log(`✓ ${userId} en ligne`);
-    
-    // Notifie ses contacts qu'il est online
-    socket.broadcast.emit('user_status', { userId, status: 'online' });
-    
-    try {
-      // Récupérer TOUS les messages non livrés destinés à cet utilisateur
-      const undelivered = await Message.find({ to: userId, status: 'sent' });
-      
-      for (const msg of undelivered) {
-        // Envoi du message (qu'il soit du texte, une image, un audio ou un pdf)
-        io.to(socket.id).emit('new_message', msg);
-        
-        // Mise à jour du statut dans la base de données
-        msg.status = 'delivered';
-        await msg.save();
-        
-        // Notifier l'expéditeur d'origine si lui aussi est en ligne (Passage à la double coche grise)
-        const fromSocketId = global.onlineUsers.get(msg.from);
-        if (fromSocketId) {
-          io.to(fromSocketId).emit('message_status', { messageId: msg.id, status: 'delivered' });
-        }
-      }
-    } catch (err) {
-      console.error('Erreur lors de la distribution des messages hors-ligne:', err.message);
+    const uid = userId.toString();
+
+    // FIX: gère multi-socket (2 téléphones ou 2 onglets)
+    if(!global.onlineUsers.has(uid)) global.onlineUsers.set(uid, new Set());
+    // Si ancien système single socket, convertis
+    const existing = global.onlineUsers.get(uid);
+    if(typeof existing === 'string'){
+      global.onlineUsers.set(uid, new Set([existing]));
     }
+    global.onlineUsers.get(uid).add(socket.id);
+
+    socket.userId = uid;
+    console.log(`✓ ${uid} en ligne -> ${socket.id} | users: ${global.onlineUsers.size}`);
+    socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
+
+    //... ton code de livraison des messages en attente
+    try {
+      const undelivered = await Message.find({ to: uid, status: 'sent' });
+      for (const msg of undelivered) {
+        io.to(socket.id).emit('new_message', msg);
+        msg.status = 'delivered'; await msg.save();
+      }
+    } catch(e){}
   });
 
   // 2. TYPING / RECORDING AUDIO
@@ -163,15 +157,20 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    if (socket.userId) {
-      global.onlineUsers.delete(socket.userId);
-      socket.broadcast.emit('user_status', { 
-        userId: socket.userId, 
-        status: 'offline', 
-        lastSeen: new Date().toISOString() 
-      });
-      console.log(`✗ ${socket.userId} hors ligne`);
+   socket.on('disconnect', () => {
+    if (socket.userId && global.onlineUsers.has(socket.userId)) {
+      const set = global.onlineUsers.get(socket.userId);
+      if(set instanceof Set){
+        set.delete(socket.id);
+        if(set.size===0) global.onlineUsers.delete(socket.userId);
+      } else {
+        // ancien single socket
+        if(set === socket.id) global.onlineUsers.delete(socket.userId);
+      }
+      if(!global.onlineUsers.has(socket.userId)){
+        socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline', lastSeen: new Date().toISOString() });
+        console.log(`✗ ${socket.userId} hors ligne`);
+      }
     }
   });
 });
