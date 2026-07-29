@@ -1266,7 +1266,7 @@ router.post('/', authUser, async (req, res) => {
     session.endSession();
 
     // 9. TRAITEMENT DU CHAT ET NOTIFICATIONS (HORS TRANSACTION ACID)
-    setImmediate(async () => {
+        setImmediate(async () => {
       try {
         const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         const dateStr = new Date().toLocaleDateString('fr-FR').replaceAll('/', '');
@@ -1274,76 +1274,63 @@ router.post('/', authUser, async (req, res) => {
         const expediteurIdStr = tx.expediteur.toString();
         const destinataireIdStr = tx.destinataire.toString();
 
-        // Récupération des sockets en temps réel
-        const destSocketId = global.onlineUsers ? global.onlineUsers.get(destinataireIdStr) : null;
-        const expSocketId = global.onlineUsers ? global.onlineUsers.get(expediteurIdStr) : null;
+        // FIX: onlineUsers est un Map<userId, Set<socketId>>
+        const getSockets = (uid) => {
+          const set = global.onlineUsers?.get(uid);
+          return set ? Array.from(set) : [];
+        };
+        const destSockets = getSockets(destinataireIdStr);
+        const expSockets = getSockets(expediteurIdStr);
 
-        // Détermination du statut de départ pour le destinataire
-        const initialDestStatus = destSocketId ? 'delivered' : 'sent';
-        // 1. REÇU POUR LE DESTINATAIRE (type: pdf / tx.type: reception)
+        const initialDestStatus = destSockets.length > 0 ? 'delivered' : 'sent';
+
         const recuDestinataire = {
           id: tx._id.toString() + '_dest',
           type: 'pdf',
-          name: `Reception_Reçu_${dateStr}_${tx.montant}.pdf`,
+          name: `Reception_${dateStr}_${tx.montant}.pdf`,
           size: `${(Math.random() * 100 + 50).toFixed(0)} KB`,
           from: expediteurIdStr,
           to: destinataireIdStr,
           time,
+          timestamp: Date.now(),
+          createdAt: new Date().toISOString(),
           status: initialDestStatus,
           contactMeta: { _id: expediteurIdStr, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil },
           tx: {...tx._doc, type: 'reception', contact: { _id: expediteurIdStr, prenom: exp.prenom, nom: exp.nom, telephone: exp.telephone, photoProfil: exp.photoProfil } }
         };
 
-        // 2. REÇU POUR L'EXPEDITEUR (type: pdf / tx.type: envoi)
         const recuExpediteur = {
           id: tx._id.toString() + '_exp',
           type: 'pdf',
-          name: `Envoi_Reçu_${dateStr}_${tx.montant}.pdf`,
+          name: `Envoi_${dateStr}_${tx.montant}.pdf`,
           size: `${(Math.random() * 100 + 50).toFixed(0)} KB`,
           from: expediteurIdStr,
           to: destinataireIdStr,
           time,
-          status: 'sent', // Déjà vu par l'expéditeur qui initie l'action
-           contactMeta: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
+          timestamp: Date.now(),
+          createdAt: new Date().toISOString(),
+          status: 'read',
+          contactMeta: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
           tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
-          
         };
 
-       
-      
-        // SAUVEGARDE STRICTE EN BASE POUR HISTORIQUE (Garantit la livraison future si hors-ligne)
-        // Note: Assurez-vous que le modèle 'Message' est importé ou accessible dans ce fichier
-        if (typeof Message !== 'undefined') {
-          await Message.create([recuDestinataire, recuExpediteur]);
-        } else if (mongoose.models.Message) {
-          await mongoose.models.Message.create([recuDestinataire, recuExpediteur]);
+        // SAUVEGARDE
+        const MessageModel = typeof Message !== 'undefined' ? Message : mongoose.models.Message;
+        if (MessageModel) {
+          await MessageModel.create([recuDestinataire, recuExpediteur]);
+          console.log('PDF sauvé en base');
         }
 
-        // ENVOI SOCKET TEMPS REEL
+        // ENVOI SOCKET - BROADCAST À TOUS LES SOCKETS DE L'USER
         if (global.io) {
-          if (destSocketId) {
-            global.io.to(destSocketId).emit('new_message', recuDestinataire);
-            console.log(`📄 Reçu temps réel envoyé au destinataire connecté : ${destinataireIdStr}`);
-          } else {
-            console.log(`⏳ Destinataire ${destinataireIdStr} hors ligne. Reçu stocké en BDD.`);
-          }
-
-          if (expSocketId) {
-            global.io.to(expSocketId).emit('new_message', recuExpediteur);
-            console.log(`📄 Reçu temps réel envoyé à l'expéditeur : ${expediteurIdStr}`);
-          }
-        }
-
-        // ENVOI OPTIONNEL DES NOTIFICATIONS PUSH PUSH IF TOKEN DISPONIBLE
-        if (exp.expoPushToken && typeof sendPushNotification === 'function') {
-          sendPushNotification(exp.expoPushToken, 'Transfert envoyé', `Tu as envoyé ${montantInt} FCFA à ${dest.prenom}`, { type: 'transfert' }).catch(() => {});
-        }
-        if (dest.expoPushToken && typeof sendPushNotification === 'function') {
-          sendPushNotification(dest.expoPushToken, 'Argent reçu', `Tu as reçu ${montantNetRecu} FCFA`, { type: 'reception' }).catch(() => {});
+          destSockets.forEach(sid => global.io.to(sid).emit('new_message', recuDestinataire));
+          expSockets.forEach(sid => global.io.to(sid).emit('new_message', recuExpediteur));
+          console.log(`📄 Dest ${destinataireIdStr}: ${destSockets.length} socket(s) | Exp ${expediteurIdStr}: ${expSockets.length} socket(s)`);
+          console.log('ONLINE:', Array.from(global.onlineUsers?.keys() || []));
         }
 
       } catch (e) {
-        console.error('Erreur traitement asynchrone chat/notif:', e.message);
+        console.error('Erreur async chat:', e.message, e.stack);
       }
     });
 
