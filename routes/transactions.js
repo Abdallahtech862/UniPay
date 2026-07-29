@@ -1309,7 +1309,7 @@ router.post('/', authUser, async (req, res) => {
           time,
           timestamp: Date.now(),
           createdAt: new Date().toISOString(),
-          status: 'sent',
+          status: 'read',
           contactMeta: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil },
           tx: {...tx._doc, type: 'envoi', contact: { _id: destinataireIdStr, prenom: dest.prenom, nom: dest.nom, telephone: dest.telephone, photoProfil: dest.photoProfil } }
         };
