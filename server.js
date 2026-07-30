@@ -3,6 +3,9 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const http = require('http');
 const { Server } = require('socket.io');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 console.log('DOTENV path:', require('path').resolve('.env'));
@@ -16,6 +19,22 @@ process.on('uncaughtException', (err) => {
   console.error('FATAL:', err.message);
 });
 
+// ================== DOSSIER UPLOAD ==================
+const uploadDir = path.join(__dirname, 'public/uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || (file.mimetype.includes('audio') ? '.m4a' : '.jpg');
+    cb(null, Date.now() + '-' + Math.random().toString(36).substring(7) + ext);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 15 * 1024 } });
+
+// Servir les fichiers
+app.use('/uploads', express.static(uploadDir));
+
 // ================== TES ROUTES EXISTANTES ==================
 app.use('/api/legal', require('./routes/legal'));
 app.use('/api/transactions', require('./routes/transactions'));
@@ -26,7 +45,16 @@ app.use('/api/clients', require('./routes/clients'));
 app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
 app.use('/api/pawapay', require('./routes/pawapay'));
 
-// ================== NOUVEAUX MODELS POUR CHAT ==================
+// ================== ROUTE UPLOAD ==================
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file' });
+  // Railway donne https automatiquement
+  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  console.log('✅ Upload:', url);
+  res.json({ url });
+});
+
+// ================== MODEL CHAT ==================
 const MessageSchema = new mongoose.Schema({
   id: String,
   from: { type: String, required: true },
@@ -39,12 +67,16 @@ const MessageSchema = new mongoose.Schema({
   status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
   createdAt: { type: Date, default: Date.now },
   tx: { type: Object },
-  contactMeta: { type: Object } // <-- MANQUAIT
+  contactMeta: { type: Object }
 });
 const Message = mongoose.model('Message', MessageSchema);
 
+// ================== SOCKET.IO ==================
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" }, maxHttpBufferSize: 10e6 });
+const io = new Server(server, {
+  cors: { origin: "*" },
+  maxHttpBufferSize: 10e6
+});
 global.io = io;
 global.onlineUsers = new Map();
 
@@ -57,6 +89,9 @@ const emitToUser = (userId, event, data) => {
 };
 
 io.on('connection', (socket) => {
+  console.log('Socket connecté:', socket.id);
+
+  // 1. USER EN LIGNE + LIVRAISON HORS-LIGNE CORRIGÉE
   socket.on('user_online', async ({ userId }) => {
     if (!userId) return;
     const uid = userId.toString();
@@ -66,18 +101,32 @@ io.on('connection', (socket) => {
     global.onlineUsers.get(uid).add(socket.id);
     socket.userId = uid;
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
+
+    // FIX HORS-LIGNE : on livre TOUS les messages non lus, pas seulement 'sent'
     try {
-      const undelivered = await Message.find({ to: uid, status: 'sent' });
+      const undelivered = await Message.find({ 
+        to: uid, 
+        status: { $in: ['sent','delivered'] } 
+      }).sort({ createdAt: 1 }).limit(200);
+
+      console.log(`📦 ${undelivered.length} messages en attente pour ${uid}`);
+
       for (const msg of undelivered) {
-        socket.emit('new_message', msg);
-        msg.status = 'delivered'; await msg.save();
-        emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
+        socket.emit('new_message', msg); // envoie au socket qui vient de se connecter
+        if (msg.status === 'sent') {
+          msg.status = 'delivered';
+          await msg.save();
+          emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
+        }
       }
-    } catch {}
+    } catch (e) { console.error('Erreur livraison offline:', e.message); }
   });
 
-  socket.on('typing', ({ to, state }) => { if (to) emitToUser(to, 'typing', { from: socket.userId, state }); });
+  socket.on('typing', ({ to, state }) => { 
+    if (to) emitToUser(to, 'typing', { from: socket.userId, state }); 
+  });
 
+  // 2. ENVOI MESSAGE - SAUVEGARDE TOUJOURS, MÊME SI DESTINATAIRE OFFLINE
   socket.on('send_message', async (data) => {
     try {
       const msg = await Message.create({
@@ -86,40 +135,52 @@ io.on('connection', (socket) => {
         to: data.to?.toString(),
         type: data.type || 'text',
         text: data.text || data.content || '',
-        content: data.content || data.text || '',
+        content: data.content || data.text || data.image || data.audio || '',
         image: data.image || '',
         audio: data.audio || '',
         status: 'sent',
-        contactMeta: data.contactMeta || null, // = infos de l'expéditeur pour le destinataire
+        contactMeta: data.contactMeta || null,
+        tx: data.tx || null,
+        createdAt: new Date()
       });
+
+      console.log(`💬 Nouveau message ${msg.type} de ${msg.from} à ${msg.to} - ${msg.id}`);
+
+      // Accusé 1 coche pour l'expéditeur
       emitToUser(data.from, 'message_status', { messageId: data.id, status: 'sent' });
+
+      // Si destinataire en ligne -> livre direct
       const destSockets = global.onlineUsers.get(data.to?.toString());
-      const hasOnline = destSockets && (destSockets instanceof Set? destSockets.size>0 :!!destSockets);
+      const hasOnline = destSockets && (destSockets instanceof Set ? destSockets.size > 0 : !!destSockets);
+
       if (hasOnline) {
         emitToUser(data.to, 'new_message', msg);
-        msg.status = 'delivered'; await msg.save();
+        msg.status = 'delivered';
+        await msg.save();
         emitToUser(data.from, 'message_status', { messageId: data.id, status: 'delivered' });
+        console.log(`✅ Livré à ${data.to}`);
+      } else {
+        console.log(`⏳ ${data.to} hors-ligne, message stocké`);
       }
-    } catch (e) { console.error(e.message); }
+    } catch (e) { console.error('Erreur send_message:', e.message, e.stack); }
   });
 
   socket.on('message_read', async ({ from, messageId }) => {
-    await Message.updateOne({ id: messageId }, { status: 'read' });
-    emitToUser(from, 'message_status', { messageId, status: 'read' });
+    try { await Message.updateOne({ id: messageId }, { status: 'read' }); emitToUser(from, 'message_status', { messageId, status: 'read' }); } catch {}
   });
   socket.on('message_delivered', async ({ from, messageId }) => {
-    await Message.updateOne({ id: messageId }, { status: 'delivered' });
-    emitToUser(from, 'message_status', { messageId, status: 'delivered' });
+    try { await Message.updateOne({ id: messageId }, { status: 'delivered' }); emitToUser(from, 'message_status', { messageId, status: 'delivered' }); } catch {}
   });
 
   socket.on('disconnect', () => {
     if (!socket.userId) return;
     const set = global.onlineUsers.get(socket.userId);
-    if (set instanceof Set) { set.delete(socket.id); if (set.size===0) global.onlineUsers.delete(socket.userId); }
+    if (set instanceof Set) { set.delete(socket.id); if (set.size === 0) global.onlineUsers.delete(socket.userId); }
     else global.onlineUsers.delete(socket.userId);
     if (!global.onlineUsers.has(socket.userId)) socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
   });
 });
+
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
 <html lang="fr">
