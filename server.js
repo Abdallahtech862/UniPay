@@ -62,6 +62,8 @@ const MessageSchema = new mongoose.Schema({
   type: { type: String, enum: ['text','image','audio','pdf'], default: 'text' },
   text: String,
   content: String,
+  time, 
+  timestamp,
   image: String,
   audio: String,
   status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
