@@ -23,6 +23,13 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }
 });
+// natify
+// Sauver token push
+router.post('/save-push-token', async (req, res) => {
+  const { userId, expoPushToken } = req.body;
+  await User.updateOne({ _id: userId }, { expoPushToken });
+  res.json({ ok: true });
+});
 
 // DÉFINIS LA FONCTION ICI
 router.get('/cloudinary-test', async (req, res) => {
