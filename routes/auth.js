@@ -25,11 +25,14 @@ const upload = multer({
 });
 // natify
 // Sauver token push
-router.post('/save-push-token', async (req, res) => {
+router.post('/save-push-token', async (req,res)=>{
+  console.log('BODY save-push-token', req.body);
   const { userId, expoPushToken } = req.body;
-  await User.updateOne({ _id: userId }, { expoPushToken });
+  if(!userId || !expoPushToken) return res.status(400).json({error:'missing'});
+  const u = await User.findByIdAndUpdate(userId, { expoPushToken }, { new: true });
+  console.log('UPDATED', u?._id, u?.expoPushToken);
   res.json({ ok: true });
-});
+})
 
 // DÉFINIS LA FONCTION ICI
 router.get('/cloudinary-test', async (req, res) => {
