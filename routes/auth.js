@@ -29,7 +29,7 @@ router.post('/save-push-token', async (req,res)=>{
   console.log('BODY save-push-token', req.body);
   const { userId, expoPushToken } = req.body;
   if(!userId || !expoPushToken) return res.status(400).json({error:'missing'});
-  const u = await User.findByIdAndUpdate(userId, { expoPushToken }, { new: true });
+  const u = await Client.findByIdAndUpdate(userId, { expoPushToken }, { new: true });
   console.log('UPDATED', u?._id, u?.expoPushToken);
   res.json({ ok: true });
 })
