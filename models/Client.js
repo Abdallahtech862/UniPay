@@ -40,8 +40,8 @@ const clientSchema = new mongoose.Schema({
 
   otpCode: { type: String, default: null },
   otpExpires: { type: Date, default: null },
-  //expoPushToken: { type: String, default: null },
-  expoPushToken: { type: String }
+  expoPushToken: { type: String, default: null },
+  //expoPushToken: { type: String }
   notificationsEnabled: { type: Boolean, default: true },
 
   createdAt: { type: Date, default: Date.now },
