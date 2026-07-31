@@ -25,14 +25,30 @@ const upload = multer({
 });
 // natify
 // Sauver token push
-router.post('/save-push-token', async (req,res)=>{
+router.post('/save-push-token', async (req, res) => {
   console.log('BODY save-push-token', req.body);
-  const { userId, expoPushToken } = req.body;
-  if(!userId || !expoPushToken) return res.status(400).json({error:'missing'});
-  const u = await Client.findByIdAndUpdate(userId, { expoPushToken }, { new: true });
-  console.log('UPDATED', u?._id, u?.expoPushToken);
-  res.json({ ok: true });
-})
+  
+  try {
+    const { userId, expoPushToken } = req.body;
+    if (!userId || !expoPushToken) {
+      return res.status(400).json({ error: 'missing' });
+    }
+
+    // Le try/catch évite que le serveur ne crash si l'userId n'est pas un ObjectId valide
+    const u = await Client.findByIdAndUpdate(userId, { expoPushToken }, { new: true });
+    
+    if (!u) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+
+    console.log('UPDATED PUSH TOKEN', u._id, u.expoPushToken);
+    return res.json({ ok: true });
+
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde du push token:', error.message);
+    return res.status(500).json({ error: 'Erreur interne du serveur' });
+  }
+});
 
 // DÉFINIS LA FONCTION ICI
 router.get('/cloudinary-test', async (req, res) => {
