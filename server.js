@@ -132,9 +132,10 @@ io.on('connection', (socket) => {
   });
 
   // 2. ENVOI MESSAGE - SAUVEGARDE TOUJOURS, MÊME SI DESTINATAIRE OFFLINE
-  socket.on('send_message', async (data) => {
+ socket.on('send_message', async (data) => {
+    let msg;
     try {
-      const msg = await Message.create({
+      msg = await Message.create({
         id: data.id,
         from: data.from?.toString(),
         to: data.to?.toString(),
@@ -149,12 +150,11 @@ io.on('connection', (socket) => {
         createdAt: new Date()
       });
 
-      console.log(`💬 Nouveau message ${msg.type} de ${msg.from} à ${msg.to} - ${msg.id}`);
+      console.log(`💬 Nouveau message ${msg.type} de ${msg.from} à ${msg.to}`);
 
-      // Accusé 1 coche pour l'expéditeur
+      // Accusé 1 coche
       emitToUser(data.from, 'message_status', { messageId: data.id, status: 'sent' });
 
-      // Si destinataire en ligne -> livre direct
       const destSockets = global.onlineUsers.get(data.to?.toString());
       const hasOnline = destSockets && (destSockets instanceof Set ? destSockets.size > 0 : !!destSockets);
 
@@ -165,41 +165,37 @@ io.on('connection', (socket) => {
         emitToUser(data.from, 'message_status', { messageId: data.id, status: 'delivered' });
         console.log(`✅ Livré à ${data.to}`);
       } else {
-        console.log(`⏳ ${data.to} hors-ligne, message stocké`);
-      }
-    } catch (e) { console.error('Erreur send_message:', e.message, e.stack); }
-    // debut des notifications
-    const destSockets = global.onlineUsers.get(data.to?.toString());
-  const hasOnline = destSockets && (destSockets instanceof Set ? destSockets.size > 0 : !!destSockets);
+        console.log(`⏳ ${data.to} hors-ligne, PUSH...`);
+        // --- PUSH NOTIF ---
+        try {
+          const recipient = await User.findById(data.to);
+          console.log('Recipient token:', recipient?.expoPushToken);
+          if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
+            const senderName = data.contactMeta ? `${data.contactMeta.prenom} ${data.contactMeta.nom}`.trim() : 'Nouveau message';
+            let body = data.text || data.content || '';
+            if (data.type === 'image') body = '📷 Image';
+            if (data.type === 'audio') body = '🎤 Message vocal';
+            if (data.type === 'pdf') body = '📄 Document';
 
-  if (hasOnline) {
-    emitToUser(data.to, 'new_message', msg);
-    msg.status = 'delivered'; await msg.save();
-    emitToUser(data.from, 'message_status', { messageId: data.id, status: 'delivered' });
-  } else {
-    // UTILISATEUR HORS-LIGNE -> PUSH NOTIF
-    try {
-      const recipient = await User.findById(data.to);
-      if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
-        const senderName = data.contactMeta ? `${data.contactMeta.prenom} ${data.contactMeta.nom}` : 'Nouveau message';
-        let body = data.text || '';
-        if (data.type === 'image') body = '📷 Image';
-        if (data.type === 'audio') body = '🎤 Message vocal';
-        if (data.type === 'pdf') body = '📄 Reçu';
-
-        await expo.sendPushNotificationsAsync([{
-          to: recipient.expoPushToken,
-          sound: 'default',
-          title: senderName,
-          body,
-          data: { from: data.from, to: data.to, type: data.type },
-          channelId: 'messages',
-        }]);
-        console.log(`📲 Push envoyé à ${data.to}`);
+            const receipts = await expo.sendPushNotificationsAsync([{
+              to: recipient.expoPushToken,
+              sound: 'default',
+              title: senderName,
+              body: body.substring(0, 100),
+              data: { from: data.from, to: data.to, type: data.type, messageId: data.id },
+              channelId: 'messages',
+            }]);
+            console.log(`📲 Push envoyé à ${data.to}`, receipts);
+          } else {
+            console.log('❌ Pas de expoPushToken valide pour', data.to);
+          }
+        } catch (e) { 
+          console.error('Push error', e.message, e.stack); 
+        }
       }
-    } catch (e) { console.error('Push error', e.message); }
-  }
-    //fin des notifications
+    } catch (e) { 
+      console.error('Erreur send_message:', e.message, e.stack); 
+    }
   });
 
   socket.on('message_read', async ({ from, messageId }) => {
