@@ -133,7 +133,7 @@ io.on('connection', (socket) => {
   });
 
   // 2. ENVOI MESSAGE - SAUVEGARDE TOUJOURS, MÊME SI DESTINATAIRE OFFLINE
- socket.on('send_message', async (data) => {
+  socket.on('send_message', async (data) => {
     let msg;
     try {
       msg = await Message.create({
@@ -167,7 +167,6 @@ io.on('connection', (socket) => {
         console.log(`✅ Livré à ${data.to}`);
       } else {
         console.log(`⏳ ${data.to} hors-ligne, PUSH...`);
-        // --- PUSH NOTIF ---
         try {
           const recipient = await User.findById(data.to);
           console.log('Recipient token:', recipient?.expoPushToken);
@@ -205,15 +204,6 @@ io.on('connection', (socket) => {
   socket.on('message_delivered', async ({ from, messageId }) => {
     try { await Message.updateOne({ id: messageId }, { status: 'delivered' }); emitToUser(from, 'message_status', { messageId, status: 'delivered' }); } catch {}
   });
-
-  socket.on('disconnect', () => {
-    if (!socket.userId) return;
-    const set = global.onlineUsers.get(socket.userId);
-    if (set instanceof Set) { set.delete(socket.id); if (set.size === 0) global.onlineUsers.delete(socket.userId); }
-    else global.onlineUsers.delete(socket.userId);
-    if (!global.onlineUsers.has(socket.userId)) socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
-  });
-});
 
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
