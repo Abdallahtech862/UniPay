@@ -133,7 +133,7 @@ io.on('connection', (socket) => {
   });
 
   // 2. ENVOI MESSAGE - SAUVEGARDE TOUJOURS, MÊME SI DESTINATAIRE OFFLINE
-  socket.on('send_message', async (data) => {
+ socket.on('send_message', async (data) => {
     let msg;
     try {
       msg = await Message.create({
@@ -197,13 +197,28 @@ io.on('connection', (socket) => {
       console.error('Erreur send_message:', e.message, e.stack); 
     }
   });
-
-  socket.on('message_read', async ({ from, messageId }) => {
+socket.on('message_read', async ({ from, messageId }) => {
     try { await Message.updateOne({ id: messageId }, { status: 'read' }); emitToUser(from, 'message_status', { messageId, status: 'read' }); } catch {}
   });
   socket.on('message_delivered', async ({ from, messageId }) => {
     try { await Message.updateOne({ id: messageId }, { status: 'delivered' }); emitToUser(from, 'message_status', { messageId, status: 'delivered' }); } catch {}
   });
+
+  // FIX 2 : Clôture propre et sécurisée de la fonction de déconnexion multi-socket
+  socket.on('disconnect', () => {
+    if (!socket.userId) return;
+    const uid = socket.userId.toString();
+    const set = global.onlineUsers.get(uid);
+    if (set instanceof Set) {
+      set.delete(socket.id);
+      if (set.size === 0) {
+        global.onlineUsers.delete(uid);
+        socket.broadcast.emit('user_status', { userId: uid, status: 'offline', lastSeen: new Date().toISOString() });
+        console.log(`✗ ${uid} est totalement déconnecté`);
+      }
+    }
+  });
+});
 
 // ================== TA PAGE HTML + HEALTH ==================
 const html = `<!DOCTYPE html>
