@@ -132,10 +132,11 @@ io.on('connection', (socket) => {
     if (to) emitToUser(to, 'typing', { from: socket.userId, state }); 
   });
 
-  // 2. ENVOI MESSAGE - SAUVEGARDE TOUJOURS, MÊME SI DESTINATAIRE OFFLINE
- socket.on('send_message', async (data) => {
+   // 2. ENVOI MESSAGE - ENVOIE TOUJOURS LE PUSH (ONLINE ET OFFLINE) + URL DE REDIRECTION
+  socket.on('send_message', async (data) => {
     let msg;
     try {
+      // 1. Sauvegarde systématique dans MongoDB
       msg = await Message.create({
         id: data.id,
         from: data.from?.toString(),
@@ -153,50 +154,71 @@ io.on('connection', (socket) => {
 
       console.log(`💬 Nouveau message ${msg.type} de ${msg.from} à ${msg.to}`);
 
-      // Accusé 1 coche
+      // Accusé de réception initial (1 coche grise pour l'émetteur)
       emitToUser(data.from, 'message_status', { messageId: data.id, status: 'sent' });
 
+      // Vérification du statut de connexion Socket
       const destSockets = global.onlineUsers.get(data.to?.toString());
       const hasOnline = destSockets && (destSockets instanceof Set ? destSockets.size > 0 : !!destSockets);
 
+      // 2. DISTRIBUTION DU MESSAGE EN DIRECT (Si l'utilisateur est connecté sur l'application)
       if (hasOnline) {
         emitToUser(data.to, 'new_message', msg);
         msg.status = 'delivered';
         await msg.save();
+        
+        // Accusé de réception livré (Double coche grise pour l'émetteur)
         emitToUser(data.from, 'message_status', { messageId: data.id, status: 'delivered' });
-        console.log(`✅ Livré à ${data.to}`);
+        console.log(`✅ Livré en temps réel (Socket) à ${data.to}`);
       } else {
-        console.log(`⏳ ${data.to} hors-ligne, PUSH...`);
-        try {
-          const recipient = await User.findById(data.to);
-          console.log('Recipient token:', recipient?.expoPushToken);
-          if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
-            const senderName = data.contactMeta ? `${data.contactMeta.prenom} ${data.contactMeta.nom}`.trim() : 'Nouveau message';
-            let body = data.text || data.content || '';
-            if (data.type === 'image') body = '📷 Image';
-            if (data.type === 'audio') body = '🎤 Message vocal';
-            if (data.type === 'pdf') body = '📄 Document';
-
-            const receipts = await expo.sendPushNotificationsAsync([{
-              to: recipient.expoPushToken,
-              sound: 'default',
-              title: senderName,
-              body: body.substring(0, 100),
-              data: { from: data.from, to: data.to, type: data.type, messageId: data.id },
-              channelId: 'messages',
-            }]);
-            console.log(`📲 Push envoyé à ${data.to}`, receipts);
-          } else {
-            console.log('❌ Pas de expoPushToken valide pour', data.to);
-          }
-        } catch (e) { 
-          console.error('Push error', e.message, e.stack); 
-        }
+        console.log(`⏳ Destinataire ${data.to} hors-ligne sur les sockets.`);
       }
+
+      // 3. FORCE L'ENVOI DU PUSH NOTIFICATION DANS LES DEUX CAS (Online ou Offline)
+      console.log(`🔔 Déclenchement du Push Notification forcé pour ${data.to}...`);
+      try {
+        const recipient = await User.findById(data.to);
+        
+        if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
+          // Détermination du nom de l'expéditeur pour le titre de la bannière
+          const senderName = data.contactMeta ? `${data.contactMeta.prenom} ${data.contactMeta.nom}`.trim() : 'UniPay Message';
+          
+          // Détermination de l'aperçu du message selon son type
+          let body = data.text || data.content || '';
+          if (data.type === 'image') body = '📷 Image reçue';
+          if (data.type === 'audio') body = '🎤 Message vocal reçu';
+          if (data.type === 'pdf') body = '📄 Reçu de transfert reçu';
+
+          // Envoi de la notification via la passerelle Expo / Firebase FCM V1
+          const receipts = await expo.sendPushNotificationsAsync([{
+            to: recipient.expoPushToken,
+            sound: 'default',
+            title: senderName,
+            body: body.substring(0, 100),
+            // AJOUT DE L'URL EXACTE EXPO ROUTER POUR LA REDIRECTION AU CLIC
+            data: { 
+              url: `/chat/${data.from?.toString()}`, // Le chemin exact attendu par router.push()
+              from: data.from?.toString(), 
+              to: data.to?.toString(), 
+              type: data.type, 
+              messageId: data.id 
+            },
+            channelId: 'messages',
+          }]);
+          
+          console.log(`📲 Push envoyé de force à ${data.to}`, receipts);
+        } else {
+          console.log('❌ Échec Push : Pas de expoPushToken valide enregistré pour', data.to);
+        }
+      } catch (pushError) {
+        console.error('❌ Erreur lors de l\'émission du Push Notification :', pushError.message);
+      }
+
     } catch (e) { 
-      console.error('Erreur send_message:', e.message, e.stack); 
+      console.error('Erreur send_message fatale :', e.message, e.stack); 
     }
   });
+
 socket.on('message_read', async ({ from, messageId }) => {
     try { await Message.updateOne({ id: messageId }, { status: 'read' }); emitToUser(from, 'message_status', { messageId, status: 'read' }); } catch {}
   });
