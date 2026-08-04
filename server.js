@@ -189,19 +189,30 @@ io.on('connection', (socket) => {
           if (data.type === 'audio') body = '🎤 Message vocal reçu';
           if (data.type === 'pdf') body = '📄 Reçu de transfert reçu';
 
-          // Envoi de la notification via la passerelle Expo / Firebase FCM V1
+         // Envoi de la notification via la passerelle Expo / Firebase FCM V1
           const receipts = await expo.sendPushNotificationsAsync([{
             to: recipient.expoPushToken,
             sound: 'default',
             title: senderName,
             body: body.substring(0, 100),
-            // AJOUT DE L'URL EXACTE EXPO ROUTER POUR LA REDIRECTION AU CLIC
+            
+            // 1. AJOUT DE L'ICÔNE EN PREMIER PLAN (Pour les bannières Android)
+            // Passez l'URL complète de la photo de profil de celui qui envoie le message
+            icon: data.contactMeta?.photoProfil || data.contactMeta?.photo || undefined,
+            
+            // 2. AJOUT DES COMPORTEMENTS AVANCÉS (Pour iOS / Android récents)
+            mutableContent: true, // Permet au téléphone de télécharger l'image avant l'affichage
+            attachments: data.contactMeta?.photoProfil ? [{ url: data.contactMeta.photoProfil }] : [],
+
+            // 3. AJOUT DANS L'OBJET DATA (Pour s'assurer que votre code mobile y a accès)
             data: { 
-              url: `/chat/${data.from?.toString()}`, // Le chemin exact attendu par router.push()
+              url: `/chat/${data.from?.toString()}`, 
               from: data.from?.toString(), 
               to: data.to?.toString(), 
               type: data.type, 
-              messageId: data.id 
+              messageId: data.id,
+              // On injecte la photo ici aussi pour l'intercepter côté mobile si besoin
+              senderPhoto: data.contactMeta?.photoProfil || data.contactMeta?.photo || ''
             },
             channelId: 'messages',
           }]);
