@@ -212,13 +212,13 @@ io.on('connection', (socket) => {
               type: data.type, 
               messageId: data.id,
               // On injecte la photo ici aussi pour l'intercepter côté mobile si besoin
-              photo: data.contactMeta?.photoProfil || data.contactMeta?.photo || ''
+              senderPhoto: data.contactMeta?.photoProfil || data.contactMeta?.photo || ''
             },
             channelId: 'messages',
           }]);
           
           console.log(`📲 Push envoyé de force à ${data.to}`, receipts);
-          console.log(icon);
+          console.log(data.senderPhoto);
         } else {
           console.log('❌ Échec Push : Pas de expoPushToken valide enregistré pour', data.to);
         }
