@@ -212,7 +212,7 @@ io.on('connection', (socket) => {
               type: data.type, 
               messageId: data.id,
               // On injecte la photo ici aussi pour l'intercepter côté mobile si besoin
-              senderPhoto: data.contactMeta?.photoProfil || data.contactMeta?.photo || ''
+              photo: data.contactMeta?.photoProfil || data.contactMeta?.photo || ''
             },
             channelId: 'messages',
           }]);
