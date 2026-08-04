@@ -199,7 +199,7 @@ io.on('connection', (socket) => {
             // 1. AJOUT DE L'ICÔNE EN PREMIER PLAN (Pour les bannières Android)
             // Passez l'URL complète de la photo de profil de celui qui envoie le message
             icon: data.contactMeta?.photoProfil || data.contactMeta?.photo || undefined,
-            
+            console.log(icon);
             // 2. AJOUT DES COMPORTEMENTS AVANCÉS (Pour iOS / Android récents)
             mutableContent: true, // Permet au téléphone de télécharger l'image avant l'affichage
             attachments: data.contactMeta?.photoProfil ? [{ url: data.contactMeta.photoProfil }] : [],
