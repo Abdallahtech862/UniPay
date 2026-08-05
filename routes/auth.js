@@ -190,6 +190,7 @@ router.post('/login', async (req, res) => {
 /// route pour creer des nouveaus utilisateurs
 router.post('/register', upload.fields([
   { name: 'carteRecto', maxCount: 1 },
+  { name: 'photoProfil', maxCount: 1 },
   { name: 'carteVerso', maxCount: 1 }
 ]), async (req, res) => {
   try {
@@ -214,6 +215,10 @@ router.post('/register', upload.fields([
     if (req.files?.carteVerso?.[0]) {
       const result = await uploadToCloudinary(req.files.carteVerso[0].buffer);
       carteVersoUrl = result.secure_url;
+    }
+    if (req.files?.photoProfil?.[0]) {
+      const result = await uploadToCloudinary(req.files.photoProfil[0].buffer);
+      photoProfilUrl = result.secure_url;
     }
 
     const plainPin = password; // on garde le clair pour le renvoyer 1 fois
