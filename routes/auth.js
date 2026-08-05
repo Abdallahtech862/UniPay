@@ -206,6 +206,7 @@ router.post('/register', upload.fields([
 
     let carteRectoUrl = null;
     let carteVersoUrl = null;
+    let photoProfilUrl = null;
 
     if (req.files?.carteRecto?.[0]) {
       const result = await uploadToCloudinary(req.files.carteRecto[0].buffer);
