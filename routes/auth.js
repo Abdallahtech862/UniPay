@@ -238,7 +238,8 @@ router.post('/register', upload.fields([
       limiteJournaliere: 500000,
       limiteMensuelle: 5000000,
       carteRecto: carteRectoUrl,
-      carteVerso: carteVersoUrl
+      carteVerso: carteVersoUrl,
+      photoProfil:photoProfilUrl
     });
     
     await client.save();
@@ -345,47 +346,7 @@ router.post('/check-user', async (req, res) => {
     });
   }
 });
-// 2. Login avec password + envoi OTP
-router.post('/login-passwordd', async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-    const user = await Client.findOne({
-      $or: [{ telephone: identifier }, { email: identifier }]
-    });
 
-    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(401).json({ error: 'Mot de passe incorrect' });
-
-    if (user.bloque) {
-      return res.status(403).json({ 
-        error: 'Votre compte a été suspendu. Contactez le support UniPay.' 
-      });
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    user.otpCode = otp;
-    user.otpExpires = Date.now() + 5 * 60 * 1000;
-    await user.save();
-
-    // ← Envoi SMS réel ici
-    const message = `Votre code UniPay: ${otp}. Valide 5 min. Ne le partagez jamais.`;
-    const smsSent = await sendSMSOrange(user.telephone, message);
-    console.log(user.telephone, message);
-    if (!smsSent) {
-    return res.status(500).json({
-      error: "Échec envoi SMS"
-    });
-  }
-    res.json({ message: 'OTP envoyé par SMS' }); // ← Plus de otp dans la réponse
-    
-  } catch (err) {
-    console.error('Erreur login-password:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 const otpRateLimit = new Map();
 const MAX_TENTATIVES = 4;
