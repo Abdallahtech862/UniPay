@@ -5,16 +5,15 @@ const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
-//const { sendPushNotification } = require('../utils/sendPushNotification');
 const fs = require('fs');
 require('dotenv').config();
-//
+
 const { Expo } = require('expo-server-sdk');
 const expo = new Expo();
 
-const User = require('./models/Client'); // ton model User
-//
-console.log('DOTENV path:', require('path').resolve('.env'));
+const User = require('./models/Client'); // Ton model User
+
+console.log('DOTENV path:', path.resolve('.env'));
 
 const app = express();
 app.use(cors());
@@ -36,34 +35,16 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + '-' + Math.random().toString(36).substring(7) + ext);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 15 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } }); // 15MB
 
 // Servir les fichiers
 app.use('/uploads', express.static(uploadDir));
 
-// ================== TES ROUTES EXISTANTES ==================
-app.use('/api/legal', require('./routes/legal'));
-app.use('/api/transactions', require('./routes/transactions'));
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/wallet', require('./routes/wallet'));
-app.use('/api/cards', require('./routes/cards'));
-app.use('/api/clients', require('./routes/clients'));
-app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
-app.use('/api/pawapay', require('./routes/pawapay'));
-//
+// ================== SCHÉMAS ET MODÈLES MONGOOSE ==================
+const { Schema } = mongoose;
 
-
-// ================== ROUTE UPLOAD ==================
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
-  // Railway donne https automatiquement
-  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  console.log('✅ Upload:', url);
-  res.json({ url });
-});
-
-// ================== MODEL CHAT ==================
-const MessageSchema = new mongoose.Schema({
+// Model Chat
+const MessageSchema = new Schema({
   id: String,
   from: { type: String, required: true },
   to: { type: String, required: true },
@@ -78,37 +59,64 @@ const MessageSchema = new mongoose.Schema({
   contactMeta: { type: Object }
 });
 const Message = mongoose.model('Message', MessageSchema);
-//==============Nouveau=========
+
+// Model Marketplace - Produit
 const ProductSchema = new Schema({
-  vendeurId: String,
+  vendeurId: { type: String, required: true },
   vendeurNom: String,
   vendeurTel: String,
   vendeurPhoto: String,
-  titre: String,
+  titre: { type: String, required: true },
   description: String,
-  prix: Number,
-  images: [String], // urls Cloudinary ou base64 converti en file comme ton chat
-  categorie: String, // telephone, vetement, etc
-  ville: String, // Ouagadougou
-  stock: Number,
-  status: { type: String, default: 'actif' }, // actif, vendu, suspendu
-  createdAt: Date
+  prix: { type: Number, required: true },
+  images: [String],
+  categorie: String,
+  ville: String,
+  stock: { type: Number, default: 1 },
+  statut: { type: String, default: 'actif' }, // 'actif', 'vendu', 'suspendu'
+  createdAt: { type: Date, default: Date.now }
 });
+const Produit = mongoose.model('Produit', ProductSchema);
 
+// Model Marketplace - Commande
 const OrderSchema = new Schema({
-  produitId: String,
-  acheteurId: String,
-  vendeurId: String,
-  prix: Number,
-  frais: Number, // 2% commission UniPay
-  total: Number,
-  status: String, // pending, paye, livre, confirme, litige
+  produitId: { type: Schema.Types.ObjectId, ref: 'Produit', required: true },
+  acheteurId: { type: String, required: true },
+  vendeurId: { type: String, required: true },
+  prix: { type: Number, required: true },
+  frais: { type: Number, default: 0 },
+  total: { type: Number, required: true },
+  statut: { type: String, default: 'paye' }, // 'pending', 'paye', 'livre', 'confirmer', 'litige'
   adresseLivraison: String,
-  createdAt: Date
+  createdAt: { type: Date, default: Date.now }
 });
-//================Fin==============
+const Commande = mongoose.model('Commande', OrderSchema);
 
-// ================== SOCKET.IO ==================
+// Exporter les modèles pour qu'ils soient réutilisables dans les fichiers routes si besoin
+module.exports = { Message, Produit, Commande };
+
+// ================== ROUTES API ==================
+app.use('/api/legal', require('./routes/legal'));
+app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/cards', require('./routes/cards'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
+app.use('/api/pawapay', require('./routes/pawapay'));
+
+// AJOUT DE LA ROUTE MARKETPLACE :
+app.use('/api/marketplace', require('./routes/marketplace'));
+
+// ================== ROUTE UPLOAD ==================
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file' });
+  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  console.log('✅ Upload:', url);
+  res.json({ url });
+});
+
+// ================== SOCKET.IO & SERVEUR HTTP ==================
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*" },
@@ -117,6 +125,7 @@ const io = new Server(server, {
 global.io = io;
 global.onlineUsers = new Map();
 
+// Fonction globale pour émettre un événement à un utilisateur spécifique
 const emitToUser = (userId, event, data) => {
   if (!userId) return;
   const sockets = global.onlineUsers.get(userId.toString());
@@ -124,11 +133,11 @@ const emitToUser = (userId, event, data) => {
   if (sockets instanceof Set) sockets.forEach(sid => global.io.to(sid).emit(event, data));
   else global.io.to(sockets).emit(event, data);
 };
+global.emitToUser = emitToUser;
 
 io.on('connection', (socket) => {
   console.log('Socket connecté:', socket.id);
 
-  // 1. USER EN LIGNE + LIVRAISON HORS-LIGNE CORRIGÉE
   socket.on('user_online', async ({ userId }) => {
     if (!userId) return;
     const uid = userId.toString();
@@ -139,7 +148,6 @@ io.on('connection', (socket) => {
     socket.userId = uid;
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
 
-    // FIX HORS-LIGNE : on livre TOUS les messages non lus, pas seulement 'sent'
     try {
       const undelivered = await Message.find({ 
         to: uid, 
@@ -149,7 +157,7 @@ io.on('connection', (socket) => {
       console.log(`📦 ${undelivered.length} messages en attente pour ${uid}`);
 
       for (const msg of undelivered) {
-        socket.emit('new_message', msg); // envoie au socket qui vient de se connecter
+        socket.emit('new_message', msg);
         if (msg.status === 'sent') {
           msg.status = 'delivered';
           await msg.save();
@@ -163,123 +171,15 @@ io.on('connection', (socket) => {
     if (to) emitToUser(to, 'typing', { from: socket.userId, state }); 
   });
 
-   // 2. ENVOI MESSAGE - ENVOIE TOUJOURS LE PUSH (ONLINE ET OFFLINE) + URL DE REDIRECTION
-  socket.on('send_message', async (data) => {
-    let msg;
-    try {
-      // 1. Sauvegarde systématique dans MongoDB
-      msg = await Message.create({
-        id: data.id,
-        from: data.from?.toString(),
-        to: data.to?.toString(),
-        type: data.type || 'text',
-        text: data.text || data.content || '',
-        content: data.content || data.text || data.image || data.audio || '',
-        image: data.image || '',
-        audio: data.audio || '',
-        status: 'sent',
-        contactMeta: data.contactMeta || null,
-        tx: data.tx || null,
-        createdAt: new Date()
-      });
-
-      console.log(`💬 Nouveau message ${msg.type} de ${msg.from} à ${msg.to}`);
-
-      // Accusé de réception initial (1 coche grise pour l'émetteur)
-      emitToUser(data.from, 'message_status', { messageId: data.id, status: 'sent' });
-
-      // Vérification du statut de connexion Socket
-      const destSockets = global.onlineUsers.get(data.to?.toString());
-      const hasOnline = destSockets && (destSockets instanceof Set ? destSockets.size > 0 : !!destSockets);
-
-      // 2. DISTRIBUTION DU MESSAGE EN DIRECT (Si l'utilisateur est connecté sur l'application)
-      if (hasOnline) {
-        emitToUser(data.to, 'new_message', msg);
-        msg.status = 'delivered';
-        await msg.save();
-        
-        // Accusé de réception livré (Double coche grise pour l'émetteur)
-        emitToUser(data.from, 'message_status', { messageId: data.id, status: 'delivered' });
-        console.log(`✅ Livré en temps réel (Socket) à ${data.to}`);
-      } else {
-        console.log(`⏳ Destinataire ${data.to} hors-ligne sur les sockets.`);
-      }
-
-      // 3. FORCE L'ENVOI DU PUSH NOTIFICATION DANS LES DEUX CAS (Online ou Offline)
-      console.log(`🔔 Déclenchement du Push Notification forcé pour ${data.to}...`);
-      try {
-        const recipient = await User.findById(data.to);
-        
-        if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
-          // Détermination du nom de l'expéditeur pour le titre de la bannière
-          const senderName = data.contactMeta ? `${data.contactMeta.prenom} ${data.contactMeta.nom}`.trim() : 'UniPay Message';
-          
-          // Détermination de l'aperçu du message selon son type
-          let body = data.text || data.content || '';
-          if (data.type === 'image') body = '📷 Image reçue';
-          if (data.type === 'audio') body = '🎤 Message vocal reçu';
-          if (data.type === 'pdf') body = '📄 Reçu de transfert reçu';
-
-         // Envoi de la notification via la passerelle Expo / Firebase FCM V1
-          const receipts = await expo.sendPushNotificationsAsync([{
-            to: recipient.expoPushToken,
-            sound: 'default',
-            title: senderName,
-            body: body.substring(0, 100),
-            
-            // 1. AJOUT DE L'ICÔNE EN PREMIER PLAN (Pour les bannières Android)
-            // Passez l'URL complète de la photo de profil de celui qui envoie le message
-            icon: data.contactMeta?.photoProfil || data.contactMeta?.photo || undefined,
-            
-            // 2. AJOUT DES COMPORTEMENTS AVANCÉS (Pour iOS / Android récents)
-            mutableContent: true, // Permet au téléphone de télécharger l'image avant l'affichage
-            attachments: data.contactMeta?.photoProfil ? [{ url: data.contactMeta.photoProfil }] : [],
-
-            // 3. AJOUT DANS L'OBJET DATA (Pour s'assurer que votre code mobile y a accès)
-            data: { 
-              url: `/chat/${data.from?.toString()}`, 
-              from: data.from?.toString(), 
-              to: data.to?.toString(), 
-              type: data.type, 
-              messageId: data.id,
-              // On injecte la photo ici aussi pour l'intercepter côté mobile si besoin
-              senderPhoto: data.contactMeta?.photoProfil || data.contactMeta?.photo || ''
-            },
-            channelId: 'messages',
-          }]);
-          
-          console.log(`📲 Push envoyé de force à ${data.to}`, receipts);
-          console.log(data.senderPhoto);
-        } else {
-          console.log('❌ Échec Push : Pas de expoPushToken valide enregistré pour', data.to);
-        }
-      } catch (pushError) {
-        console.error('❌ Erreur lors de l\'émission du Push Notification :', pushError.message);
-      }
-
-    } catch (e) { 
-      console.error('Erreur send_message fatale :', e.message, e.stack); 
-    }
-  });
-
-socket.on('message_read', async ({ from, messageId }) => {
-    try { await Message.updateOne({ id: messageId }, { status: 'read' }); emitToUser(from, 'message_status', { messageId, status: 'read' }); } catch {}
-  });
-  socket.on('message_delivered', async ({ from, messageId }) => {
-    try { await Message.updateOne({ id: messageId }, { status: 'delivered' }); emitToUser(from, 'message_status', { messageId, status: 'delivered' }); } catch {}
-  });
-
-  // FIX 2 : Clôture propre et sécurisée de la fonction de déconnexion multi-socket
   socket.on('disconnect', () => {
-    if (!socket.userId) return;
-    const uid = socket.userId.toString();
-    const set = global.onlineUsers.get(uid);
-    if (set instanceof Set) {
-      set.delete(socket.id);
-      if (set.size === 0) {
-        global.onlineUsers.delete(uid);
-        socket.broadcast.emit('user_status', { userId: uid, status: 'offline', lastSeen: new Date().toISOString() });
-        console.log(`✗ ${uid} est totalement déconnecté`);
+    if (socket.userId && global.onlineUsers.has(socket.userId)) {
+      const userSockets = global.onlineUsers.get(socket.userId);
+      if (userSockets instanceof Set) {
+        userSockets.delete(socket.id);
+        if (userSockets.size === 0) {
+          global.onlineUsers.delete(socket.userId);
+          socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
+        }
       }
     }
   });
