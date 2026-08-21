@@ -50,5 +50,22 @@ app.post('/api/orders/:id/confirm', auth, async (req,res) => {
   res.json({success:true});
 });
 
+// GET mes commandes (acheteur + vendeur)
+app.get('/api/orders/my', auth, async (req,res)=>{
+  const orders = await Order.find({ $or: [{acheteurId:req.userId}, {vendeurId:req.userId}] })
+   .sort({createdAt:-1})
+   .lean();
+  // populate produit
+  for(let o of orders){ o.produit = await Product.findById(o.produitId); }
+  res.json(orders);
+});
 
+// Marquer livré par vendeur
+app.post('/api/orders/:id/deliver', auth, async (req,res)=>{
+  const order = await Order.findById(req.params.id);
+  if(order.vendeurId!==req.userId) return res.status(403).json({error:'Non autorisé'});
+  order.status='livre';
+  await order.save();
+  res.json(order);
+});
 module.exports = router;
