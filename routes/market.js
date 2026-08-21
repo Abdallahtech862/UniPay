@@ -49,3 +49,6 @@ app.post('/api/orders/:id/confirm', auth, async (req,res) => {
   await order.save();
   res.json({success:true});
 });
+
+
+module.exports = router;
