@@ -50,6 +50,8 @@ app.use('/api/cards', require('./routes/cards'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
 app.use('/api/pawapay', require('./routes/pawapay'));
+//
+
 
 // ================== ROUTE UPLOAD ==================
 app.post('/api/upload', upload.single('file'), (req, res) => {
@@ -76,6 +78,35 @@ const MessageSchema = new mongoose.Schema({
   contactMeta: { type: Object }
 });
 const Message = mongoose.model('Message', MessageSchema);
+//==============Nouveau=========
+const ProductSchema = new Schema({
+  vendeurId: String,
+  vendeurNom: String,
+  vendeurTel: String,
+  vendeurPhoto: String,
+  titre: String,
+  description: String,
+  prix: Number,
+  images: [String], // urls Cloudinary ou base64 converti en file comme ton chat
+  categorie: String, // telephone, vetement, etc
+  ville: String, // Ouagadougou
+  stock: Number,
+  status: { type: String, default: 'actif' }, // actif, vendu, suspendu
+  createdAt: Date
+});
+
+const OrderSchema = new Schema({
+  produitId: String,
+  acheteurId: String,
+  vendeurId: String,
+  prix: Number,
+  frais: Number, // 2% commission UniPay
+  total: Number,
+  status: String, // pending, paye, livre, confirme, litige
+  adresseLivraison: String,
+  createdAt: Date
+});
+//================Fin==============
 
 // ================== SOCKET.IO ==================
 const server = http.createServer(app);
