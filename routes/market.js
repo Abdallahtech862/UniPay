@@ -1,3 +1,6 @@
+const express = require('express');
+const router = express.Router();
+
 // routes/marketplace.js
 app.post('/api/products', auth, async (req,res) => {
   const product = await Product.create(req.body);
