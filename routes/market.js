@@ -158,7 +158,7 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
 // 5. Mes commandes
 router.get('/orders/my', verifyToken, async (req, res) => {
   try {
-    const ordres = await Commande.find({ $or: [{ acheteurId: req.client }, { vendeurId: req.client }] })
+    const ordres = await Commande.find({ $or: [{ acheteurId: req.client.Id }, { vendeurId: req.client }] })
      .sort({ createdAt: -1 })
      .lean();
     // Populate manuel car ton champ s'appelle produitId et pas ref
