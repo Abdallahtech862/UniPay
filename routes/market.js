@@ -10,8 +10,9 @@ const Utilisateur = require('../models/Client');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
 router.post('/products',async (req, res) => {
-  const userId = req.user.id;
-  console.log('error:',userId);
+  const { vendeurId } = req.query;
+  console.log('error:',vendeurId);
+  const userId = vendeurId;
   try {
     const vendeur = await Utilisateur.findById(userId);
     const produit = await Produit.create({
