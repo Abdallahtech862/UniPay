@@ -95,7 +95,7 @@ router.post('/orders/pay', verifyToken, async (req, res) => {
     // Commande
     const commande = await Commande.create({
       produitId: produit._id,
-      acheteurId: req.userId,
+      acheteurId: req.client._id ,
       vendeurId: produit.vendeurId,
       prix: produit.prix,
       frais: produit.prix * 0.02,
