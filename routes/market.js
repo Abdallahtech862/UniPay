@@ -16,6 +16,7 @@ router.post('/products',authUse, async (req, res) => {
     const userId = req.userId || req.user?.id || req.body.vendeurId;
     if (!userId) return res.status(401).json({ erreur: 'Non authentifié' });
     const vendeur = await Utilisateur.findById(req.userId);
+    const vendeurId = userId.toString();
     const produit = await Produit.create({
       titre: req.body.titre,
       description: req.body.description,
