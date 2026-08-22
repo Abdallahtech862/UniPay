@@ -106,7 +106,7 @@ app.use('/api/rechargeWallet', require('./routes/rechargeWallet'));
 app.use('/api/pawapay', require('./routes/pawapay'));
 
 // AJOUT DE LA ROUTE MARKETPLACE :
-app.use('/api/marketplace', require('./routes/marketplace'));
+app.use('/api/marketplace', require('./routes/market'));
 
 // ================== ROUTE UPLOAD ==================
 app.post('/api/upload', upload.single('file'), (req, res) => {
