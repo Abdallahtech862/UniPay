@@ -8,7 +8,7 @@ const Utilisateur = mongoose.model('Client');
 //const authentification = require('../middlewares/auth');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
-router.post('/products', verifyToken, async (req, res) => {
+router.post('/products', async (req, res) => {
   try {
     const vendeur = await Utilisateur.findById(req.userId);
     const produit = await Produit.create({
