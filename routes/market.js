@@ -9,12 +9,15 @@ const Utilisateur = require('../models/Client');
 //const authentification = require('../middlewares/auth');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
-router.post('/products',async (req, res) => {
-  const { vendeurId } = req.query;
-  console.log('error:',vendeurId);
-  const userId = vendeurId;
+router.post('/products', async (req, res) => {
   try {
-    const vendeur = await Utilisateur.findById(userId);
+    // On accepte vendeurId depuis body OU query
+    const vendeurId = req.body.vendeurId || req.query.vendeurId || req.body.vendeur_id;
+    console.log('vendeurId reçu:', vendeurId);
+
+    if(!vendeurId) return res.status(400).json({ erreur: 'vendeurId manquant - renvoyer depuis le frontend' });
+
+    const vendeur = await Utilisateur.findById(vendeurId);
     const produit = await Produit.create({
       titre: req.body.titre,
       description: req.body.description,
@@ -24,27 +27,34 @@ router.post('/products',async (req, res) => {
       ville: req.body.ville || 'Ouagadougou',
       stock: 1,
       statut: 'actif',
-      vendeurId: userId,
-      vendeurNom: vendeur? `${vendeur.prenom || ''} ${vendeur.nom || ''}`.trim() : 'Vendeur',
-      vendeurTel: vendeur?.telephone || '',
-      vendeurPhoto: vendeur?.photoProfil || ''
+      vendeurId: vendeurId.toString(),
+      vendeurNom: vendeur? `${vendeur.prenom||''} ${vendeur.nom||''}`.trim() : (req.body.vendeurNom||'Vendeur'),
+      vendeurTel: vendeur?.telephone || req.body.vendeurTel || '',
+      vendeurPhoto: vendeur?.photoProfil || req.body.vendeurPhoto || ''
     });
+
     if (global.io) global.io.emit('nouveau_produit', produit);
     res.status(201).json(produit);
   } catch (error) {
-    console.log(error);
+    console.log('CREATE ERROR:', error.message);
     res.status(500).json({ erreur: error.message });
   }
 });
 
-// 2. Liste active
-router.get('/products', async (req, res) => {
-  try {
-    const produits = await Produit.find({ statut: 'actif' }).sort({ createdAt: -1 }).limit(100);
+// LISTE
+router.get('/products', async (req,res)=>{
+  try{
+    const produits = await Produit.find({ statut: 'actif' }).sort({ createdAt: -1 });
     res.json(produits);
-  } catch (error) {
-    res.status(500).json({ erreur: error.message });
-  }
+  }catch(e){ res.status(500).json({erreur:e.message}); }
+});
+
+router.get('/products/:id', async (req,res)=>{
+  try{
+    const p = await Produit.findById(req.params.id);
+    if(!p) return res.status(404).json({erreur:'Non trouvé'});
+    res.json(p);
+  }catch(e){ res.status(500).json({erreur:e.message}); }
 });
 
 // 2bis. IMPORTANT: Détail d'un produit (manquait chez toi)
