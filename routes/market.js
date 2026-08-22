@@ -12,7 +12,6 @@ const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 router.post('/products',authUse, async (req, res) => {
   console.log('error');
   try {
-    
     const userId = req.userId || req.user?.id || req.body.vendeurId;
     if (!userId) return res.status(401).json({ erreur: 'Non authentifié' });
     const vendeur = await Utilisateur.findById(req.userId);
