@@ -158,7 +158,7 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
 // 5. Mes commandes
 router.get('/orders/my', verifyToken, async (req, res) => {
   try {
-    const ordres = await Commande.find({ $or: [{ acheteurId: req.userId }, { vendeurId: req.userId }] })
+    const ordres = await Commande.find({ $or: [{ acheteurId: req.client }, { vendeurId: req.client }] })
      .sort({ createdAt: -1 })
      .lean();
     // Populate manuel car ton champ s'appelle produitId et pas ref
@@ -176,7 +176,7 @@ router.post('/orders/:id/deliver', verifyToken, async (req, res) => {
   try {
     const commande = await Commande.findById(req.params.id);
     if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
-    if (commande.vendeurId.toString()!== req.userId) return res.status(403).json({ erreur: 'Non autorisé' });
+    if (commande.vendeurId.toString()!== req.client) return res.status(403).json({ erreur: 'Non autorisé' });
     commande.statut = 'livre';
     await commande.save();
     if (global.emitToUser) {
