@@ -1,4 +1,5 @@
-const express = require('express');
+c
+  onst express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
@@ -158,7 +159,7 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
 // 5. Mes commandes
 router.get('/orders/my', verifyToken, async (req, res) => {
   try {
-    const ordres = await Commande.find({ $or: [{ acheteurId: req.client.Id }, { vendeurId: req.client }] })
+    const ordres = await Commande.find({ $or: [{ acheteurId: req.client._id }, { vendeurId: req.client._id }] })
      .sort({ createdAt: -1 })
      .lean();
     // Populate manuel car ton champ s'appelle produitId et pas ref
