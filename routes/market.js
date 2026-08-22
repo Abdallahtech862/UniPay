@@ -38,6 +38,8 @@ router.post('/products',authUse, async (req, res) => {
 // 2. Liste active
 router.get('/products', authUse, async (req, res) => {
   try {
+    const userId = req.userId || req.user?.id || req.body.vendeurId;
+    if (!userId) return res.status(401).json({ erreur: 'Non authentifié' });
     const produits = await Produit.find({ statut: 'actif' }).sort({ createdAt: -1 }).limit(100);
     res.json(produits);
   } catch (error) {
