@@ -6,7 +6,7 @@ const Produit = mongoose.model('Produit');
 const Commande = mongoose.model('Commande');
 const Utilisateur = mongoose.model('Client');
 const authentification = require('../middlewares/auth');
-
+//const authentification = require('../middleware/auth');
 // 1. Créer un produit
 router.post('/products', authentification, async (req, res) => {
   try {
