@@ -5,10 +5,10 @@ const mongoose = require('mongoose');
 const Produit = mongoose.model('Produit');
 const Commande = mongoose.model('Commande');
 const Utilisateur = mongoose.model('Client');
-const authentification = require('../middlewares/auth');
-//const authentification = require('../middleware/auth');
+//const authentification = require('../middlewares/auth');
+const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
-router.post('/products', authentification, async (req, res) => {
+router.post('/products', verifyToken, async (req, res) => {
   try {
     const vendeur = await Utilisateur.findById(req.userId);
     const produit = await Produit.create({
@@ -55,7 +55,7 @@ router.get('/products/:id', async (req, res) => {
 });
 
 // 3. Payer (Escrow)
-router.post('/orders/pay', authentification, async (req, res) => {
+router.post('/orders/pay',verifyToken, async (req, res) => {
   try {
     const { produitId, adresseLivraison } = req.body;
     const produit = await Produit.findById(produitId);
@@ -98,7 +98,7 @@ router.post('/orders/pay', authentification, async (req, res) => {
 });
 
 // 4. Confirmer réception
-router.post('/orders/:id/confirm', authentification, async (req, res) => {
+router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   try {
     const commande = await Commande.findById(req.params.id);
     if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
@@ -127,7 +127,7 @@ router.post('/orders/:id/confirm', authentification, async (req, res) => {
 });
 
 // 5. Mes commandes
-router.get('/orders/my', authentification, async (req, res) => {
+router.get('/orders/my', verifyToken, async (req, res) => {
   try {
     const ordres = await Commande.find({ $or: [{ acheteurId: req.userId }, { vendeurId: req.userId }] })
      .sort({ createdAt: -1 })
@@ -143,7 +143,7 @@ router.get('/orders/my', authentification, async (req, res) => {
 });
 
 // 6. Marquer livré
-router.post('/orders/:id/deliver', authentification, async (req, res) => {
+router.post('/orders/:id/deliver', verifyToken, async (req, res) => {
   try {
     const commande = await Commande.findById(req.params.id);
     if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
