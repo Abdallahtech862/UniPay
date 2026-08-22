@@ -76,7 +76,8 @@ router.post('/orders/pay',verifyToken, async (req, res) => {
     if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
     if (produit.statut!== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
 
-    const acheteur = await Utilisateur.findById(req.userId);
+    const acheteur = await Utilisateur.findById(req.acheteur);
+    onsole.log('vendeurId reçu:', vendeurId);
     if (acheteur.solde < produit.prix) return res.status(400).json({ erreur: 'Solde insuffisant' });
 
     acheteur.solde -= produit.prix;
