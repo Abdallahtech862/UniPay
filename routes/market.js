@@ -4,7 +4,8 @@ const mongoose = require('mongoose');
 
 const Produit = mongoose.model('Produit');
 const Commande = mongoose.model('Commande');
-const Utilisateur = mongoose.model('Client');
+//const Utilisateur = mongoose.model('Client');
+const Utilisateur = require('../models/Client');
 //const authentification = require('../middlewares/auth');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
