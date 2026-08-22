@@ -6,7 +6,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const authentification = require('../middleware/auth');
+//const authentification = require('../middleware/auth');
 require('dotenv').config();
 
 const { Expo } = require('expo-server-sdk');
