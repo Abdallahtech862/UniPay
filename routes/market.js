@@ -9,7 +9,7 @@ const Utilisateur = require('../models/Client');
 //const authentification = require('../middlewares/auth');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
-router.post('/products',  authUser,async (req, res) => {
+router.post('/products',async (req, res) => {
   console.log('error:',req.user.id);
   try {
     const vendeur = await Utilisateur.findById(req.user.id);
