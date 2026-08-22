@@ -72,14 +72,14 @@ router.get('/products/:id', async (req, res) => {
 router.post('/orders/pay', verifyToken, async (req, res) => {
   try {
     const { produitId, adresseLivraison } = req.body;
-    console.log('Achat produitId:', produitId, 'par user:', req.userId); // DEBUG
+    console.log('Achat produitId:', produitId, 'par user:', req.client); // DEBUG
 
     const produit = await Produit.findById(produitId);
     if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
     if (produit.statut!== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
 
     // CORRECTION ICI: c'est req.userId pas req.acheteur
-    const acheteur = await Utilisateur.findById(req.userId);
+    const acheteur = await Utilisateur.findById(req.client);
     if (!acheteur) return res.status(404).json({ erreur: 'Acheteur introuvable' });
 
     console.log(`Solde acheteur: ${acheteur.solde} - Prix: ${produit.prix}`);
