@@ -36,7 +36,7 @@ router.post('/products', async (req, res) => {
 });
 
 // 2. Liste active
-router.get('/products', async (req, res) => {
+router.get('/products', authUse, async (req, res) => {
   try {
     const produits = await Produit.find({ statut: 'actif' }).sort({ createdAt: -1 }).limit(100);
     res.json(produits);
