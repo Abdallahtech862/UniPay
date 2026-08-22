@@ -10,9 +10,9 @@ const Utilisateur = require('../models/Client');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 // 1. Créer un produit
 router.post('/products',  authUser,async (req, res) => {
-  console.log('error:',req.vendeurId);
+  console.log('error:',req.user.id);
   try {
-    const vendeur = await Utilisateur.findById(req.userId);
+    const vendeur = await Utilisateur.findById(req.user.id);
     const produit = await Produit.create({
       titre: req.body.titre,
       description: req.body.description,
@@ -22,7 +22,7 @@ router.post('/products',  authUser,async (req, res) => {
       ville: req.body.ville || 'Ouagadougou',
       stock: 1,
       statut: 'actif',
-      vendeurId: req.userId,
+      vendeurId: req.user.id,
       vendeurNom: vendeur? `${vendeur.prenom || ''} ${vendeur.nom || ''}`.trim() : 'Vendeur',
       vendeurTel: vendeur?.telephone || '',
       vendeurPhoto: vendeur?.photoProfil || ''
