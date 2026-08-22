@@ -13,7 +13,7 @@ const expo = new Expo();
 
 const User = require('./models/Client'); // Ton model User
 
-console.log('DOTENV path:', path.resolve('.env'));
+//console.log('DOTENV path:', path.resolve('.env'));
 
 const app = express();
 app.use(cors());
