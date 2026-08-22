@@ -1,25 +1,28 @@
-c
-  onst express = require('express');
+const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-const Produit = mongoose.model('Produit');
-const Commande = mongoose.model('Commande');
-//const Utilisateur = mongoose.model('Client');
+const Produit = mongoose.models.Produit || mongoose.model('Produit');
+const Commande = mongoose.models.Commande || mongoose.model('Commande');
 const Utilisateur = require('../models/Client');
-//const authentification = require('../middlewares/auth');
-const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
-// 1. Créer un produit
-router.post('/products', async (req, res) => {
+
+const { verifyToken } = require('../middleware/auth');
+
+const getUserId = (req) => {
+  const id = req.client?._id || req.user?._id || req.client || req.user;
+  return id ? id.toString() : null;
+};
+
+// 1. Créer produit - SÉCURISÉ avec token
+router.post('/products', verifyToken, async (req, res) => {
   try {
-    // On accepte vendeurId depuis body OU query
-    const vendeurId = req.body.vendeurId || req.query.vendeurId || req.body.vendeur_id;
-    console.log('vendeurId reçu:', vendeurId);
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ erreur: 'Non authentifié' });
 
-    if(!vendeurId) return res.status(400).json({ erreur: 'vendeurId manquant - renvoyer depuis le frontend' });
+    const vendeur = await Utilisateur.findById(userId);
+    if (!vendeur) return res.status(404).json({ erreur: 'Vendeur introuvable' });
 
-    const vendeur = await Utilisateur.findById(vendeurId);
-    const produit = await Produit.create({
+    const produit = await mongoose.model('Produit').create({
       titre: req.body.titre,
       description: req.body.description,
       prix: Number(req.body.prix),
@@ -28,75 +31,62 @@ router.post('/products', async (req, res) => {
       ville: req.body.ville || 'Ouagadougou',
       stock: 1,
       statut: 'actif',
-      vendeurId: vendeurId.toString(),
-      vendeurNom: vendeur? `${vendeur.prenom||''} ${vendeur.nom||''}`.trim() : (req.body.vendeurNom||'Vendeur'),
-      vendeurTel: vendeur?.telephone || req.body.vendeurTel || '',
-      vendeurPhoto: vendeur?.photoProfil || req.body.vendeurPhoto || ''
+      vendeurId: userId,
+      vendeurNom: `${vendeur.prenom || ''} ${vendeur.nom || ''}`.trim() || 'Vendeur',
+      vendeurTel: vendeur.telephone || '',
+      vendeurPhoto: vendeur.photoProfil || ''
     });
 
     if (global.io) global.io.emit('nouveau_produit', produit);
     res.status(201).json(produit);
-  } catch (error) {
-    console.log('CREATE ERROR:', error.message);
-    res.status(500).json({ erreur: error.message });
+  } catch (e) {
+    console.error('CREATE ERROR:', e);
+    res.status(500).json({ erreur: e.message });
   }
 });
 
-// LISTE
-router.get('/products', async (req,res)=>{
-  try{
-    const produits = await Produit.find({ statut: 'actif' }).sort({ createdAt: -1 });
+// 2. Liste
+router.get('/products', async (req, res) => {
+  try {
+    const produits = await mongoose.model('Produit').find({ statut: 'actif' }).sort({ createdAt: -1 });
     res.json(produits);
-  }catch(e){ res.status(500).json({erreur:e.message}); }
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-router.get('/products/:id', async (req,res)=>{
-  try{
-    const p = await Produit.findById(req.params.id);
-    if(!p) return res.status(404).json({erreur:'Non trouvé'});
-    res.json(p);
-  }catch(e){ res.status(500).json({erreur:e.message}); }
-});
-
-// 2bis. IMPORTANT: Détail d'un produit (manquait chez toi)
+// 3. Détail - UNE SEULE FOIS
 router.get('/products/:id', async (req, res) => {
   try {
-    const produit = await Produit.findById(req.params.id);
-    if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
-    res.json(produit);
-  } catch (error) {
-    res.status(500).json({ erreur: error.message });
-  }
+    const p = await mongoose.model('Produit').findById(req.params.id);
+    if (!p) return res.status(404).json({ erreur: 'Non trouvé' });
+    res.json(p);
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-// 3. Payer (Escrow) - VERSION CORRIGÉE
+// 4. Payer (Escrow)
 router.post('/orders/pay', verifyToken, async (req, res) => {
   try {
+    const userId = getUserId(req);
     const { produitId, adresseLivraison } = req.body;
-    console.log('Achat produitId:', produitId, 'par user:', req.client); // DEBUG
+    console.log('PAY:', { userId, produitId });
 
-    const produit = await Produit.findById(produitId);
+    const produit = await mongoose.model('Produit').findById(produitId);
     if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
-    if (produit.statut!== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
+    if (produit.statut !== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
+    if (produit.vendeurId === userId) return res.status(400).json({ erreur: "Vous ne pouvez pas acheter votre propre article" });
 
-    // CORRECTION ICI: c'est req.userId pas req.acheteur
-    const acheteur = await Utilisateur.findById(req.client);
+    const acheteur = await Utilisateur.findById(userId);
     if (!acheteur) return res.status(404).json({ erreur: 'Acheteur introuvable' });
 
-    console.log(`Solde acheteur: ${acheteur.solde} - Prix: ${produit.prix}`);
-
-    if (acheteur.solde < produit.prix) {
-      return res.status(400).json({ erreur: 'Solde insuffisant' });
+    if ((acheteur.solde || 0) < produit.prix) {
+      return res.status(400).json({ erreur: `Solde insuffisant. Vous avez ${acheteur.solde} FCFA` });
     }
 
-    // Débit
     acheteur.solde -= produit.prix;
     await acheteur.save();
 
-    // Commande
-    const commande = await Commande.create({
+    const commande = await mongoose.model('Commande').create({
       produitId: produit._id,
-      acheteurId: req.client._id ,
+      acheteurId: userId,
       vendeurId: produit.vendeurId,
       prix: produit.prix,
       frais: produit.prix * 0.02,
@@ -105,39 +95,39 @@ router.post('/orders/pay', verifyToken, async (req, res) => {
       adresseLivraison: adresseLivraison || ''
     });
 
-    // Stock
     produit.stock = Math.max(0, (produit.stock || 1) - 1);
     if (produit.stock <= 0) produit.statut = 'vendu';
     await produit.save();
 
-    // Notif vendeur
     if (global.emitToUser) {
       global.emitToUser(produit.vendeurId, 'notification', {
         type: 'ordre_marche',
         titre: `Nouvelle vente! ${produit.titre}`,
-        corps: `${acheteur.prenom} a payé ${produit.prix} FCFA`,
-        orderId: commande._id
+        corps: `${acheteur.prenom} a payé ${produit.prix} FCFA`
       });
     }
 
-    console.log('✅ Commande créée:', commande._id);
     res.json(commande);
-  } catch (error) {
-    console.error('Erreur pay:', error);
-    res.status(500).json({ erreur: error.message });
+  } catch (e) {
+    console.error('PAY ERROR:', e);
+    res.status(500).json({ erreur: e.message });
   }
 });
-// 4. Confirmer réception
+
+// 5. Confirmer réception -> libère argent vendeur
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   try {
-    const commande = await Commande.findById(req.params.id);
+    const userId = getUserId(req);
+    const commande = await mongoose.model('Commande').findById(req.params.id);
     if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
-    if (commande.acheteurId.toString()!== req.userId) return res.status(403).json({ erreur: 'Non autorisé' });
+    if (commande.acheteurId.toString() !== userId) return res.status(403).json({ erreur: 'Seul acheteur peut confirmer' });
     if (commande.statut === 'confirme') return res.status(400).json({ erreur: 'Déjà confirmée' });
 
     const vendeur = await Utilisateur.findById(commande.vendeurId);
+    if (!vendeur) return res.status(404).json({ erreur: 'Vendeur introuvable' });
+
     const montantVendeur = commande.prix * 0.98;
-    vendeur.solde += montantVendeur;
+    vendeur.solde = (vendeur.solde || 0) + montantVendeur;
     await vendeur.save();
 
     commande.statut = 'confirme';
@@ -150,36 +140,37 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
         corps: `Vous avez reçu ${montantVendeur.toLocaleString()} FCFA`
       });
     }
+
     res.json({ succes: true, commande });
-  } catch (error) {
-    res.status(500).json({ erreur: error.message });
-  }
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-// 5. Mes commandes
+// 6. Mes commandes
 router.get('/orders/my', verifyToken, async (req, res) => {
   try {
-    const ordres = await Commande.find({ $or: [{ acheteurId: req.client._id }, { vendeurId: req.client._id }] })
-     .sort({ createdAt: -1 })
-     .lean();
-    // Populate manuel car ton champ s'appelle produitId et pas ref
+    const userId = getUserId(req);
+    const ordres = await mongoose.model('Commande').find({
+      $or: [{ acheteurId: userId }, { vendeurId: userId }]
+    }).sort({ createdAt: -1 }).lean();
+
     for (let o of ordres) {
-      o.produit = await Produit.findById(o.produitId);
+      o.produit = await mongoose.model('Produit').findById(o.produitId);
     }
     res.json(ordres);
-  } catch (error) {
-    res.status(500).json({ erreur: error.message });
-  }
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-// 6. Marquer livré
+// 7. Marquer livré
 router.post('/orders/:id/deliver', verifyToken, async (req, res) => {
   try {
-    const commande = await Commande.findById(req.params.id);
+    const userId = getUserId(req);
+    const commande = await mongoose.model('Commande').findById(req.params.id);
     if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
-    if (commande.vendeurId.toString()!== req.client) return res.status(403).json({ erreur: 'Non autorisé' });
+    if (commande.vendeurId.toString() !== userId) return res.status(403).json({ erreur: 'Seul vendeur' });
+
     commande.statut = 'livre';
     await commande.save();
+
     if (global.emitToUser) {
       global.emitToUser(commande.acheteurId, 'notification', {
         type: 'ordre_livre',
@@ -188,9 +179,7 @@ router.post('/orders/:id/deliver', verifyToken, async (req, res) => {
       });
     }
     res.json(commande);
-  } catch (error) {
-    res.status(500).json({ erreur: error.message });
-  }
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
 module.exports = router;
