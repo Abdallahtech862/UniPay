@@ -68,21 +68,31 @@ router.get('/products/:id', async (req, res) => {
   }
 });
 
-// 3. Payer (Escrow)
-router.post('/orders/pay',verifyToken, async (req, res) => {
+// 3. Payer (Escrow) - VERSION CORRIGÉE
+router.post('/orders/pay', verifyToken, async (req, res) => {
   try {
     const { produitId, adresseLivraison } = req.body;
+    console.log('Achat produitId:', produitId, 'par user:', req.userId); // DEBUG
+
     const produit = await Produit.findById(produitId);
     if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
     if (produit.statut!== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
 
-    const acheteur = await Utilisateur.findById(req.acheteur);
-    console.log('vendeurId reçu:', acheteur);
-    if (acheteur.solde < produit.prix) return res.status(400).json({ erreur: 'Solde insuffisant' });
+    // CORRECTION ICI: c'est req.userId pas req.acheteur
+    const acheteur = await Utilisateur.findById(req.userId);
+    if (!acheteur) return res.status(404).json({ erreur: 'Acheteur introuvable' });
 
+    console.log(`Solde acheteur: ${acheteur.solde} - Prix: ${produit.prix}`);
+
+    if (acheteur.solde < produit.prix) {
+      return res.status(400).json({ erreur: 'Solde insuffisant' });
+    }
+
+    // Débit
     acheteur.solde -= produit.prix;
     await acheteur.save();
 
+    // Commande
     const commande = await Commande.create({
       produitId: produit._id,
       acheteurId: req.userId,
@@ -94,10 +104,12 @@ router.post('/orders/pay',verifyToken, async (req, res) => {
       adresseLivraison: adresseLivraison || ''
     });
 
+    // Stock
     produit.stock = Math.max(0, (produit.stock || 1) - 1);
     if (produit.stock <= 0) produit.statut = 'vendu';
     await produit.save();
 
+    // Notif vendeur
     if (global.emitToUser) {
       global.emitToUser(produit.vendeurId, 'notification', {
         type: 'ordre_marche',
@@ -106,12 +118,14 @@ router.post('/orders/pay',verifyToken, async (req, res) => {
         orderId: commande._id
       });
     }
+
+    console.log('✅ Commande créée:', commande._id);
     res.json(commande);
   } catch (error) {
+    console.error('Erreur pay:', error);
     res.status(500).json({ erreur: error.message });
   }
 });
-
 // 4. Confirmer réception
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   try {
