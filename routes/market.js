@@ -71,19 +71,37 @@ router.get('/products/my/mine', verifyToken, async (req, res) => {
 });
 
 // MODIFIER
+const { uploadBase64ToCloudinary } = require('../utils/cloudinary'); // si tu as ça
+
 router.put('/products/:id', verifyToken, async (req, res) => {
   try {
-    const userId = (req.client?._id || req.user?._id).toString();
-    const p = await mongoose.model('Produit').findById(req.params.id);
+    const userId = getUserId(req);
+    const p = await Produit.findById(req.params.id);
     if(!p) return res.status(404).json({erreur:'Non trouvé'});
     if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
+
+    let images = p.images;
+    if(req.body.images && Array.isArray(req.body.images)){
+      // Si nouvelles images en base64, upload
+      const newImgs = [];
+      for(let img of req.body.images){
+        if(img.startsWith('data:image')){
+          const url = await uploadBase64ToCloudinary(img); // ta fonction
+          newImgs.push(url);
+        } else {
+          newImgs.push(img); // garde URL existante
+        }
+      }
+      images = newImgs;
+    }
+
     Object.assign(p, {
       titre: req.body.titre?? p.titre,
       description: req.body.description?? p.description,
       prix: req.body.prix? Number(req.body.prix) : p.prix,
-      images: req.body.images?? p.images,
       categorie: req.body.categorie?? p.categorie,
       ville: req.body.ville?? p.ville,
+      images
     });
     await p.save();
     res.json(p);
