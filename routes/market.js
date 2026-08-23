@@ -94,16 +94,32 @@ router.put('/products/:id', verifyToken, async (req, res) => {
   }
 });
 
-// 5. SUPPRIMER (soft delete)
+// SUPPRIMER / RESTAURER (toggle actif <-> suspendu)
 router.delete('/products/:id', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const p = await mongoose.model('Produit').findById(req.params.id);
     if(!p) return res.status(404).json({erreur:'Non trouvé'});
-    if(p.vendeurId.toString() !== userId) return res.status(403).json({erreur:'Pas ton article'});
-    p.statut = 'suspendu';
+    if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
+
+    // Toggle
+    p.statut = p.statut === 'actif'? 'suspendu' : 'actif';
     await p.save();
-    res.json({ succes: true });
+
+    res.json({ succes: true, statut: p.statut, produit: p });
+  } catch(e){ res.status(500).json({erreur:e.message}); }
+});
+
+// Optionnel: route dédiée pour restaurer
+router.patch('/products/:id/restore', verifyToken, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const p = await mongoose.model('Produit').findById(req.params.id);
+    if(!p) return res.status(404).json({erreur:'Non trouvé'});
+    if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
+    p.statut = 'actif';
+    await p.save();
+    res.json(p);
   } catch(e){ res.status(500).json({erreur:e.message}); }
 });
 
