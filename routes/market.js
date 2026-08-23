@@ -54,14 +54,55 @@ router.get('/products', async (req, res) => {
 });
 
 // 3. Détail - UNE SEULE FOIS
-router.get('/products/:id', async (req, res) => {
+router.get('/productss/:id', async (req, res) => {
   try {
     const p = await mongoose.model('Produit').findById(req.params.id);
     if (!p) return res.status(404).json({ erreur: 'Non trouvé' });
     res.json(p);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
+// MES ARTICLES
+router.get('/products/my/mine', verifyToken, async (req, res) => {
+  try {
+    const userId = (req.client?._id || req.user?._id).toString();
+    const produits = await mongoose.model('Produit').find({ vendeurId: userId }).sort({ createdAt: -1 });
+    res.json(produits);
+  } catch(e){ res.status(500).json({erreur:e.message}); }
+});
 
+// MODIFIER
+router.put('/products/:id', verifyToken, async (req, res) => {
+  try {
+    const userId = (req.client?._id || req.user?._id).toString();
+    const p = await mongoose.model('Produit').findById(req.params.id);
+    if(!p) return res.status(404).json({erreur:'Non trouvé'});
+    if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
+    Object.assign(p, {
+      titre: req.body.titre?? p.titre,
+      description: req.body.description?? p.description,
+      prix: req.body.prix? Number(req.body.prix) : p.prix,
+      images: req.body.images?? p.images,
+      categorie: req.body.categorie?? p.categorie,
+      ville: req.body.ville?? p.ville,
+    });
+    await p.save();
+    res.json(p);
+  } catch(e){ res.status(500).json({erreur:e.message}); }
+});
+
+// SUPPRIMER
+router.delete('/products/:id', verifyToken, async (req, res) => {
+  try {
+    const userId = (req.client?._id || req.user?._id).toString();
+    const p = await mongoose.model('Produit').findById(req.params.id);
+    if(!p) return res.status(404).json({erreur:'Non trouvé'});
+    if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
+    p.statut = 'suspendu'; // soft delete
+    await p.save();
+    // ou p.deleteOne() si tu veux supprimer vraiment
+    res.json({ succes: true });
+  } catch(e){ res.status(500).json({erreur:e.message}); }
+});
 // 4. Payer (Escrow)
 router.post('/orders/pay', verifyToken, async (req, res) => {
   try {
