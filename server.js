@@ -99,7 +99,7 @@ module.exports = { Message, Produit, Commande };
 // ================== ROUTES API ==================
 app.use('/api/legal', require('./routes/legal'));
 app.use('/product', require('./routes/deeplink'));
-app.use('/.well-known', require('./routes/well-known'));
+//app.use('/.well-known', require('./routes/well-known'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
