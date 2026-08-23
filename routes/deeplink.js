@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-router.get('/product/:id', async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const Produit = mongoose.models.Produit || mongoose.model('Produit');
     const p = await Produit.findById(req.params.id).lean();
