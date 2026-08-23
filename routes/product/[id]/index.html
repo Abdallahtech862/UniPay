@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta property="og:title" content="Article UniPay" />
+<meta property="og:image" content="PRODUCT_IMAGE_URL" />
+<script>
+  // Tente d'ouvrir l'app
+  window.location.href = "unipay://market/PRODUCT_ID";
+  // Si l'app n'est pas installée, reste sur la page web ou redirige vers Play Store
+  setTimeout(() => {
+    window.location.href = "https://play.google.com/store/apps/details?id=com.unipay.app";
+  }, 1500);
+</script>
+</head>
+<body>Ouverture UniPay...</body>
+</html>
