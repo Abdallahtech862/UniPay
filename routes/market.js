@@ -46,10 +46,13 @@ router.post('/products', verifyToken, async (req, res) => {
 // 2. Liste active
 router.get('/products', async (req, res) => {
   try {
-    const produits = await mongoose.model('Produit').find({ statut: 'actif' }).sort({ createdAt: -1 });
+    const filter = { statut: 'actif' };
+    if(req.query.categorie) filter.categorie = req.query.categorie;
+    const produits = await mongoose.model('Produit').find(filter).sort({ createdAt: -1 }).limit(50);
     res.json(produits);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
+
 
 // 2b. Mes articles - DOIT ETRE AVANT /products/:id sinon "my" est pris comme un id
 router.get('/products/my/mine', verifyToken, async (req, res) => {
