@@ -5,7 +5,6 @@ const mongoose = require('mongoose');
 const Produit = mongoose.models.Produit || mongoose.model('Produit');
 const Commande = mongoose.models.Commande || mongoose.model('Commande');
 const Utilisateur = require('../models/Client');
-
 const { verifyToken } = require('../middleware/auth');
 
 const getUserId = (req) => {
@@ -13,12 +12,11 @@ const getUserId = (req) => {
   return id ? id.toString() : null;
 };
 
-// 1. Créer produit - SÉCURISÉ avec token
+// 1. Créer - GARDE BASE64 tel quel
 router.post('/products', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ erreur: 'Non authentifié' });
-
     const vendeur = await Utilisateur.findById(userId);
     if (!vendeur) return res.status(404).json({ erreur: 'Vendeur introuvable' });
 
@@ -26,7 +24,7 @@ router.post('/products', verifyToken, async (req, res) => {
       titre: req.body.titre,
       description: req.body.description,
       prix: Number(req.body.prix),
-      images: req.body.images || [],
+      images: req.body.images || [], // on garde base64 direct
       categorie: req.body.categorie || 'Autres',
       ville: req.body.ville || 'Ouagadougou',
       stock: 1,
@@ -45,7 +43,7 @@ router.post('/products', verifyToken, async (req, res) => {
   }
 });
 
-// 2. Liste
+// 2. Liste active
 router.get('/products', async (req, res) => {
   try {
     const produits = await mongoose.model('Produit').find({ statut: 'actif' }).sort({ createdAt: -1 });
@@ -53,190 +51,119 @@ router.get('/products', async (req, res) => {
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-// 3. Détail - UNE SEULE FOIS
-router.get('/productss/:id', async (req, res) => {
+// 2b. Mes articles - DOIT ETRE AVANT /products/:id sinon "my" est pris comme un id
+router.get('/products/my/mine', verifyToken, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const produits = await mongoose.model('Produit').find({ vendeurId: userId }).sort({ createdAt: -1 });
+    res.json(produits);
+  } catch(e){ res.status(500).json({erreur:e.message}); }
+});
+
+// 3. Détail - CORRIGÉ: un seul /products/:id
+router.get('/products/:id', async (req, res) => {
   try {
     const p = await mongoose.model('Produit').findById(req.params.id);
     if (!p) return res.status(404).json({ erreur: 'Non trouvé' });
     res.json(p);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
-// MES ARTICLES
-router.get('/products/my/mine', verifyToken, async (req, res) => {
-  try {
-    const userId = (req.client?._id || req.user?._id).toString();
-    const produits = await mongoose.model('Produit').find({ vendeurId: userId }).sort({ createdAt: -1 });
-    res.json(produits);
-  } catch(e){ res.status(500).json({erreur:e.message}); }
-});
 
-// MODIFIER
-const { uploadBase64ToCloudinary } = require('../utils/cloudinary'); // si tu as ça
-
+// 4. MODIFIER - GARDE BASE64
 router.put('/products/:id', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
-    const p = await Produit.findById(req.params.id);
-    if(!p) return res.status(404).json({erreur:'Non trouvé'});
-    if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
-
-    let images = p.images;
-    if(req.body.images && Array.isArray(req.body.images)){
-      // Si nouvelles images en base64, upload
-      const newImgs = [];
-      for(let img of req.body.images){
-        if(img.startsWith('data:image')){
-          const url = await uploadBase64ToCloudinary(img); // ta fonction
-          newImgs.push(url);
-        } else {
-          newImgs.push(img); // garde URL existante
-        }
-      }
-      images = newImgs;
-    }
-
-    Object.assign(p, {
-      titre: req.body.titre?? p.titre,
-      description: req.body.description?? p.description,
-      prix: req.body.prix? Number(req.body.prix) : p.prix,
-      categorie: req.body.categorie?? p.categorie,
-      ville: req.body.ville?? p.ville,
-      images
-    });
-    await p.save();
-    res.json(p);
-  } catch(e){ res.status(500).json({erreur:e.message}); }
-});
-
-// SUPPRIMER
-router.delete('/products/:id', verifyToken, async (req, res) => {
-  try {
-    const userId = (req.client?._id || req.user?._id).toString();
     const p = await mongoose.model('Produit').findById(req.params.id);
     if(!p) return res.status(404).json({erreur:'Non trouvé'});
-    if(p.vendeurId.toString()!== userId) return res.status(403).json({erreur:'Pas ton article'});
-    p.statut = 'suspendu'; // soft delete
+    if(p.vendeurId.toString() !== userId) return res.status(403).json({erreur:'Pas ton article'});
+
+    p.titre = req.body.titre ?? p.titre;
+    p.description = req.body.description ?? p.description;
+    p.prix = req.body.prix ? Number(req.body.prix) : p.prix;
+    p.categorie = req.body.categorie ?? p.categorie;
+    p.ville = req.body.ville ?? p.ville;
+    if(req.body.images && Array.isArray(req.body.images)){
+      p.images = req.body.images; // base64 direct
+    }
     await p.save();
-    // ou p.deleteOne() si tu veux supprimer vraiment
-    res.json({ succes: true });
-  } catch(e){ res.status(500).json({erreur:e.message}); }
-});
-// 4. Payer (Escrow)
-router.post('/orders/pay', verifyToken, async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    const { produitId, adresseLivraison } = req.body;
-    console.log('PAY:', { userId, produitId });
-
-    const produit = await mongoose.model('Produit').findById(produitId);
-    if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
-    if (produit.statut !== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
-    if (produit.vendeurId === userId) return res.status(400).json({ erreur: "Vous ne pouvez pas acheter votre propre article" });
-
-    const acheteur = await Utilisateur.findById(userId);
-    if (!acheteur) return res.status(404).json({ erreur: 'Acheteur introuvable' });
-
-    if ((acheteur.solde || 0) < produit.prix) {
-      return res.status(400).json({ erreur: `Solde insuffisant. Vous avez ${acheteur.solde} FCFA` });
-    }
-
-    acheteur.solde -= produit.prix;
-    await acheteur.save();
-
-    const commande = await mongoose.model('Commande').create({
-      produitId: produit._id,
-      acheteurId: userId,
-      vendeurId: produit.vendeurId,
-      prix: produit.prix,
-      frais: produit.prix * 0.02,
-      total: produit.prix,
-      statut: 'paye',
-      adresseLivraison: adresseLivraison || ''
-    });
-
-    produit.stock = Math.max(0, (produit.stock || 1) - 1);
-    if (produit.stock <= 0) produit.statut = 'vendu';
-    await produit.save();
-
-    if (global.emitToUser) {
-      global.emitToUser(produit.vendeurId, 'notification', {
-        type: 'ordre_marche',
-        titre: `Nouvelle vente! ${produit.titre}`,
-        corps: `${acheteur.prenom} a payé ${produit.prix} FCFA`
-      });
-    }
-
-    res.json(commande);
-  } catch (e) {
-    console.error('PAY ERROR:', e);
-    res.status(500).json({ erreur: e.message });
+    if (global.io) global.io.emit('produit_modifie', p);
+    res.json(p);
+  } catch(e){ 
+    console.error('UPDATE ERROR', e);
+    res.status(500).json({erreur:e.message}); 
   }
 });
 
-// 5. Confirmer réception -> libère argent vendeur
+// 5. SUPPRIMER (soft delete)
+router.delete('/products/:id', verifyToken, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const p = await mongoose.model('Produit').findById(req.params.id);
+    if(!p) return res.status(404).json({erreur:'Non trouvé'});
+    if(p.vendeurId.toString() !== userId) return res.status(403).json({erreur:'Pas ton article'});
+    p.statut = 'suspendu';
+    await p.save();
+    res.json({ succes: true });
+  } catch(e){ res.status(500).json({erreur:e.message}); }
+});
+
+// 6. Payer, confirmer, etc...
+router.post('/orders/pay', verifyToken, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { produitId } = req.body;
+    const produit = await mongoose.model('Produit').findById(produitId);
+    if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
+    if (produit.statut !== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
+    if (produit.vendeurId === userId) return res.status(400).json({ erreur: "Ton propre article" });
+    const acheteur = await Utilisateur.findById(userId);
+    if ((acheteur.solde || 0) < produit.prix) return res.status(400).json({ erreur: `Solde insuffisant: ${acheteur.solde} FCFA` });
+    acheteur.solde -= produit.prix;
+    await acheteur.save();
+    const commande = await mongoose.model('Commande').create({
+      produitId: produit._id, acheteurId: userId, vendeurId: produit.vendeurId,
+      prix: produit.prix, frais: produit.prix * 0.02, total: produit.prix, statut: 'paye'
+    });
+    produit.stock = Math.max(0, (produit.stock || 1) - 1);
+    if (produit.stock <= 0) produit.statut = 'vendu';
+    await produit.save();
+    res.json(commande);
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
+});
+
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const commande = await mongoose.model('Commande').findById(req.params.id);
-    if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
-    if (commande.acheteurId.toString() !== userId) return res.status(403).json({ erreur: 'Seul acheteur peut confirmer' });
+    if (!commande) return res.status(404).json({ erreur: 'Introuvable' });
+    if (commande.acheteurId.toString() !== userId) return res.status(403).json({ erreur: 'Seul acheteur' });
     if (commande.statut === 'confirme') return res.status(400).json({ erreur: 'Déjà confirmée' });
-
     const vendeur = await Utilisateur.findById(commande.vendeurId);
-    if (!vendeur) return res.status(404).json({ erreur: 'Vendeur introuvable' });
-
-    const montantVendeur = commande.prix * 0.98;
-    vendeur.solde = (vendeur.solde || 0) + montantVendeur;
+    vendeur.solde = (vendeur.solde || 0) + commande.prix * 0.98;
     await vendeur.save();
-
     commande.statut = 'confirme';
     await commande.save();
-
-    if (global.emitToUser) {
-      global.emitToUser(commande.vendeurId, 'notification', {
-        type: 'ordre_confirme',
-        titre: 'Paiement libéré!',
-        corps: `Vous avez reçu ${montantVendeur.toLocaleString()} FCFA`
-      });
-    }
-
     res.json({ succes: true, commande });
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-// 6. Mes commandes
 router.get('/orders/my', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
-    const ordres = await mongoose.model('Commande').find({
-      $or: [{ acheteurId: userId }, { vendeurId: userId }]
-    }).sort({ createdAt: -1 }).lean();
-
-    for (let o of ordres) {
-      o.produit = await mongoose.model('Produit').findById(o.produitId);
-    }
+    const ordres = await mongoose.model('Commande').find({ $or: [{ acheteurId: userId }, { vendeurId: userId }] }).sort({ createdAt: -1 }).lean();
+    for (let o of ordres) { o.produit = await mongoose.model('Produit').findById(o.produitId); o.status = o.statut; }
     res.json(ordres);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
 
-// 7. Marquer livré
 router.post('/orders/:id/deliver', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const commande = await mongoose.model('Commande').findById(req.params.id);
-    if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
+    if (!commande) return res.status(404).json({ erreur: 'Introuvable' });
     if (commande.vendeurId.toString() !== userId) return res.status(403).json({ erreur: 'Seul vendeur' });
-
     commande.statut = 'livre';
     await commande.save();
-
-    if (global.emitToUser) {
-      global.emitToUser(commande.acheteurId, 'notification', {
-        type: 'ordre_livre',
-        titre: 'Commande livrée!',
-        corps: 'Confirmez la réception pour libérer le paiement.'
-      });
-    }
     res.json(commande);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
