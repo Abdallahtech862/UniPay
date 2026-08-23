@@ -11,7 +11,14 @@ const getUserId = (req) => {
   const id = req.client?._id || req.user?._id || req.client || req.user;
   return id ? id.toString() : null;
 };
-
+les livreurs
+router.get('/services', (req,res)=>{
+  res.json([
+    { _id: 'liv1', nom: 'unipay Express', ville: 'Ouagadougou', prix: 1000, note: '4.9', telephone: '+22675322321' },
+    { _id: 'liv2', nom: 'Rapide BF', ville: 'Ouagadougou', prix: 1500, note: '4.8' },
+    { _id: 'liv3', nom: 'Bobo Livraison', ville: 'Bobo-Dioulasso', prix: 2000, note: '4.7' },
+  ]);
+});
 // 1. Créer - GARDE BASE64 tel quel
 router.post('/products', verifyToken, async (req, res) => {
   try {
