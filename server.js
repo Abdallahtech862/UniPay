@@ -144,6 +144,8 @@ const emitToUser = (userId, event, data) => {
 global.emitToUser = emitToUser;
 
 io.on('connection', (socket) => {
+  console.log('Socket connecté:', socket.id);
+
   socket.on('user_online', async ({ userId }) => {
     if (!userId) return;
     const uid = userId.toString();
@@ -153,39 +155,100 @@ io.on('connection', (socket) => {
     global.onlineUsers.get(uid).add(socket.id);
     socket.userId = uid;
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
+
     try {
       const undelivered = await Message.find({ to: uid, status: { $in: ['sent','delivered'] } }).sort({ createdAt: 1 }).limit(200);
       for (const msg of undelivered) {
         socket.emit('new_message', msg);
-        msg.status = 'delivered'; await msg.save();
-        emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
+        if (msg.status === 'sent') {
+          msg.status = 'delivered';
+          await msg.save();
+          emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
+        }
       }
-    } catch(e){}
+    } catch (e) { console.error(e.message); }
   });
 
-  socket.on('send_message', async (msg) => {
+  socket.on('send_message', async (data) => {
     try {
-      if (!msg?.to ||!msg?.from) return;
-      console.log(`💬 ${msg.from} -> ${msg.to} type:${msg.type}`);
+      if (!data?.to ||!data?.from) return;
+      console.log(`💬 ${data.from} -> ${data.to} [${data.type}]`);
+
+      // 1. Sauvegarde en base
       await Message.create({
-        id: msg.id,
-        from: msg.from.toString(),
-        to: msg.to.toString(),
-        type: msg.type || 'text',
-        text: msg.text || '',
-        content: msg.content || '',
-        image: msg.image || '',
-        audio: msg.audio || '',
-        product: msg.product || null,
-        productId: msg.productId || msg.product?._id || '',
+        id: data.id,
+        from: data.from.toString(),
+        to: data.to.toString(),
+        type: data.type || 'text',
+        text: data.text || data.content || '',
+        content: data.content || data.text || '',
+        image: data.image || '',
+        audio: data.audio || '',
+        product: data.product || null,
+        productId: data.productId || data.product?._id || '',
         status: 'sent',
-        createdAt: new Date(msg.timestamp || Date.now()),
-        contactMeta: msg.contactMeta || null,
-        tx: msg.tx || null
+        createdAt: new Date(data.timestamp || Date.now()),
+        contactMeta: data.contactMeta || null,
+        tx: data.tx || null
       });
-      emitToUser(msg.to.toString(), 'new_message', msg);
-      emitToUser(msg.from.toString(), 'message_status', { messageId: msg.id, status: 'sent' });
-    } catch(e){ console.error(e); }
+
+      // 2. Envoie temps réel si online
+      emitToUser(data.to.toString(), 'new_message', data);
+      emitToUser(data.from.toString(), 'message_status', { messageId: data.id, status: 'sent' });
+
+      // 3. FORCE L'ENVOI DU PUSH NOTIFICATION DANS LES DEUX CAS (Online ou Offline)
+      console.log(`🔔 Déclenchement Push forcé pour ${data.to}...`);
+      try {
+        const recipient = await User.findById(data.to);
+
+        if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
+          const senderName = data.contactMeta? `${data.contactMeta.prenom || ''} ${data.contactMeta.nom || ''}`.trim() : 'UniPay';
+
+          let body = data.text || data.content || '';
+          if (data.type === 'image') body = '📷 Photo';
+          if (data.type === 'audio') body = '🎤 Vocal';
+          if (data.type === 'pdf') body = '📄 Reçu UniPay';
+          if (data.type === 'product') body = `🛍️ ${data.product?.titre || 'Article partagé'}`;
+
+          const receipts = await expo.sendPushNotificationsAsync([{
+            to: recipient.expoPushToken,
+            sound: 'default',
+            title: senderName || 'Nouveau message',
+            body: body.substring(0, 100),
+            icon: data.contactMeta?.photoProfil || undefined,
+            mutableContent: true,
+            data: {
+              url: `/chat/${data.from?.toString()}`,
+              from: data.from?.toString(),
+              to: data.to?.toString(),
+              type: data.type,
+              messageId: data.id,
+              senderPhoto: data.contactMeta?.photoProfil || ''
+            },
+            channelId: 'messages',
+          }]);
+
+          console.log(`📲 Push envoyé à ${data.to}`, receipts);
+        } else {
+          console.log('❌ Pas de expoPushToken valide pour', data.to);
+        }
+      } catch (pushError) {
+        console.error('❌ Erreur Push:', pushError.message);
+      }
+
+    } catch (e) {
+      console.error('Erreur send_message fatale:', e.message, e.stack);
+    }
+  });
+
+  socket.on('message_delivered', async ({ from, messageId }) => {
+    await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
+    emitToUser(from, 'message_status', { messageId, status: 'delivered' });
+  });
+
+  socket.on('message_read', async ({ from, messageId }) => {
+    await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
+    emitToUser(from, 'message_status', { messageId, status: 'read' });
   });
 
   socket.on('typing', ({ to, state }) => {
@@ -194,21 +257,12 @@ io.on('connection', (socket) => {
     emitToUser(to.toString(), 'typing', { from: socket.userId, state });
   });
 
-  socket.on('message_delivered', async ({ from, messageId }) => {
-    await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
-    emitToUser(from, 'message_status', { messageId, status: 'delivered' });
-  });
-  socket.on('message_read', async ({ from, messageId }) => {
-    await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
-    emitToUser(from, 'message_status', { messageId, status: 'read' });
-  });
-
   socket.on('disconnect', () => {
     if (socket.userId && global.onlineUsers.has(socket.userId)) {
-      const s = global.onlineUsers.get(socket.userId);
-      if (s instanceof Set) {
-        s.delete(socket.id);
-        if (s.size === 0) {
+      const userSockets = global.onlineUsers.get(socket.userId);
+      if (userSockets instanceof Set) {
+        userSockets.delete(socket.id);
+        if (userSockets.size === 0) {
           global.onlineUsers.delete(socket.userId);
           socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
         }
