@@ -49,16 +49,18 @@ const MessageSchema = new Schema({
   id: String,
   from: { type: String, required: true },
   to: { type: String, required: true },
-  type: { type: String, enum: ['text','image','audio','pdf'], default: 'text' },
+  type: { type: String, enum: ['text','image','audio','pdf','product'], default: 'text' },
   text: String,
   content: String,
   image: String,
   audio: String,
+  product: { type: Object }, // <--- AJOUTE ÇA
+  productId: String,
   status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
   createdAt: { type: Date, default: Date.now },
   tx: { type: Object },
   contactMeta: { type: Object }
-});
+}, { strict: false }); // important pour garder product
 const Message = mongoose.model('Message', MessageSchema);
 
 // Model Marketplace - Produit
@@ -142,8 +144,6 @@ const emitToUser = (userId, event, data) => {
 global.emitToUser = emitToUser;
 
 io.on('connection', (socket) => {
-  console.log('Socket connecté:', socket.id);
-
   socket.on('user_online', async ({ userId }) => {
     if (!userId) return;
     const uid = userId.toString();
@@ -153,78 +153,62 @@ io.on('connection', (socket) => {
     global.onlineUsers.get(uid).add(socket.id);
     socket.userId = uid;
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
-
     try {
       const undelivered = await Message.find({ to: uid, status: { $in: ['sent','delivered'] } }).sort({ createdAt: 1 }).limit(200);
       for (const msg of undelivered) {
         socket.emit('new_message', msg);
-        if (msg.status === 'sent') {
-          msg.status = 'delivered';
-          await msg.save();
-          emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
-        }
+        msg.status = 'delivered'; await msg.save();
+        emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
       }
-    } catch (e) { console.error(e.message); }
+    } catch(e){}
   });
 
-  // === MANQUAIT TOTALEMENT ===
   socket.on('send_message', async (msg) => {
     try {
-      if (!msg ||!msg.to ||!msg.from) return;
-      console.log(`💬 ${msg.from} -> ${msg.to} [${msg.type}]`);
-
-      // Sauvegarde en base
+      if (!msg?.to ||!msg?.from) return;
+      console.log(`💬 ${msg.from} -> ${msg.to} type:${msg.type}`);
       await Message.create({
         id: msg.id,
         from: msg.from.toString(),
         to: msg.to.toString(),
         type: msg.type || 'text',
-        text: msg.text || msg.content || '',
-        content: msg.content || msg.text || '',
+        text: msg.text || '',
+        content: msg.content || '',
         image: msg.image || '',
         audio: msg.audio || '',
+        product: msg.product || null,
+        productId: msg.productId || msg.product?._id || '',
         status: 'sent',
         createdAt: new Date(msg.timestamp || Date.now()),
-        tx: msg.tx || null,
-        contactMeta: msg.contactMeta || null
+        contactMeta: msg.contactMeta || null,
+        tx: msg.tx || null
       });
-
-      // Envoie au destinataire
       emitToUser(msg.to.toString(), 'new_message', msg);
-
-      // Accusé d'envoi au sender
       emitToUser(msg.from.toString(), 'message_status', { messageId: msg.id, status: 'sent' });
-
-    } catch (e) { console.error('send_message error', e.message); }
-  });
-
-  socket.on('message_delivered', async ({ from, messageId }) => {
-    try {
-      await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
-      emitToUser(from, 'message_status', { messageId, status: 'delivered' });
-    } catch {}
-  });
-
-  socket.on('message_read', async ({ from, messageId }) => {
-    try {
-      await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
-      emitToUser(from, 'message_status', { messageId, status: 'read' });
-    } catch {}
+    } catch(e){ console.error(e); }
   });
 
   socket.on('typing', ({ to, state }) => {
     if (!to ||!socket.userId) return;
-    // Ne pas s'envoyer à soi-même
     if (to.toString() === socket.userId.toString()) return;
     emitToUser(to.toString(), 'typing', { from: socket.userId, state });
   });
 
+  socket.on('message_delivered', async ({ from, messageId }) => {
+    await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
+    emitToUser(from, 'message_status', { messageId, status: 'delivered' });
+  });
+  socket.on('message_read', async ({ from, messageId }) => {
+    await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
+    emitToUser(from, 'message_status', { messageId, status: 'read' });
+  });
+
   socket.on('disconnect', () => {
     if (socket.userId && global.onlineUsers.has(socket.userId)) {
-      const userSockets = global.onlineUsers.get(socket.userId);
-      if (userSockets instanceof Set) {
-        userSockets.delete(socket.id);
-        if (userSockets.size === 0) {
+      const s = global.onlineUsers.get(socket.userId);
+      if (s instanceof Set) {
+        s.delete(socket.id);
+        if (s.size === 0) {
           global.onlineUsers.delete(socket.userId);
           socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
         }
