@@ -155,13 +155,7 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
 
     try {
-      const undelivered = await Message.find({ 
-        to: uid, 
-        status: { $in: ['sent','delivered'] } 
-      }).sort({ createdAt: 1 }).limit(200);
-
-      console.log(`📦 ${undelivered.length} messages en attente pour ${uid}`);
-
+      const undelivered = await Message.find({ to: uid, status: { $in: ['sent','delivered'] } }).sort({ createdAt: 1 }).limit(200);
       for (const msg of undelivered) {
         socket.emit('new_message', msg);
         if (msg.status === 'sent') {
@@ -170,11 +164,59 @@ io.on('connection', (socket) => {
           emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
         }
       }
-    } catch (e) { console.error('Erreur livraison offline:', e.message); }
+    } catch (e) { console.error(e.message); }
   });
 
-  socket.on('typing', ({ to, state }) => { 
-    if (to) emitToUser(to, 'typing', { from: socket.userId, state }); 
+  // === MANQUAIT TOTALEMENT ===
+  socket.on('send_message', async (msg) => {
+    try {
+      if (!msg ||!msg.to ||!msg.from) return;
+      console.log(`💬 ${msg.from} -> ${msg.to} [${msg.type}]`);
+
+      // Sauvegarde en base
+      await Message.create({
+        id: msg.id,
+        from: msg.from.toString(),
+        to: msg.to.toString(),
+        type: msg.type || 'text',
+        text: msg.text || msg.content || '',
+        content: msg.content || msg.text || '',
+        image: msg.image || '',
+        audio: msg.audio || '',
+        status: 'sent',
+        createdAt: new Date(msg.timestamp || Date.now()),
+        tx: msg.tx || null,
+        contactMeta: msg.contactMeta || null
+      });
+
+      // Envoie au destinataire
+      emitToUser(msg.to.toString(), 'new_message', msg);
+
+      // Accusé d'envoi au sender
+      emitToUser(msg.from.toString(), 'message_status', { messageId: msg.id, status: 'sent' });
+
+    } catch (e) { console.error('send_message error', e.message); }
+  });
+
+  socket.on('message_delivered', async ({ from, messageId }) => {
+    try {
+      await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
+      emitToUser(from, 'message_status', { messageId, status: 'delivered' });
+    } catch {}
+  });
+
+  socket.on('message_read', async ({ from, messageId }) => {
+    try {
+      await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
+      emitToUser(from, 'message_status', { messageId, status: 'read' });
+    } catch {}
+  });
+
+  socket.on('typing', ({ to, state }) => {
+    if (!to ||!socket.userId) return;
+    // Ne pas s'envoyer à soi-même
+    if (to.toString() === socket.userId.toString()) return;
+    emitToUser(to.toString(), 'typing', { from: socket.userId, state });
   });
 
   socket.on('disconnect', () => {
