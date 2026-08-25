@@ -1318,6 +1318,7 @@ router.post('/', authUser, async (req, res) => {
     const [tx] = await Transaction.create([{
       expediteur: exp._id,
       destinataire: dest._id,
+      type: 'envoi',
       montant: montantInt,
       montantNetRecu,
       frais: fraisDestinataire, 
