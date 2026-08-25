@@ -195,15 +195,16 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
     await commande.save({ session });
 
     // Historique transaction achat
-    const [tx] = await Transaction.create([{
+   const [tx] = await Transaction.create([{
       expediteur: acheteur._id,
       destinataire: vendeur._id,
       montant: prix,
       frais: frais,
       montantNetRecu: netVendeur,
-      type: 'achat_marketplace',
+      montantNet: netVendeur,
+      type: 'achat', // ✅ maintenant autorisé
       status: 'validee',
-      motif: `Achat confirmé: ${produit?.titre || 'Article'} #${commande._id.toString().slice(-6)}`,
+      motif: `Achat confirmé: ${produit?.titre} #${commande._id.toString().slice(-6)}`,
       produitId: produit?._id,
       commandeId: commande._id,
       adminId: admin?._id,
