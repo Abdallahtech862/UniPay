@@ -195,27 +195,45 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
     await commande.save({ session });
 
     // Historique transaction achat
-   const [tx] = await Transaction.create([{
-      expediteur: acheteur._id,
-      destinataire: vendeur._id,
-      montant: prix,
-      frais: frais,
-      montantNetRecu: netVendeur,
-      montantNet: netVendeur,
-      type: 'achat', // ✅ maintenant autorisé
-      status: 'validee',
-      motif: `Achat confirmé: ${produit?.titre} #${commande._id.toString().slice(-6)}`,
-      produitId: produit?._id,
-      commandeId: commande._id,
-      adminId: admin?._id,
-      soldeExpediteurApres: acheteur.solde,
-      soldeDestinataireApres: vendeur.solde,
-    }], { session });
+   const [txAchat, txVente] = await Transaction.create([
+      {
+        expediteur: acheteur._id,
+        destinataire: vendeur._id,
+        montant: prix,
+        frais: frais,
+        montantNetRecu: netVendeur,
+        montantNet: prix,
+        type: 'achat',
+        status: 'validee',
+        motif: `${produit?.titre}`,
+        produitId: produit?._id,
+        commandeId: commande._id,
+        soldeExpediteurApres: acheteur.solde,
+        soldeDestinataireApres: acheteur.solde,
+        contact: { prenom: vendeur.prenom, nom: vendeur.nom, telephone: vendeur.telephone }
+      },
+      {
+        expediteur: acheteur._id,
+        destinataire: vendeur._id,
+        montant: prix,
+        frais: frais,
+        montantNetRecu: netVendeur,
+        montantNet: netVendeur,
+        type: 'vente',
+        status: 'validee',
+        motif: `${produit?.titre}`,
+        produitId: produit?._id,
+        commandeId: commande._id,
+        soldeExpediteurApres: vendeur.solde,
+        soldeDestinataireApres: vendeur.solde,
+        contact: { prenom: acheteur.prenom, nom: acheteur.nom, telephone: acheteur.telephone }
+      }
+    ], { session });
 
     await session.commitTransaction();
     session.endSession();
 
-    // === NOTIFICATIONS + CHAT HORS TRANSACTION ===
+   // === NOTIFICATIONS + CHAT HORS TRANSACTION ===
     setImmediate(async () => {
       try {
         const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -233,7 +251,7 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
           timestamp: Date.now(),
           status: 'sent',
           contactMeta: { _id: acheteurIdStr, prenom: acheteur.prenom, nom: acheteur.nom, telephone: acheteur.telephone, photoProfil: acheteur.photoProfil },
-          tx: {...tx._doc, type: 'vente_confirmee' }
+          tx: {...txVente._doc, type: 'vente_confirmee' }
         };
 
         const msgAcheteur = {
@@ -246,7 +264,7 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
           timestamp: Date.now(),
           status: 'sent',
           contactMeta: { _id: vendeurIdStr, prenom: vendeur.prenom, nom: vendeur.nom, telephone: vendeur.telephone, photoProfil: vendeur.photoProfil },
-          tx: {...tx._doc, type: 'achat_confirme' }
+          tx: {...txAchat._doc, type: 'achat_confirme' }
         };
 
         if (Message) await Message.create([msgVendeur, msgAcheteur]);
@@ -274,7 +292,7 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
                 url: `/orders/${commande._id}`,
                 type: 'marketplace',
                 commandeId: commande._id.toString(),
-                transactionId: tx._id.toString()
+                transactionId: (isVendeur ? txVente._id : txAchat._id).toString()
               },
               channelId: 'orders'
             }]);
@@ -284,15 +302,14 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
         console.log(`✅ Confirmation commande ${commande._id} notifiée`);
 
       } catch (e) {
-        console.error('Erreur post-confirmation:', e.message);
+        console.error('Erreur post-confirmation:', e.message, e.stack);
       }
     });
-
     res.json({
       succes: true,
       message: `Achat confirmé! ${netVendeur.toLocaleString()}F versés au vendeur`,
       commande,
-      transaction: tx,
+      transaction: txAchat,
       detail: { prix, frais, netVendeur }
     });
 
