@@ -256,9 +256,74 @@ router.get('/pending', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
+// POST /api/transactions/:id/validate - Valider un retrait vers Mobile Money
+router.post('/:id/validate', authUser, async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
 
+    const tx = await Transaction.findById(req.params.id).populate('expediteur');
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
+
+    const total = tx.montant + (tx.frais || 0);
+    if (tx.expediteur.solde < total) {
+      await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Solde insuffisant' });
+      return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
+    }
+    if (tx.expediteur.bloque) {
+      await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Client suspendu' });
+      return res.status(403).json({ error: 'Client suspendu. Transaction annulée.' });
+    }
+
+    // --- COMPTES DE DESTINATION ---
+    const COMPTE_PRINCIPAL_TEL = '+22670879425'; // reçoit le montant
+    const COMPTE_FRAIS_TEL = '+22670000000'; // reçoit les frais
+
+    const comptePrincipal = await Client.findOne({ telephone: COMPTE_PRINCIPAL_TEL });
+    const compteFrais = await Client.findOne({ telephone: COMPTE_FRAIS_TEL });
+
+    if (!comptePrincipal) return res.status(404).json({ error: `Compte principal ${COMPTE_PRINCIPAL_TEL} introuvable` });
+    if (!compteFrais) return res.status(404).json({ error: `Compte frais ${COMPTE_FRAIS_TEL} introuvable` });
+
+    const nouveauSoldeExpediteur = tx.expediteur.solde - total;
+    const nouveauSoldePrincipal = (comptePrincipal.solde || 0) + tx.montant;
+    const nouveauSoldeFrais = (compteFrais.solde || 0) + (tx.frais || 0);
+
+    // Transaction atomique
+    await Promise.all([
+      Transaction.findByIdAndUpdate(req.params.id, {
+        status: 'validee',
+        soldeExpediteurApres: nouveauSoldeExpediteur,
+        dateValidation: new Date(),
+        compteDestination: COMPTE_PRINCIPAL_TEL,
+        compteFrais: COMPTE_FRAIS_TEL
+      }),
+      Client.findByIdAndUpdate(tx.expediteur._id, { solde: nouveauSoldeExpediteur }),
+      Client.findByIdAndUpdate(comptePrincipal._id, { solde: nouveauSoldePrincipal }),
+      Client.findByIdAndUpdate(compteFrais._id, { solde: nouveauSoldeFrais })
+    ]);
+
+    // Optionnel: log pour traçabilité
+    console.log(`✅ RETRAIT VALIDÉ #${tx._id}: ${tx.montant}F -> ${COMPTE_PRINCIPAL_TEL} | ${tx.frais}F frais -> ${COMPTE_FRAIS_TEL} | Exp: ${tx.expediteur.telephone}`);
+
+    res.json({
+      success: true,
+      message: `Retrait validé: ${tx.montant}F versé sur ${COMPTE_PRINCIPAL_TEL} et ${tx.frais}F de frais vers ${COMPTE_FRAIS_TEL}`,
+      debit: total,
+      versePrincipal: tx.montant,
+      verseFrais: tx.frais,
+      nouveauSolde: nouveauSoldeExpediteur
+    });
+
+  } catch (err) {
+    console.error('Erreur /validate:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // POST /api/transactions/:id/validate - Valider un retrait/transfert
-router.post('/:id/validate', authUser, async (req, res) => { // ← authUser obligatoire
+router.post('/:id/validatee', authUser, async (req, res) => { // ← authUser obligatoire
   try {
     // Check admin
     if (!req.user || req.user.role !== 'admin') {
@@ -765,41 +830,6 @@ router.post('/send', async (req, res) => {
   }
 });
 
-//trouve lhistorique dun seul client
-// GET /api/transactions/me - Historique du client connecté
-router.get('/mee', authUser, async (req, res) => {
-  try {
-    const user = await Client.findById(req.user.id).select('solde');
-    const transactions = await Transaction.find({
-      $or: [{ expediteur: req.user.id }, { destinataire: req.user.id }]
-    })
-    .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
-    .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
-    .sort({ createdAt: -1 })
-    .lean();
-
-    res.json({
-      solde: user?.solde || 0,
-      transactions: transactions.map(t => ({
-        id: t._id,
-        type: t.type || (t.expediteur._id.equals(req.user.id) ? 'envoi' : 'reception'), // ✅ Prend le type du schema
-        montant: t.montant,
-        frais: t.frais || 0,
-        //expediteur:expediteur._id,
-        contact: t.expediteur._id.equals(req.user.id) ? t.destinataire : t.expediteur,
-        operateur: t.operateur || null, // ✅ Ajouté
-        numeroDestination: t.numeroDestination || null, // ✅ Ajouté
-        motif: t.motif || '',
-        status: t.status,
-        soldeExpediteurApres: t.soldeExpediteurApres || 0,
-        soldeDestinataireApres: t.soldeDestinataireApres || 0,
-        date: t.createdAt
-      }))
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 // GET /api/transactions/me - Historique du client connecté
 router.get('/me', authUser, async (req, res) => {
   try {
