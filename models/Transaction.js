@@ -6,20 +6,26 @@ const transactionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',
     required: function() {
-      return this.type === 'envoi' || this.type === 'reception' || this.type === 'achat' || this.type === 'vente';
+      return ['envoi','reception','achat','vente'].includes(this.type);
     }
   },
   type: {
     type: String,
-    enum: ['envoi', 'reception', 'retrait', 'recharge', 'achat', 'vente', 'marketplace', 'livraison'],
+    enum: [
+      'envoi', 'reception', 'retrait', 'recharge',
+      'achat', 'vente',
+      'achat_market', 'vente_market', // <-- ton frontend
+      'achat_marketplace', 'vente_marketplace', // <-- ton erreur actuelle
+      'marketplace', 'livraison'
+    ],
     required: true
   },
   montant: { type: Number, required: true, min: 1 },
-  montantNet: { type: Number },
-  montantNetRecu: { type: Number },
-  frais: { type: Number },
-  fraisExpediteur: { type: Number },
-  fraisDestinataire: { type: Number },
+  montantNet: Number,
+  montantNetRecu: Number,
+  frais: Number,
+  fraisExpediteur: Number,
+  fraisDestinataire: Number,
   motif: String,
 
   // Marketplace
@@ -30,9 +36,9 @@ const transactionSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['validee', 'annulee', 'en_attente', 'reussie', 'echouee'],
-    default: 'en_attente'
+    default: 'validee' // mets validee direct
   },
-  depositId: { type: String, unique: true, sparse: true, index: true },
+  depositId: { type: String, unique: true, sparse: true },
   numeroSource: String,
   numeroDestination: String,
   operateur: String,
