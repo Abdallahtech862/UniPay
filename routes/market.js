@@ -156,8 +156,153 @@ router.post('/orders/pay', verifyToken, async (req, res) => {
     res.json(commande);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
-
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const userId = getUserId(req);
+    const CommandeModel = mongoose.model('Commande');
+    const Transaction = mongoose.model('Transaction');
+    const Message = mongoose.models.Message;
+
+    const commande = await CommandeModel.findById(req.params.id).session(session);
+    if (!commande) throw new Error('Commande introuvable');
+    if (commande.acheteurId.toString()!== userId) throw new Error('Seul l\'acheteur peut confirmer');
+    if (commande.statut === 'confirme') throw new Error('Déjà confirmée');
+    if (commande.statut!== 'livre' && commande.statut!== 'paye') throw new Error('La commande doit être livrée avant confirmation');
+
+    const produit = await mongoose.model('Produit').findById(commande.produitId).session(session);
+    const vendeur = await Utilisateur.findById(commande.vendeurId).session(session);
+    const acheteur = await Utilisateur.findById(commande.acheteurId).session(session);
+    const admin = await Utilisateur.findOne({ telephone: '+22670000000' }).session(session); // compte frais
+
+    if (!vendeur ||!acheteur) throw new Error('Utilisateur introuvable');
+
+    // Calculs
+    const prix = Number(commande.prix);
+    const fraisRate = 0.02;
+    const frais = Math.round(prix * fraisRate);
+    const netVendeur = prix - frais;
+
+    // Mouvements de fonds
+    vendeur.solde = (vendeur.solde || 0) + netVendeur;
+    if (admin) admin.solde = (admin.solde || 0) + frais;
+    commande.statut = 'confirme';
+    commande.dateConfirmation = new Date();
+
+    await vendeur.save({ session });
+    if (admin) await admin.save({ session });
+    await commande.save({ session });
+
+    // Historique transaction achat
+    const [tx] = await Transaction.create([{
+      expediteur: acheteur._id,
+      destinataire: vendeur._id,
+      montant: prix,
+      frais: frais,
+      montantNetRecu: netVendeur,
+      type: 'achat_marketplace',
+      status: 'validee',
+      motif: `Achat confirmé: ${produit?.titre || 'Article'} #${commande._id.toString().slice(-6)}`,
+      produitId: produit?._id,
+      commandeId: commande._id,
+      adminId: admin?._id,
+      soldeExpediteurApres: acheteur.solde,
+      soldeDestinataireApres: vendeur.solde,
+    }], { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // === NOTIFICATIONS + CHAT HORS TRANSACTION ===
+    setImmediate(async () => {
+      try {
+        const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const vendeurIdStr = vendeur._id.toString();
+        const acheteurIdStr = acheteur._id.toString();
+
+        // 1. Messages chat pour les deux
+        const msgVendeur = {
+          id: Date.now().toString() + '_v',
+          type: 'text',
+          text: `✅ VENTE CONFIRMÉE!\nL'acheteur a confirmé la réception de "${produit?.titre}".\n\n💰 ${netVendeur.toLocaleString()} FCFA crédités sur ton solde (frais 2%: ${frais.toLocaleString()}F)\nCommande #${commande._id.toString().slice(-6)}`,
+          from: acheteurIdStr,
+          to: vendeurIdStr,
+          time,
+          timestamp: Date.now(),
+          status: 'sent',
+          contactMeta: { _id: acheteurIdStr, prenom: acheteur.prenom, nom: acheteur.nom, telephone: acheteur.telephone, photoProfil: acheteur.photoProfil },
+          tx: {...tx._doc, type: 'vente_confirmee' }
+        };
+
+        const msgAcheteur = {
+          id: Date.now().toString() + '_a',
+          type: 'text',
+          text: `🙏 Merci pour ta confirmation!\nTu as confirmé la réception de "${produit?.titre}". Le vendeur a été payé.`,
+          from: vendeurIdStr,
+          to: acheteurIdStr,
+          time,
+          timestamp: Date.now(),
+          status: 'sent',
+          contactMeta: { _id: vendeurIdStr, prenom: vendeur.prenom, nom: vendeur.nom, telephone: vendeur.telephone, photoProfil: vendeur.photoProfil },
+          tx: {...tx._doc, type: 'achat_confirme' }
+        };
+
+        if (Message) await Message.create([msgVendeur, msgAcheteur]);
+
+        if (global.io) {
+          global.emitToUser(vendeurIdStr, 'new_message', msgVendeur);
+          global.emitToUser(acheteurIdStr, 'new_message', msgAcheteur);
+        }
+
+        // 2. Push Notification forcée
+        const { Expo } = require('expo-server-sdk');
+        const expo = new Expo();
+
+        for (const user of [vendeur, acheteur]) {
+          if (user.expoPushToken && Expo.isExpoPushToken(user.expoPushToken)) {
+            const isVendeur = user._id.toString() === vendeurIdStr;
+            await expo.sendPushNotificationsAsync([{
+              to: user.expoPushToken,
+              sound: 'default',
+              title: isVendeur? '✅ Vente confirmée!' : '📦 Achat confirmé',
+              body: isVendeur
+               ? `${netVendeur.toLocaleString()}F crédités pour "${produit?.titre}"`
+                : `Merci! Vente de "${produit?.titre}" finalisée`,
+              data: {
+                url: `/orders/${commande._id}`,
+                type: 'marketplace',
+                commandeId: commande._id.toString(),
+                transactionId: tx._id.toString()
+              },
+              channelId: 'orders'
+            }]);
+          }
+        }
+
+        console.log(`✅ Confirmation commande ${commande._id} notifiée`);
+
+      } catch (e) {
+        console.error('Erreur post-confirmation:', e.message);
+      }
+    });
+
+    res.json({
+      succes: true,
+      message: `Achat confirmé! ${netVendeur.toLocaleString()}F versés au vendeur`,
+      commande,
+      transaction: tx,
+      detail: { prix, frais, netVendeur }
+    });
+
+  } catch (e) {
+    if (session.inTransaction()) await session.abortTransaction();
+    session.endSession();
+    console.error('Erreur confirm:', e.message);
+    res.status(400).json({ erreur: e.message });
+  }
+});
+router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const commande = await mongoose.model('Commande').findById(req.params.id);
