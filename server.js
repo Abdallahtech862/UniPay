@@ -82,17 +82,22 @@ const ProductSchema = new Schema({
 const Produit = mongoose.model('Produit', ProductSchema);
 
 // Model Marketplace - Commande
+// Model Marketplace - Commande
 const OrderSchema = new Schema({
   produitId: { type: Schema.Types.ObjectId, ref: 'Produit', required: true },
   acheteurId: { type: String, required: true },
   vendeurId: { type: String, required: true },
-  prix: { type: Number, required: true },
+  prix: { type: Number, required: true }, // prix unitaire
+  quantite: { type: Number, required: true, default: 1 }, // <-- AJOUTE ÇA
   frais: { type: Number, default: 0 },
-  total: { type: Number, required: true },
-  statut: { type: String, default: 'paye' }, // 'pending', 'paye', 'livre', 'confirmer', 'litige'
+  total: { type: Number, required: true }, // prix * quantite
+  statut: { type: String, default: 'paye' },
   adresseLivraison: String,
+  dateLivraison: Date,
+  dateConfirmation: Date,
   createdAt: { type: Date, default: Date.now }
-});
+}, { timestamps: true });
+
 const Commande = mongoose.model('Commande', OrderSchema);
 
 // Exporter les modèles pour qu'ils soient réutilisables dans les fichiers routes si besoin
