@@ -25,7 +25,7 @@ router.get('/:id', async (req, res) => {
     const prix = `${Number(p.prix).toLocaleString()} FCFA`;
     const description = (p.description || '').slice(0, 160) + ` - Vendu par ${p.vendeurNom} à ${p.ville}. Paiement sécurisé avec UniPay Wallet.`;
     const productId = req.params.id;
-    const pageUrl = `https://unipayburkina.com/product/${productId}`;
+    const pageUrl = `unipay-production-d2a0.up.railway.app/product/${productId}`;
     const appLink = `unipay://market/${productId}`;
     const playStoreLink = 'https://play.google.com/store/apps/details?id=com.abdallahtech.uniPay&pcampaignid=web_share';
 
