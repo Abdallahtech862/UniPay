@@ -86,8 +86,8 @@ router.get('/share/:id', async (req, res) => {
     if (!p) return res.status(404).send('<h1>Produit introuvable - UniPay</h1>');
 
     const productId = req.params.id;
-    const API_DOMAIN = 'https://kori2-railway-production.up.railway.app';
-    const PUBLIC_DOMAIN = 'https://unipayburkina.com'; // change si tu as un domaine custom
+    const API_DOMAIN = 'https://unipay-production-d2a0.up.railway.app';
+    const PUBLIC_DOMAIN = 'https://unipay-production-d2a0.up.railway.app'; // change si tu as un domaine custom
     
     // Image https qui sert ton base64
     const ogImageUrl = `${API_DOMAIN}/api/marketplace/product-image/${productId}/0`;
