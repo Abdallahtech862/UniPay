@@ -15,41 +15,50 @@ const getUserId = (req) => {
 // ===================== 0. ROUTES PUBLIQUES POUR WHATSAPP (DOIVENT ETRE EN HAUT) =====================
 
 // Sert ton base64 en https:// pour que WhatsApp l'affiche
+// REMPLACE product-image PAR CECI - VERSION QUI MARCHE SANS SHARP
 router.get('/product-image/:id/:index', async (req, res) => {
   try {
+    console.log('IMAGE REQ', req.params.id, req.params.index);
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
-    if (!p || !p.images || !p.images[req.params.index]) return res.status(404).send('no img');
-
-    let img = p.images[req.params.index];
+    if (!p) {
+      console.log('Produit not found');
+      return res.status(404).send('Produit not found');
+    }
+    if (!p.images || !p.images[req.params.index]) {
+      console.log('Image index not found, images length:', p.images?.length);
+      return res.status(404).send('Image index not found');
+    }
     
-    // 1. Si c'est déjà une url https
+    let img = p.images[req.params.index];
+    console.log('Image type:', typeof img, 'start:', img.substring(0,30));
+
+    // Si déjà https
     if (!img.startsWith('data:')) {
-      return res.redirect(302, img);
+      return res.redirect(img);
     }
 
-    // 2. Decode base64
     const matches = img.match(/^data:(.+);base64,(.+)$/);
-    if (!matches) return res.status(400).send('bad base64');
+    if (!matches) {
+      console.log('Bad base64 format');
+      return res.status(400).send('Bad base64');
+    }
     
-    const buffer = Buffer.from(matches[2], 'base64');
+    const mime = matches[1]; // image/jpeg
+    const base64Data = matches[2];
+    console.log('MIME:', mime, 'base64 length:', base64Data.length);
 
-    // 3. COMPRESSE pour WhatsApp (obligatoire)
-    // WhatsApp veut < 300ko et carré
-    const sharp = require('sharp');
-    const compressed = await sharp(buffer)
-      .resize(600, 600, { fit: 'cover' })
-      .jpeg({ quality: 75 })
-      .toBuffer();
+    const buffer = Buffer.from(base64Data, 'base64');
+    console.log('Buffer size:', buffer.length);
 
-    res.set('Content-Type', 'image/jpeg');
-    res.set('Content-Length', compressed.length);
+    res.set('Content-Type', mime);
+    res.set('Content-Length', buffer.length);
     res.set('Cache-Control', 'public, max-age=86400');
     res.set('Access-Control-Allow-Origin', '*');
-    res.send(compressed);
+    res.send(buffer);
 
   } catch (e) { 
-    console.log('IMAGE ERROR', e.message);
-    res.status(500).send('err'); 
+    console.error('IMAGE ERROR FULL:', e);
+    res.status(500).send(`err: ${e.message}`);
   }
 });
 router.get('/product-image/:id/:indexx', async (req, res) => {
