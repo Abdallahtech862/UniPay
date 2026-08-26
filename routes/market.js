@@ -61,22 +61,6 @@ router.get('/product-image/:id/:index', async (req, res) => {
     res.status(500).send(`err: ${e.message}`);
   }
 });
-router.get('/product-image/:id/:indexx', async (req, res) => {
-  try {
-    const p = await mongoose.model('Produit').findById(req.params.id).lean();
-    if (!p || !p.images || !p.images[req.params.index]) return res.status(404).send('Image not found');
-    
-    let img = p.images[req.params.index];
-    const matches = img.match(/^data:(.+);base64,(.+)$/);
-    if (!matches) return res.redirect(img); // déjà https
-    
-    const mime = matches[1];
-    const buffer = Buffer.from(matches[2], 'base64');
-    res.set('Content-Type', mime);
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.send(buffer);
-  } catch (e) { res.status(500).send('Erreur image'); }
-});
 
 // Page de partage avec Open Graph - C'EST CETTE URL QUE TU PARTAGES SUR WHATSAPP
 // Ex: https://kori2-railway-production.up.railway.app/api/marketplace/share/ID
@@ -195,8 +179,31 @@ router.post('/products', verifyToken, async (req, res) => {
     res.status(500).json({ erreur: e.message });
   }
 });
-
 router.get('/products', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const filter = { statut: 'actif' };
+    if(req.query.categorie && req.query.categorie!== 'Tous') filter.categorie = req.query.categorie;
+
+    const produits = await mongoose.model('Produit').find(filter)
+     .sort({ createdAt: -1 })
+     .skip(skip)
+     .limit(limit)
+     .lean();
+
+    const total = await mongoose.model('Produit').countDocuments(filter);
+
+    res.json({
+      produits,
+      hasMore: skip + produits.length < total,
+      total
+    });
+  } catch (e) { res.status(500).json({ erreur: e.message }); }
+});
+router.get('/productss', async (req, res) => {
   try {
     const filter = { statut: 'actif' };
     if(req.query.categorie) filter.categorie = req.query.categorie;
