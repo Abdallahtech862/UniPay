@@ -212,8 +212,68 @@ router.post('/orders/pay', verifyToken, async (req, res) => {
     res.status(500).json({ erreur: e.message });
   }
 });
-
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const commande = await Commande.findById(req.params.id);
+    if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
+    if (commande.acheteurId.toString() !== userId.toString()) return res.status(403).json({ erreur: 'Seul acheteur peut confirmer' });
+    if (commande.statut === 'confirme') return res.status(400).json({ erreur: 'Déjà confirmée' });
+
+    const vendeur = await Utilisateur.findById(commande.vendeurId);
+    const acheteur = await Utilisateur.findById(commande.acheteurId);
+    if (!vendeur) return res.status(404).json({ erreur: 'Vendeur introuvable' });
+
+    const totalPaye = commande.total || commande.prix;
+    const frais = Math.round(totalPaye * 0.02);
+    const netVendeur = totalPaye - frais;
+
+    // 1. Débloque argent
+    vendeur.solde = (vendeur.solde || 0) + netVendeur;
+    await vendeur.save();
+
+    // 2. Commission admin (optionnel)
+    const admin = await Utilisateur.findOne({ telephone: '+22670000000' });
+    if (admin) {
+      admin.solde = (admin.solde || 0) + frais;
+      await admin.save();
+    }
+
+    // 3. Update commande
+    commande.statut = 'confirme';
+    commande.dateConfirmation = new Date();
+    await commande.save();
+
+    // 4. Log transaction - CORRIGÉ SANS SESSION
+    try {
+      const Transaction = mongoose.model('Transaction');
+      await Transaction.create({
+        expediteur: acheteur?._id,
+        destinataire: vendeur._id,
+        montant: totalPaye,
+        frais: frais,
+        type: 'vente',
+        status: 'validee',
+        motif: `Vente ${commande.quantite||1}x ${commande.produit?.titre||''}`,
+        commandeId: commande._id
+      });
+    } catch(e){ console.log('Tx log ignore', e.message); }
+
+    if (global.io) global.io.emit('commande_update', commande);
+
+    res.json({ 
+      succes: true, 
+      message: `${netVendeur.toLocaleString()} FCFA débloqués`,
+      commande,
+      detail: { total: totalPaye, frais, netVendeur }
+    });
+
+  } catch (e) {
+    console.error('CONFIRM ERROR:', e);
+    res.status(500).json({ erreur: e.message });
+  }
+});
+router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
