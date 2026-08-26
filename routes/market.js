@@ -18,6 +18,43 @@ const getUserId = (req) => {
 router.get('/product-image/:id/:index', async (req, res) => {
   try {
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
+    if (!p || !p.images || !p.images[req.params.index]) return res.status(404).send('no img');
+
+    let img = p.images[req.params.index];
+    
+    // 1. Si c'est déjà une url https
+    if (!img.startsWith('data:')) {
+      return res.redirect(302, img);
+    }
+
+    // 2. Decode base64
+    const matches = img.match(/^data:(.+);base64,(.+)$/);
+    if (!matches) return res.status(400).send('bad base64');
+    
+    const buffer = Buffer.from(matches[2], 'base64');
+
+    // 3. COMPRESSE pour WhatsApp (obligatoire)
+    // WhatsApp veut < 300ko et carré
+    const sharp = require('sharp');
+    const compressed = await sharp(buffer)
+      .resize(600, 600, { fit: 'cover' })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Content-Length', compressed.length);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.send(compressed);
+
+  } catch (e) { 
+    console.log('IMAGE ERROR', e.message);
+    res.status(500).send('err'); 
+  }
+});
+router.get('/product-image/:id/:indexx', async (req, res) => {
+  try {
+    const p = await mongoose.model('Produit').findById(req.params.id).lean();
     if (!p || !p.images || !p.images[req.params.index]) return res.status(404).send('Image not found');
     
     let img = p.images[req.params.index];
