@@ -157,14 +157,16 @@ router.post('/products', verifyToken, async (req, res) => {
     const vendeur = await Utilisateur.findById(userId);
     if (!vendeur) return res.status(404).json({ erreur: 'Vendeur introuvable' });
 
+    const stock = req.body.stock ? Math.max(1, parseInt(req.body.stock)) : 1;
+
     const produit = await mongoose.model('Produit').create({
       titre: req.body.titre,
       description: req.body.description,
       prix: Number(req.body.prix),
-      images: req.body.images || [], // BASE64 GARDÉ POUR IA
+      images: req.body.images || [],
       categorie: req.body.categorie || 'Autres',
       ville: req.body.ville || 'Ouagadougou',
-      stock: 1,
+      stock: stock, // <-- prend la valeur envoyée
       statut: 'actif',
       vendeurId: userId,
       vendeurNom: `${vendeur.prenom || ''} ${vendeur.nom || ''}`.trim() || 'Vendeur',
@@ -174,9 +176,9 @@ router.post('/products', verifyToken, async (req, res) => {
 
     if (global.io) global.io.emit('nouveau_produit', produit);
     res.status(201).json(produit);
-  } catch (e) {
-    console.error('CREATE ERROR:', e);
-    res.status(500).json({ erreur: e.message });
+  } catch(e){
+    console.log(e);
+    res.status(500).json({erreur: e.message});
   }
 });
 router.get('/products', async (req, res) => {
@@ -242,12 +244,20 @@ router.put('/products/:id', verifyToken, async (req, res) => {
     const p = await mongoose.model('Produit').findById(req.params.id);
     if(!p) return res.status(404).json({erreur:'Non trouvé'});
     if(p.vendeurId.toString() !== userId) return res.status(403).json({erreur:'Pas ton article'});
+    
     p.titre = req.body.titre ?? p.titre;
     p.description = req.body.description ?? p.description;
-    p.prix = req.body.prix ? Number(req.body.prix) : p.prix;
+    p.prix = req.body.prix !== undefined ? Number(req.body.prix) : p.prix;
+    p.stock = req.body.stock !== undefined ? Number(req.body.stock) : p.stock; // <-- AJOUT
     p.categorie = req.body.categorie ?? p.categorie;
     p.ville = req.body.ville ?? p.ville;
+    
     if(req.body.images && Array.isArray(req.body.images)) p.images = req.body.images;
+
+    // Si stock repasse >0 on remet actif
+    if(p.stock > 0 && p.statut === 'vendu') p.statut = 'actif';
+    if(p.stock === 0) p.statut = 'vendu';
+
     await p.save();
     if (global.io) global.io.emit('produit_modifie', p);
     res.json(p);
@@ -321,28 +331,7 @@ router.post('/orders/pay', auth, async (req, res) => {
     res.status(500).json({ erreur: e.message });
   }
 });
-router.post('/orders/payy', verifyToken, async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    const { produitId } = req.body;
-    const produit = await mongoose.model('Produit').findById(produitId);
-    if (!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
-    if (produit.statut !== 'actif') return res.status(400).json({ erreur: 'Produit non disponible' });
-    if (produit.vendeurId === userId) return res.status(400).json({ erreur: "Ton propre article" });
-    const acheteur = await Utilisateur.findById(userId);
-    if ((acheteur.solde || 0) < produit.prix) return res.status(400).json({ erreur: `Solde insuffisant: ${acheteur.solde} FCFA` });
-    acheteur.solde -= produit.prix;
-    await acheteur.save();
-    const commande = await mongoose.model('Commande').create({
-      produitId: produit._id, acheteurId: userId, vendeurId: produit.vendeurId,
-      prix: produit.prix, frais: produit.prix * 0.02, total: produit.prix, statut: 'paye'
-    });
-    produit.stock = Math.max(0, (produit.stock || 1) - 1);
-    if (produit.stock <= 0) produit.statut = 'vendu';
-    await produit.save();
-    res.json(commande);
-  } catch (e) { res.status(500).json({ erreur: e.message }); }
-});
+
 
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   const session = await mongoose.startSession();
