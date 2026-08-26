@@ -12,13 +12,13 @@ router.get('/:id', async (req, res) => {
     let image = p.images?.[0] || '';
     // Si c'est du base64, on ne peut pas l'afficher sur WhatsApp -> fallback icon
     if (image.startsWith('data:')) {
-      image = 'https://unipayburkina.com/icon.png';
+      image = 'unipay-production-d2a0.up.railway.app/icon.png';
     }
     // Assure https:// (WhatsApp refuse http)
     if (image &&!image.startsWith('https://')) {
       image = image.replace('http://', 'https://');
     }
-    const fallbackImage = 'https://unipayburkina.com/icon.png';
+    const fallbackImage = 'unipay-production-d2a0.up.railway.app/icon.png';
     const finalImage = image || fallbackImage;
 
     const titre = `${p.titre} - ${Number(p.prix).toLocaleString()} FCFA | UniPay Market`;
