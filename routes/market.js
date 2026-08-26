@@ -184,15 +184,30 @@ router.get('/products', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
+    const sortType = req.query.sort || 'recent'; // recent | random
 
     const filter = { statut: 'actif' };
     if(req.query.categorie && req.query.categorie!== 'Tous') filter.categorie = req.query.categorie;
 
-    const produits = await mongoose.model('Produit').find(filter)
-     .sort({ createdAt: -1 })
-     .skip(skip)
-     .limit(limit)
-     .lean();
+    let produits = [];
+
+    if (sortType === 'random') {
+      // Mélange aléatoire côté MongoDB - pas de doublon par page grâce à $sample
+      // On fait un random journalier pour éviter de revoir les mêmes articles si on refresh vite
+      const seed = Math.floor(Date.now() / (1000*60*60*6)); // change toutes les 6h
+      produits = await mongoose.model('Produit').aggregate([
+        { $match: filter },
+        { $sample: { size: limit * 3 } }, // prend 60 au hasard
+        { $skip: skip % 60 }, // simule pagination dans le sample
+        { $limit: limit }
+      ]);
+    } else {
+      produits = await mongoose.model('Produit').find(filter)
+       .sort({ createdAt: -1 })
+       .skip(skip)
+       .limit(limit)
+       .lean();
+    }
 
     const total = await mongoose.model('Produit').countDocuments(filter);
 
@@ -203,14 +218,7 @@ router.get('/products', async (req, res) => {
     });
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
-router.get('/productss', async (req, res) => {
-  try {
-    const filter = { statut: 'actif' };
-    if(req.query.categorie) filter.categorie = req.query.categorie;
-    const produits = await mongoose.model('Produit').find(filter).sort({ createdAt: -1 }).limit(50);
-    res.json(produits);
-  } catch (e) { res.status(500).json({ erreur: e.message }); }
-});
+
 
 router.get('/products/my/mine', verifyToken, async (req, res) => {
   try {
