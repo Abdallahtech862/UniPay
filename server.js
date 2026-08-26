@@ -718,7 +718,7 @@ const html = `<!DOCTYPE html>
         <p>Paye en ligne, dans les magasins et entre particuliers. Recharge par Orange Money, Wave, Moov. Simple, rapide, sécurisé.</p>
         <div>
           <a href="#download" class="unipay-btn">Télécharger l'app</a>
-          <a href="https://play.google.com/store/apps/details?id=com.abdallahtech.uniPay&pcampaignid=web_share" class="unipay-btn unipay-btn-outline" style="margin-left: 12px;">Découvrir le Wallet</a>
+          <a href="wallet" class="unipay-btn unipay-btn-outline" style="margin-left: 12px;">Découvrir le Wallet</a>
         </div>
         
         <div class="unipay-phone">
