@@ -279,7 +279,49 @@ router.patch('/products/:id/restore', verifyToken, async (req, res) => {
 });
 
 // ===================== 3. COMMANDES =====================
-router.post('/orders/pay', verifyToken, async (req, res) => {
+router.post('/orders/pay', auth, async (req, res) => {
+  try {
+    const { produitId, quantite = 1 } = req.body;
+    const qty = Math.max(1, parseInt(quantite));
+    
+    const produit = await Produit.findById(produitId);
+    if(!produit) return res.status(404).json({ erreur: 'Produit introuvable' });
+    if(produit.vendeurId === req.user._id.toString()) return res.status(400).json({ erreur: 'Votre article' });
+    if(produit.statut !== 'actif') return res.status(400).json({ erreur: 'Article non disponible' });
+    if(produit.stock < qty) return res.status(400).json({ erreur: `Stock insuffisant, il ne reste que ${produit.stock}` });
+
+    const total = produit.prix * qty;
+
+    // Ici ton code de paiement wallet...
+    const buyer = await mongoose.model('Client').findById(req.user._id);
+    if(buyer.solde < total) return res.status(400).json({ erreur: 'Solde insuffisant' });
+
+    buyer.solde -= total;
+    await buyer.save();
+
+    // Décrémente le stock
+    produit.stock -= qty;
+    if(produit.stock === 0) produit.statut = 'vendu';
+    await produit.save();
+
+    const order = await Order.create({
+      produitId: produit._id,
+      produit: produit, // snapshot
+      acheteurId: req.user._id,
+      vendeurId: produit.vendeurId,
+      prix: produit.prix,
+      quantite: qty,
+      total,
+      statut: 'paye'
+    });
+
+    res.json({ success: true, order, total, quantite: qty });
+  } catch(e){
+    console.log(e);
+    res.status(500).json({ erreur: e.message });
+  }
+});
+router.post('/orders/payy', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const { produitId } = req.body;
