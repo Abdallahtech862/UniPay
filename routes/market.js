@@ -197,7 +197,7 @@ router.get('/products', async (req, res) => {
       const seed = Math.floor(Date.now() / (1000*60*60*6)); // change toutes les 6h
       produits = await mongoose.model('Produit').aggregate([
         { $match: filter },
-        { $sample: { size: limit * 3 } }, // prend 60 au hasard
+        { $sample: { size: limit * 2 } }, // prend 60 au hasard
         { $skip: skip % 60 }, // simule pagination dans le sample
         { $limit: limit }
       ]);
