@@ -182,7 +182,7 @@ router.post('/products', verifyToken, async (req, res) => {
 router.get('/products', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 2;
     const skip = (page - 1) * limit;
     const sortType = req.query.sort || 'recent'; // recent | random
 
