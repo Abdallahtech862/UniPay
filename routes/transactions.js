@@ -1038,7 +1038,7 @@ router.get('/dashboard', async (req, res) => {
 </html>`);
 });
 
-router.get('/e', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
@@ -1216,7 +1216,144 @@ router.get('/e', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-    function renderTable(transactions){
+router.get('/e', async (req, res) => {
+  try {
+    const clients = await Client.find().select('nom prenom').lean();
+    let optionsClients = '<option value="">Tous les clients</option>';
+    clients.forEach(c => {
+      optionsClients += `<option value="${c._id}">${c.prenom} ${c.nom}</option>`;
+    });
+
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Historique Transactions - UniPay</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    *{box-sizing:border-box} body{font-family:Inter,Arial;padding:20px;background:#f8f9fa;color:#212529}
+    h2{margin:0 0 10px} a{color:#007bff;text-decoration:none}
+    .card{background:white;padding:15px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:15px}
+    .filtres{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+    select,input,button{padding:10px;border-radius:8px;border:1px solid #ddd;width:100%}
+    button{cursor:pointer;font-weight:bold}
+    .btn-primary{background:#007bff;color:white;border:none}
+    .btn-dark{background:#343a40;color:white}.btn-info{background:#17a2b8;color:white}.btn-danger{background:#dc3545;color:white}
+    table{border-collapse:collapse;width:100%;background:white;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    th{background:#1a233a;color:white;padding:12px 8px;text-align:left;font-size:12px;text-transform:uppercase}
+    td{padding:10px 8px;font-size:13px;border-bottom:1px solid #eee;vertical-align:top}
+    tr:hover{background:#f1f5ff}
+    .badge{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:bold;color:white;display:inline-block}
+    .ok{background:#28a745}.ko{background:#dc3545}.wait{background:#fd7e14}.annul{background:#6c757d}
+    .type{font-weight:bold;text-transform:uppercase;font-size:11px}
+    .type-recharge{color:#007bff}.type-envoi{color:#28a745}.type-retrait{color:#fd7e14}.type-vente{color:#6f42c1}.type-achat{color:#e83e8c}
+    .small{font-size:11px;color:#6c757d}.montant{font-weight:bold;color:#111}
+    .grid-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:15px 0}
+    .stat{background:white;padding:15px;border-radius:10px;border-left:4px solid #007bff}
+    .stat b{font-size:20px;display:block}
+    @media print{.no-print{display:none}}
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <h2>📊 Historique Transactions UniPay</h2>
+    <p><a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">+ Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a> | <a href="/api/transactions/pending-view">En attente</a></p>
+    
+    <div class="card">
+      <div class="filtres">
+        <select id="filterClient">${optionsClients}</select>
+        <select id="filterType">
+          <option value="">Tous types</option>
+          <option value="recharge">Recharge</option>
+          <option value="envoi">Envoi</option>
+          <option value="retrait">Retrait</option>
+          <option value="vente">Vente</option>
+          <option value="achat">Achat</option>
+        </select>
+        <select id="filterStatus">
+          <option value="">Tous statuts</option>
+          <option value="validee">Validée / Réussie</option>
+          <option value="echouee">Échouée</option>
+          <option value="annulee">Annulée</option>
+          <option value="en_attente">En attente</option>
+        </select>
+        <input type="text" id="filterNumero" placeholder="N° tel / opérateur (ex: 75322321, Orange)">
+        <input type="number" id="filterMontant" placeholder="Montant exact">
+        <input type="date" id="dateDebut"><input type="date" id="dateFin">
+        <button class="btn-primary" onclick="loadTransactions()">🔍 Filtrer</button>
+        <button class="btn-dark" onclick="resetFiltres()">Reset</button>
+      </div>
+    </div>
+    <div class="card no-print" style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn-dark" onclick="window.print()">🖨️ Imprimer</button>
+      <button class="btn-info" onclick="exportCSV()">📄 Export CSV</button>
+      <button class="btn-danger" onclick="exportPDF()">📕 Export PDF</button>
+      <span id="count" style="margin-left:auto;padding-top:8px;font-weight:bold"></span>
+    </div>
+  </div>
+
+  <div id="stats"></div>
+  <div id="content">Chargement...</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/api/auth/login';
+    let currentTransactions = [];
+
+    async function loadTransactions(){
+      try{
+        const p = new URLSearchParams();
+        const client = document.getElementById('filterClient').value;
+        const type = document.getElementById('filterType').value;
+        const status = document.getElementById('filterStatus').value;
+        const numero = document.getElementById('filterNumero').value;
+        const montant = document.getElementById('filterMontant').value;
+        const debut = document.getElementById('dateDebut').value;
+        const fin = document.getElementById('dateFin').value;
+        if(client) p.append('client', client);
+        if(type) p.append('type', type);
+        if(status) p.append('status', status);
+        if(numero) p.append('numero', numero);
+        if(montant) p.append('montant', montant);
+        if(debut) p.append('debut', debut);
+        if(fin) p.append('fin', fin);
+
+        const res = await fetch('/api/transactions/data?'+p.toString(), { headers:{'Authorization':'Bearer '+token}});
+        if(res.status===401||res.status===403){ localStorage.removeItem('token'); window.location.href='/api/auth/login'; return; }
+        const data = await res.json();
+        currentTransactions = data.transactions || [];
+        // Filtre côté client pour ta data actuelle (si ton backend /data ne filtre pas encore type/status)
+        let filtered = currentTransactions;
+        if(type) filtered = filtered.filter(t=> (t.type||'').toLowerCase()===type);
+        if(status){ 
+          filtered = filtered.filter(t=> {
+            if(status==='validee') return t.status==='validee' || t.status==='reussie';
+            return t.status===status;
+          });
+        }
+        currentTransactions = filtered;
+        renderStats(data.stats, filtered);
+        renderTable(filtered);
+        document.getElementById('count').innerText = filtered.length + ' transactions';
+      }catch(e){ document.getElementById('content').innerHTML='Erreur: '+e.message; }
+    }
+
+    function renderStats(globalStats, list){
+      const volumeOk = list.filter(t=> t.status==='validee'||t.status==='reussie').reduce((s,t)=> s+(t.montant||0),0);
+      const echecs = list.filter(t=> t.status==='echouee').length;
+      const annules = list.filter(t=> t.status==='annulee' || t.annulee).length;
+      document.getElementById('stats').innerHTML = \`
+        <div class="grid-stats">
+          <div class="stat" style="border-color:#007bff"><span class="small">TOTAL AFFICHÉ</span><b>\${list.length}</b><span class="small">sur \${globalStats?.total||0} total</span></div>
+          <div class="stat" style="border-color:#28a745"><span class="small">VOLUME VALIDÉ</span><b>\${volumeOk.toLocaleString()} F</b></div>
+          <div class="stat" style="border-color:#dc3545"><span class="small">ÉCHOUÉES</span><b>\${echecs}</b></div>
+          <div class="stat" style="border-color:#6c757d"><span class="small">ANNULÉES</span><b>\${annules}</b></div>
+        </div>\`;
+    }
+
+        function renderTable(transactions){
       if(!transactions.length){ document.getElementById('content').innerHTML='<div class="card">Aucune transaction</div>'; return; }
       let html = '<table><tr><th>Date</th><th>Type / Op</th><th>Expéditeur</th><th>Destinataire / N°</th><th>Montant</th><th>FRAIS DETAIL</th><th>Statut</th><th class="no-print">Action</th></tr>';
       transactions.forEach(t=>{
@@ -1331,6 +1468,43 @@ router.get('/e', async (req, res) => {
       const blob = new Blob(["\\ufeff"+csv], {type:'text/csv;charset=utf-8;'}); // BOM pour Excel FR
       const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`unipay_complet_${new Date().toISOString().slice(0,10)}.csv`; a.click();
     }
+    async function annulerTx(id, type){
+      if(!confirm('Confirmer annulation de '+type+' '+id+' ?\\nLe solde sera recrédité.')) return;
+      try{
+        const res = await fetch('/api/transactions/'+id+'/cancel', { method:'POST', headers:{'Authorization':'Bearer '+token}});
+        const data = await res.json();
+        alert(data.message || data.error || 'Fait');
+        loadTransactions();
+      }catch(e){ alert('Erreur: '+e.message); }
+    }
+
+    function exportPDF(){
+      if(!currentTransactions.length) return alert('Aucune donnée');
+      const {jsPDF}=window.jspdf; const doc=new jsPDF('l');
+      doc.text('Historique UniPay - '+new Date().toLocaleDateString('fr-FR'),14,15);
+      const body = currentTransactions.map(t=>[
+        new Date(t.createdAt).toLocaleString('fr-FR'),
+        (t.type||'')+' '+(t.operateur||''),
+        t.expediteur.prenom+' '+t.expediteur.nom,
+        t.destinataire? t.destinataire.telephone : (t.numeroDestination||t.numeroSource||''),
+        t.montant+' F', (t.frais||0)+' F', t.status
+      ]);
+      doc.autoTable({ head:[['Date','Type','Exp','Dest/Num','Montant','Frais','Statut']], body, startY:20, styles:{fontSize:7} });
+      doc.save('unipay.pdf');
+    }
+
+    function resetFiltres(){
+      ['filterClient','filterType','filterStatus','filterNumero','filterMontant','dateDebut','dateFin'].forEach(id=> document.getElementById(id).value='');
+      loadTransactions();
+    }
+    loadTransactions();
+  </script>
+</body>
+</html>`);
+  } catch (error) {
+    res.status(500).send('Erreur: ' + error.message);
+  }
+});
 // ==================== ROUTE TRANSFERT B2B CORRIGEE ====================
 // ==================== ROUTE TRANSFERT B2B CORRIGEE ====================
 router.post('/', authUser, async (req, res) => {
