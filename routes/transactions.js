@@ -256,13 +256,7 @@ router.get('/pending', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
-router.get('/pendingg', authUser, adminOnly, async (req,res)=>{
-  const filter = { status: 'en_attente', type: 'retrait' };
-  // si tu utilises 'pending' comme status, mets:
-  // const filter = { status: { $in: ['en_attente','pending'] }, type: 'retrait' };
-  const tx = await Transaction.find(filter).populate('expediteur').sort({createdAt:-1}).lean();
-  res.json({ transactions: tx });
-});
+
 
 // POST /api/transactions/:id/validate - Valider un retrait vers Mobile Money
 router.post('/:id/validate', authUser, async (req, res) => {
@@ -363,7 +357,7 @@ router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici a
   }
 });
 // le code pour voir les transactions en attent
-router.get('/pending-view', async (req, res) => {
+router.get('/pending-vieww', async (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -493,7 +487,7 @@ router.get('/pending-view', async (req, res) => {
   `);
 });
 // UNIQUEMENT RETRAITS EN ATTENTE
-router.get('/pending-vieww', async (req, res) => {
+router.get('/pending-view', async (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
