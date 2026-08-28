@@ -1038,7 +1038,7 @@ router.get('/dashboard', async (req, res) => {
 </html>`);
 });
 
-router.get('/', async (req, res) => {
+router.get('/e', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
