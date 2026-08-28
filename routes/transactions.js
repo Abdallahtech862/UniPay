@@ -1216,7 +1216,7 @@ router.get('/', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-router.get('/e', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
@@ -1246,7 +1246,6 @@ router.get('/e', async (req, res) => {
     .badge{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:bold;color:white;display:inline-block}
     .ok{background:#28a745}.ko{background:#dc3545}.wait{background:#fd7e14}.annul{background:#6c757d}
     .type{font-weight:bold;text-transform:uppercase;font-size:11px}
-    .type-recharge{color:#007bff}.type-envoi{color:#28a745}.type-retrait{color:#fd7e14}.type-vente{color:#6f42c1}.type-achat{color:#e83e8c}
     .small{font-size:11px;color:#6c757d}.montant{font-weight:bold;color:#111}
     .grid-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:15px 0}
     .stat{background:white;padding:15px;border-radius:10px;border-left:4px solid #007bff}
@@ -1257,27 +1256,13 @@ router.get('/e', async (req, res) => {
 <body>
   <div class="no-print">
     <h2>📊 Historique Transactions UniPay</h2>
-    <p><a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">+ Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a> | <a href="/api/transactions/pending-view">En attente</a></p>
-    
+    <p><a href="/api/clients/admin">← Admin</a> | <a href="/api/transactions/add">+ Nouveau transfert</a> | <a href="/api/transactions/dashboard">Dashboard</a></p>
     <div class="card">
       <div class="filtres">
         <select id="filterClient">${optionsClients}</select>
-        <select id="filterType">
-          <option value="">Tous types</option>
-          <option value="recharge">Recharge</option>
-          <option value="envoi">Envoi</option>
-          <option value="retrait">Retrait</option>
-          <option value="vente">Vente</option>
-          <option value="achat">Achat</option>
-        </select>
-        <select id="filterStatus">
-          <option value="">Tous statuts</option>
-          <option value="validee">Validée / Réussie</option>
-          <option value="echouee">Échouée</option>
-          <option value="annulee">Annulée</option>
-          <option value="en_attente">En attente</option>
-        </select>
-        <input type="text" id="filterNumero" placeholder="N° tel / opérateur (ex: 75322321, Orange)">
+        <select id="filterType"><option value="">Tous types</option><option value="recharge">Recharge</option><option value="envoi">Envoi</option><option value="retrait">Retrait</option><option value="vente">Vente</option><option value="achat">Achat</option></select>
+        <select id="filterStatus"><option value="">Tous statuts</option><option value="validee">Validée / Réussie</option><option value="echouee">Échouée</option><option value="annulee">Annulée</option><option value="en_attente">En attente</option></select>
+        <input type="text" id="filterNumero" placeholder="N° tel / opérateur">
         <input type="number" id="filterMontant" placeholder="Montant exact">
         <input type="date" id="dateDebut"><input type="date" id="dateFin">
         <button class="btn-primary" onclick="loadTransactions()">🔍 Filtrer</button>
@@ -1285,23 +1270,20 @@ router.get('/e', async (req, res) => {
       </div>
     </div>
     <div class="card no-print" style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn-dark" onclick="window.print()">🖨️ Imprimer</button>
-      <button class="btn-info" onclick="exportCSV()">📄 Export CSV</button>
+      <button class="btn-dark" onclick="window.print()">🖨 Imprimer</button>
+      <button class="btn-info" onclick="exportCSV()">📄 Export CSV Complet</button>
       <button class="btn-danger" onclick="exportPDF()">📕 Export PDF</button>
       <span id="count" style="margin-left:auto;padding-top:8px;font-weight:bold"></span>
     </div>
   </div>
-
   <div id="stats"></div>
   <div id="content">Chargement...</div>
-
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
   <script>
     const token = localStorage.getItem('token');
     if (!token) window.location.href = '/api/auth/login';
     let currentTransactions = [];
-
     async function loadTransactions(){
       try{
         const p = new URLSearchParams();
@@ -1319,41 +1301,33 @@ router.get('/e', async (req, res) => {
         if(montant) p.append('montant', montant);
         if(debut) p.append('debut', debut);
         if(fin) p.append('fin', fin);
-
         const res = await fetch('/api/transactions/data?'+p.toString(), { headers:{'Authorization':'Bearer '+token}});
         if(res.status===401||res.status===403){ localStorage.removeItem('token'); window.location.href='/api/auth/login'; return; }
         const data = await res.json();
         currentTransactions = data.transactions || [];
-        // Filtre côté client pour ta data actuelle (si ton backend /data ne filtre pas encore type/status)
         let filtered = currentTransactions;
         if(type) filtered = filtered.filter(t=> (t.type||'').toLowerCase()===type);
-        if(status){ 
-          filtered = filtered.filter(t=> {
-            if(status==='validee') return t.status==='validee' || t.status==='reussie';
-            return t.status===status;
-          });
-        }
+        if(status){ filtered = filtered.filter(t=> { if(status==='validee') return t.status==='validee' || t.status==='reussie'; return t.status===status; }); }
         currentTransactions = filtered;
         renderStats(data.stats, filtered);
         renderTable(filtered);
         document.getElementById('count').innerText = filtered.length + ' transactions';
       }catch(e){ document.getElementById('content').innerHTML='Erreur: '+e.message; }
     }
-
     function renderStats(globalStats, list){
-      const volumeOk = list.filter(t=> t.status==='validee'||t.status==='reussie').reduce((s,t)=> s+(t.montant||0),0);
+      const ok = list.filter(t=> t.status==='validee'||t.status==='reussie');
+      const volumeOk = ok.reduce((s,t)=> s+(t.montant||0),0);
+      const fraisTotal = ok.reduce((s,t)=> s+(t.frais||0)+(t.fraisExpediteur||0)+(t.fraisDestinataire||0),0);
       const echecs = list.filter(t=> t.status==='echouee').length;
       const annules = list.filter(t=> t.status==='annulee' || t.annulee).length;
-      document.getElementById('stats').innerHTML = \`
-        <div class="grid-stats">
-          <div class="stat" style="border-color:#007bff"><span class="small">TOTAL AFFICHÉ</span><b>\${list.length}</b><span class="small">sur \${globalStats?.total||0} total</span></div>
-          <div class="stat" style="border-color:#28a745"><span class="small">VOLUME VALIDÉ</span><b>\${volumeOk.toLocaleString()} F</b></div>
-          <div class="stat" style="border-color:#dc3545"><span class="small">ÉCHOUÉES</span><b>\${echecs}</b></div>
-          <div class="stat" style="border-color:#6c757d"><span class="small">ANNULÉES</span><b>\${annules}</b></div>
-        </div>\`;
+      document.getElementById('stats').innerHTML = '<div class="grid-stats">'+
+        '<div class="stat" style="border-color:#007bff"><span class="small">TOTAL AFFICHÉ</span><b>'+list.length+'</b><span class="small">sur '+(globalStats?.total||0)+' total</span></div>'+
+        '<div class="stat" style="border-color:#28a745"><span class="small">VOLUME VALIDÉ</span><b>'+volumeOk.toLocaleString()+' F</b></div>'+
+        '<div class="stat" style="border-color:#e83e8c"><span class="small">FRAIS COLLECTÉS</span><b>'+fraisTotal.toLocaleString()+' F</b></div>'+
+        '<div class="stat" style="border-color:#dc3545"><span class="small">ÉCHOUÉES</span><b>'+echecs+'</b></div>'+
+        '<div class="stat" style="border-color:#6c757d"><span class="small">ANNULÉES</span><b>'+annules+'</b></div></div>';
     }
-
-        function renderTable(transactions){
+    function renderTable(transactions){
       if(!transactions.length){ document.getElementById('content').innerHTML='<div class="card">Aucune transaction</div>'; return; }
       let html = '<table><tr><th>Date</th><th>Type / Op</th><th>Expéditeur</th><th>Destinataire / N°</th><th>Montant</th><th>FRAIS DETAIL</th><th>Statut</th><th class="no-print">Action</th></tr>';
       transactions.forEach(t=>{
@@ -1361,115 +1335,44 @@ router.get('/e', async (req, res) => {
         const date = t.createdAt ? new Date(t.createdAt).toLocaleString('fr-FR') : '-';
         const type = t.type || 'transfert';
         let dest = '-';
-        if(t.type==='retrait') dest = `<b>${t.numeroDestination||'-'}</b><br><span class="small">${t.operateur||''}</span><br><span class="small">${t.motif||''}</span>`;
-        else if(t.type==='recharge') dest = `<b>${t.numeroSource||'-'}</b><br><span class="small">${t.operateur||''}</span> ${t.credited?'<span class="badge ok">Crédité</span>':''}`;
-        else if(t.destinataire) dest = `${t.destinataire.prenom} ${t.destinataire.nom}<br><span class="small">${t.destinataire.telephone}</span>`;
+        if(t.type==='retrait') dest = '<b>'+(t.numeroDestination||'-')+'</b><br><span class="small">'+(t.operateur||'')+'</span>';
+        else if(t.type==='recharge') dest = '<b>'+(t.numeroSource||'-')+'</b><br><span class="small">'+(t.operateur||'')+'</span> '+(t.credited?'<span class="badge ok">Crédité</span>':'');
+        else if(t.destinataire) dest = t.destinataire.prenom+' '+t.destinataire.nom+'<br><span class="small">'+t.destinataire.telephone+'</span>';
         else dest = t.numeroDestination || t.numeroSource || '-';
-        if(t.motif && t.type!=='recharge' && t.type!=='retrait') dest += `<br><span class="small">${t.motif}</span>`;
-
         let badgeStatut = '';
         if(t.status==='validee' || t.status==='reussie') badgeStatut = '<span class="badge ok">VALIDÉE</span>';
         else if(t.status==='echouee') badgeStatut = '<span class="badge ko">ÉCHOUÉE</span>';
         else if(t.status==='annulee' || t.annulee) badgeStatut = '<span class="badge annul">ANNULÉE</span>';
         else badgeStatut = '<span class="badge wait">'+(t.status||'').toUpperCase()+'</span>';
         if(t.motifAnnulation) badgeStatut += '<br><span class="small" style="color:#dc3545">'+t.motifAnnulation+'</span>';
-
-        // --- COLONNE FRAIS DETAILLEE ---
         const fraisTotal = t.frais || 0;
         const fraisExp = t.fraisExpediteur || 0;
         const fraisDest = t.fraisDestinataire || 0;
         const fraisAdmin = t.fraisReversesAdmin || 0;
         const fraisNet = t.montantNet || t.montantNetRecu || '-';
-        let htmlFrais = `<b style="color:#dc3545">${fraisTotal} F</b><br>`;
-        htmlFrais += `<span class="small">Net: ${fraisNet} F</span><br>`;
-        if(fraisExp || fraisDest){
-          htmlFrais += `<span class="small">Exp:${fraisExp} / Dest:${fraisDest}</span><br>`;
-        }
-        if(fraisAdmin) htmlFrais += `<span class="small">Admin:${fraisAdmin} F</span>`;
-        if(t.compteFrais) htmlFrais += `<br><span class="small">${t.compteFrais}</span>`;
-
+        let htmlFrais = '<b style="color:#dc3545">'+fraisTotal+' F</b><br><span class="small">Net: '+fraisNet+' F</span><br>';
+        if(fraisExp || fraisDest) htmlFrais += '<span class="small">Exp:'+fraisExp+' / Dest:'+fraisDest+'</span><br>';
+        if(fraisAdmin) htmlFrais += '<span class="small">Admin:'+fraisAdmin+' F</span>';
         const peutAnnuler = (t.type==='envoi' || t.type==='vente') && (t.status==='validee' || t.status==='reussie') && !t.annulee;
-        const actionBtn = peutAnnuler 
-          ? `<button class="btn-danger" style="padding:5px 10px;font-size:11px" onclick="annulerTx('${t._id}', '${type}')">Annuler ${type}<br><span style="font-size:9px">${(t.montant||0)} F</span></button>`
-          : (t.annulee ? '<span class="small">Annulée le '+ (t.dateAnnulation? new Date(t.dateAnnulation).toLocaleDateString('fr-FR'):'') +'</span>' : '-');
-
-        html += `<tr>
-          <td><span class="small">${date}</span><br><span class="small" title="${t._id}">${t._id.slice(-6)}</span></td>
-          <td><span class="type type-${type}">${type}</span><br><span class="small">${t.operateur||''}</span></td>
-          <td>${t.expediteur.prenom} ${t.expediteur.nom}<br><span class="small">${t.expediteur.telephone}</span><br><span class="small">Après: ${(t.soldeExpediteurApres||0).toLocaleString()} F</span></td>
-          <td>${dest} ${t.soldeDestinataireApres!==undefined? '<br><span class="small">Dest après: '+(t.soldeDestinataireApres||0).toLocaleString()+' F</span>':''}</td>
-          <td class="montant">${(t.montant||0).toLocaleString()} F ${t.montantAnnule? '<br><span class="small" style="color:red">Annulé: '+t.montantAnnule+'</span>':''}</td>
-          <td>${htmlFrais}</td>
-          <td>${badgeStatut}</td>
-          <td class="no-print">${actionBtn}</td>
-        </tr>`;
+        const actionBtn = peutAnnuler ? '<button class="btn-danger" style="padding:5px 10px;font-size:11px" onclick="annulerTx(\\''+t._id+'\\', \\''+type+'\\')">Annuler '+type+'<br><span style="font-size:9px">'+(t.montant||0)+' F</span></button>' : (t.annulee ? '<span class="small">Annulée</span>' : '-');
+        html += '<tr><td><span class="small">'+date+'</span><br><span class="small">'+t._id.slice(-6)+'</span></td><td><span class="type">'+type+'</span><br><span class="small">'+(t.operateur||'')+'</span></td><td>'+t.expediteur.prenom+' '+t.expediteur.nom+'<br><span class="small">'+t.expediteur.telephone+'</span><br><span class="small">Après: '+(t.soldeExpediteurApres||0).toLocaleString()+' F</span></td><td>'+dest+'</td><td class="montant">'+(t.montant||0).toLocaleString()+' F</td><td>'+htmlFrais+'</td><td>'+badgeStatut+'</td><td class="no-print">'+actionBtn+'</td></tr>';
       });
       html+='</table>';
       document.getElementById('content').innerHTML=html;
     }
-
     function exportCSV(){
       if(!currentTransactions.length) return alert('Aucune donnée');
-      // CSV COMPLET - DATA PURE POUR EXCEL
-      const headers = [
-        '_id','createdAt','date','dateValidation','type','montant','montantNet','montantNetRecu','frais','fraisExpediteur','fraisDestinataire','fraisReversesAdmin','montantAnnule','status','annulee','credited',
-        'expediteur_id','expediteur_nom','expediteur_prenom','expediteur_telephone','soldeExpediteurApres','soldeExpediteurAvant',
-        'destinataire_id','destinataire_nom','destinataire_prenom','destinataire_telephone','soldeDestinataireApres',
-        'numeroSource','numeroDestination','operateur','depositId','motif','motifAnnulation','dateAnnulation',
-        'commandeId','produitId','compteDestination','compteFrais','adminId','verificationExpediteur','volumeRecuMoisApres'
-      ];
+      const headers = ['_id','createdAt','date','type','montant','montantNet','montantNetRecu','frais','fraisExpediteur','fraisDestinataire','fraisReversesAdmin','montantAnnule','status','annulee','credited','expediteur_id','expediteur_nom','expediteur_prenom','expediteur_telephone','soldeExpediteurApres','destinataire_id','destinataire_nom','destinataire_prenom','destinataire_telephone','soldeDestinataireApres','numeroSource','numeroDestination','operateur','depositId','motif','motifAnnulation','commandeId','produitId','compteDestination','compteFrais'];
       let csv = headers.join(';')+'\\n';
       currentTransactions.forEach(t=>{
-        const row = [
-          t._id||'',
-          t.createdAt||'',
-          t.date||'',
-          t.dateValidation||'',
-          t.type||'',
-          t.montant||0,
-          t.montantNet||t.montantNetRecu||'',
-          t.montantNetRecu||'',
-          t.frais||0,
-          t.fraisExpediteur||0,
-          t.fraisDestinataire||0,
-          t.fraisReversesAdmin||0,
-          t.montantAnnule||0,
-          t.status||'',
-          t.annulee||false,
-          t.credited||false,
-          t.expediteur?._id||'',
-          t.expediteur?.nom||'',
-          t.expediteur?.prenom||'',
-          t.expediteur?.telephone||'',
-          t.soldeExpediteurApres||'',
-          t.soldeExpediteurAvant||'',
-          t.destinataire?._id||'',
-          t.destinataire?.nom||'',
-          t.destinataire?.prenom||'',
-          t.destinataire?.telephone||'',
-          t.soldeDestinataireApres||'',
-          t.numeroSource||'',
-          t.numeroDestination||'',
-          t.operateur||'',
-          t.depositId||'',
-          (t.motif||'').replace(/;/g,',').replace(/\\n/g,' '),
-          (t.motifAnnulation||'').replace(/;/g,','),
-          t.dateAnnulation||'',
-          t.commandeId||'',
-          t.produitId||'',
-          t.compteDestination||'',
-          t.compteFrais||'',
-          t.adminId||'',
-          t.verificationExpediteur||'',
-          t.volumeRecuMoisApres||''
-        ];
-        csv += row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')+'\\n';
+        const row = [t._id||'',t.createdAt||'',t.date||'',t.type||'',t.montant||0,t.montantNet||'',t.montantNetRecu||'',t.frais||0,t.fraisExpediteur||0,t.fraisDestinataire||0,t.fraisReversesAdmin||0,t.montantAnnule||0,t.status||'',t.annulee||false,t.credited||false,t.expediteur?._id||'',t.expediteur?.nom||'',t.expediteur?.prenom||'',t.expediteur?.telephone||'',t.soldeExpediteurApres||'',t.destinataire?._id||'',t.destinataire?.nom||'',t.destinataire?.prenom||'',t.destinataire?.telephone||'',t.soldeDestinataireApres||'',t.numeroSource||'',t.numeroDestination||'',t.operateur||'',t.depositId||'',(t.motif||'').replace(/;/g,','), (t.motifAnnulation||'').replace(/;/g,','), t.commandeId||'',t.produitId||'',t.compteDestination||'',t.compteFrais||''];
+        csv += row.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(';')+'\\n';
       });
-      const blob = new Blob(["\\ufeff"+csv], {type:'text/csv;charset=utf-8;'}); // BOM pour Excel FR
-      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`unipay_complet_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+      const blob = new Blob(["\\ufeff"+csv], {type:'text/csv;charset=utf-8;'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='unipay_complet_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
     }
     async function annulerTx(id, type){
-      if(!confirm('Confirmer annulation de '+type+' '+id+' ?\\nLe solde sera recrédité.')) return;
+      if(!confirm('Confirmer annulation de '+type+' '+id+' ?')) return;
       try{
         const res = await fetch('/api/transactions/'+id+'/cancel', { method:'POST', headers:{'Authorization':'Bearer '+token}});
         const data = await res.json();
@@ -1477,22 +1380,14 @@ router.get('/e', async (req, res) => {
         loadTransactions();
       }catch(e){ alert('Erreur: '+e.message); }
     }
-
     function exportPDF(){
       if(!currentTransactions.length) return alert('Aucune donnée');
       const {jsPDF}=window.jspdf; const doc=new jsPDF('l');
       doc.text('Historique UniPay - '+new Date().toLocaleDateString('fr-FR'),14,15);
-      const body = currentTransactions.map(t=>[
-        new Date(t.createdAt).toLocaleString('fr-FR'),
-        (t.type||'')+' '+(t.operateur||''),
-        t.expediteur.prenom+' '+t.expediteur.nom,
-        t.destinataire? t.destinataire.telephone : (t.numeroDestination||t.numeroSource||''),
-        t.montant+' F', (t.frais||0)+' F', t.status
-      ]);
+      const body = currentTransactions.map(t=>[ new Date(t.createdAt).toLocaleString('fr-FR'), (t.type||'')+' '+(t.operateur||''), t.expediteur.prenom+' '+t.expediteur.nom, t.destinataire? t.destinataire.telephone : (t.numeroDestination||t.numeroSource||''), t.montant+' F', (t.frais||0)+' F', t.status ]);
       doc.autoTable({ head:[['Date','Type','Exp','Dest/Num','Montant','Frais','Statut']], body, startY:20, styles:{fontSize:7} });
       doc.save('unipay.pdf');
     }
-
     function resetFiltres(){
       ['filterClient','filterType','filterStatus','filterNumero','filterMontant','dateDebut','dateFin'].forEach(id=> document.getElementById(id).value='');
       loadTransactions();
