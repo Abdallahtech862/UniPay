@@ -546,7 +546,7 @@ router.get('/pending-view', async (req, res) => {
 
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data',  async (req, res) => {
+router.get('/data',authUse,async (req, res) => {
   try {
     const { client, debut, fin, q, numero, montant } = req.query;
     let query = {};
@@ -1038,7 +1038,7 @@ router.get('/dashboard', async (req, res) => {
 </html>`);
 });
 
-router.get('/', authUser,async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
