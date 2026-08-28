@@ -231,7 +231,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
   }
 });
 // GET /api/transactions/pending - Admin voit les retraits/transferts en attente
-router.get('/pending', authUser, async (req, res) => {
+router.get('/pendingg', authUser, async (req, res) => {
   try {
     if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
@@ -256,6 +256,14 @@ router.get('/pending', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
+router.get('/pending', auth, adminOnly, async (req,res)=>{
+  const filter = { status: 'en_attente', type: 'retrait' };
+  // si tu utilises 'pending' comme status, mets:
+  // const filter = { status: { $in: ['en_attente','pending'] }, type: 'retrait' };
+  const tx = await Transaction.find(filter).populate('expediteur').sort({createdAt:-1}).lean();
+  res.json({ transactions: tx });
+});
+
 // POST /api/transactions/:id/validate - Valider un retrait vers Mobile Money
 router.post('/:id/validate', authUser, async (req, res) => {
   try {
@@ -355,7 +363,7 @@ router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici a
   }
 });
 // le code pour voir les transactions en attent
-router.get('/pending-view', async (req, res) => {
+router.get('/pending-vieww', async (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -484,7 +492,114 @@ router.get('/pending-view', async (req, res) => {
     </html>
   `);
 });
+// UNIQUEMENT RETRAITS EN ATTENTE
+router.get('/pending-view', async (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Retraits en attente - UniPay</title>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: Arial; padding: 20px; background:#f8f9fa; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; background:white; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+        th, td { border: 1px solid #eee; padding: 10px; text-align: left; font-size:13px; }
+        th { background: #f59e0b; color: white; }
+        button { padding: 8px 15px; margin: 2px; cursor: pointer; border: none; border-radius: 4px; font-weight:bold; }
+        .validate { background: #10b981; color: white; }
+        .reject { background: #ef4444; color: white; }
+        .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; color:white; }
+        .badge-wait { background: #f59e0b; }
+        .small{font-size:11px;color:#6c757d}
+        .card{background:white;padding:15px;border-radius:10px;margin-bottom:15px}
+        .error { color: #ef4444; padding: 20px; background: #fee; border-radius: 4px; }
+      </style>
+    </head>
+    <body>
+      <h2>💸 Retraits en attente de validation</h2>
+      <div class="card">
+        <a href="/api/clients/admin">← Admin</a> | 
+        <a href="/api/transactions">Historique complet</a> | 
+        <button onclick="loadPending()" style="width:auto">🔄 Actualiser</button>
+        <span id="count" style="float:right;font-weight:bold"></span>
+      </div>
+      <div id="content">Chargement...</div>
 
+      <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/api/auth/login';
+
+        async function loadPending() {
+          try {
+            const res = await fetch('/api/transactions/pending?type=retrait', {
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (res.status === 401 || res.status === 403) {
+              document.getElementById('content').innerHTML = '<div class="error">Accès refusé. Connecte-toi en tant qu admin.</div>';
+              return;
+            }
+            if (!res.ok) throw new Error('Erreur serveur: ' + res.status);
+            const data = await res.json();
+            let list = data.transactions || data || [];
+            // Filtre sécurité côté front: que retraits en attente
+            list = list.filter(t => t.type==='retrait' && (t.status==='en_attente' || t.status==='pending'));
+            renderTable(list);
+          } catch (err) {
+            document.getElementById('content').innerHTML = '<div class="error">Erreur: ' + err.message + '</div>';
+          }
+        }
+
+        function renderTable(tx) {
+          document.getElementById('count').innerText = tx.length + ' retraits en attente';
+          if (!tx || tx.length === 0) {
+            document.getElementById('content').innerHTML = '<div class="card">✅ Aucun retrait en attente</div>';
+            return;
+          }
+          let html = '<table><tr><th>Date</th><th>Client</th><th>Montant / Frais</th><th>Destination</th><th>Solde</th><th>Actions</th></tr>';
+          tx.forEach(t => {
+            const date = new Date(t.createdAt).toLocaleString('fr-FR');
+            const client = t.expediteur ? (t.expediteur.prenom + ' ' + t.expediteur.nom + '<br><span class="small">' + t.expediteur.telephone + '</span>') : 'Inconnu';
+            const totalADebiter = (t.montant||0) + (t.frais||0);
+            html += '<tr id="row-'+t._id+'">'+
+              '<td><span class="small">'+date+'</span><br><span class="badge badge-wait">RETRAIT</span></td>'+
+              '<td>'+client+'</td>'+
+              '<td><b>'+(t.montant||0).toLocaleString()+' F</b><br><span class="small" style="color:#dc3545">Frais: '+(t.frais||0)+' F</span><br><span class="small"><b>Total débit: '+totalADebiter.toLocaleString()+' F</b></span><br><span class="small">'+(t.motif||'')+'</span></td>'+
+              '<td><b>'+(t.numeroDestination||'-')+'</b><br><span class="small">'+(t.operateur||'Orange Money')+'</span><br><span class="small">Compte: '+(t.compteDestination||'-')+'</span></td>'+
+              '<td><span class="small">Avant: '+(t.soldeExpediteurAvant||0).toLocaleString()+' F</span><br><span class="small">Après: '+(t.soldeExpediteurApres||0).toLocaleString()+' F</span></td>'+
+              '<td><button class="validate" onclick="validateTx(\\''+t._id+'\\')">✅ Valider</button><br><button class="reject" onclick="rejectTx(\\''+t._id+'\\')">❌ Refuser</button></td>'+
+              '</tr>';
+          });
+          html += '</table>';
+          document.getElementById('content').innerHTML = html;
+        }
+
+        async function validateTx(id) {
+          if (!confirm('Valider ce retrait ? L argent sera envoyé.')) return;
+          const res = await fetch('/api/transactions/' + id + '/validate', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } });
+          const data = await res.json();
+          alert(data.message || data.error || 'Validé');
+          loadPending();
+        }
+
+        async function rejectTx(id) {
+          const motif = prompt('Motif du refus:');
+          if (!motif) return;
+          const res = await fetch('/api/transactions/' + id + '/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ motif })
+          });
+          const data = await res.json();
+          alert(data.message || data.error || 'Refusé');
+          loadPending();
+        }
+
+        loadPending();
+      </script>
+    </body>
+    </html>
+  `);
+});
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
 router.get('/data', authUser, async (req, res) => {
