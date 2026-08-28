@@ -134,18 +134,18 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
     }
 
     const FRAIS = {
-      'Telecel Money': 0.01,
-      'Orange Money': 0.01,
-      'Moov Money': 0.01,
-      'SankMoney': 0.01,
-      'Coris Money': 0.01,
-      'Wave': 0.01,
-      'XpresCash': 0.01,
+      'Telecel Money': 0.00,
+      'Orange Money': 0.00,
+      'Moov Money': 0.00,
+      'SankMoney': 0.00,
+      'Coris Money': 0.00,
+      'Wave': 0.00,
+      'XpresCash': 0.00,
       'Carte Visa': 0.025
     };
 
     const tauxFrais = FRAIS[operateur];// + 100 || 0.01 + 100;
-    const frais = Math.ceil(montant * tauxFrais) + 100;
+    const frais = Math.ceil(montant * tauxFrais) + 00;
     const total = montant + frais;
 
     if (user.solde < total) {
@@ -180,18 +180,18 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     }
 
     const FRAIS = {
-      'MTN Money': 0.01,
-      'Orange Money': 0.01,
-      'Moov Money': 0.015,
-      'SankMoney': 0.005,
-      'Coris Money': 0.01,
-      'Wave': 0.01,
-      'XpresCash': 0.02,
-      'Carte Visa': 0.025
+      'MTN Money': 0.00,
+      'Orange Money': 0.00,
+      'Moov Money': 0.00,
+      'SankMoney': 0.000,
+      'Coris Money': 0.00,
+      'Wave': 0.00,
+      'XpresCash': 0.00,
+      'Carte Visa': 0.00
     };
 
-    const tauxFrais = FRAIS[operateur] || 0.01;
-    const frais = Math.ceil(montant * tauxFrais) + 100;
+    const tauxFrais = FRAIS[operateur] || 0.00;
+    const frais = Math.ceil(montant * tauxFrais) + 00;
     const total = montant + frais;
 
     if (user.solde < total) {
@@ -546,7 +546,7 @@ router.get('/pending-view', async (req, res) => {
 
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data', authUser, async (req, res) => {
+router.get('/data',  async (req, res) => {
   try {
     const { client, debut, fin, q, numero, montant } = req.query;
     let query = {};
