@@ -322,66 +322,7 @@ router.post('/:id/validate', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// POST /api/transactions/:id/validate - Valider un retrait/transfert
-router.post('/:id/validatee', authUser, async (req, res) => { // ← authUser obligatoire
-  try {
-    // Check admin
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Accès réservé aux admins' });
-    }
 
-    const tx = await Transaction.findById(req.params.id)
-      .populate('expediteur');
-
-    if (!tx) {
-      return res.status(404).json({ error: 'Transaction introuvable' });
-    }
-
-    if (tx.status !== 'en_attente') {
-      return res.status(400).json({ error: 'Transaction déjà traitée' });
-    }
-
-    // Vérif solde encore suffisant
-    const total = tx.montant + (tx.frais || 0);
-    if (tx.expediteur.solde < total) {
-      await Transaction.findByIdAndUpdate(req.params.id, { 
-        status: 'annulee',
-        motifAnnulation: 'Solde insuffisant au moment de la validation'
-      });
-      return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
-    }
-
-    // Vérif client pas bloqué entre-temps
-    if (tx.expediteur.bloque) {
-      await Transaction.findByIdAndUpdate(req.params.id, { 
-        status: 'annulee',
-        motifAnnulation: 'Client suspendu'
-      });
-      return res.status(403).json({ error: 'Client suspendu. Transaction annulée.' });
-    }
-
-    const nouveauSolde = tx.expediteur.solde - total;
-
-    await Promise.all([
-      Transaction.findByIdAndUpdate(req.params.id, {
-        status: 'validee',
-        soldeExpediteurApres: nouveauSolde,
-        dateValidation: new Date()
-      }),
-      Client.findByIdAndUpdate(tx.expediteur._id, { solde: nouveauSolde })
-    ]);
-
-    res.json({ 
-      success: true, 
-      message: 'Transaction validée',
-      nouveauSolde
-    });
-
-  } catch (err) {
-    console.error('Erreur /validate:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 // POST /api/transactions/:id/reject - Refuser une transaction
 router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici aussi
   try {
@@ -546,7 +487,7 @@ router.get('/pending-view', async (req, res) => {
 
 // ==================== ROUTES HTML pour voir toutes les transaction====================
 // GET /api/transactions/data - Données pour le tableau avec recherche historique
-router.get('/data',authUse,async (req, res) => {
+router.get('/data', authUser, async (req, res) => {
   try {
     const { client, debut, fin, q, numero, montant } = req.query;
     let query = {};
