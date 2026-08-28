@@ -1216,7 +1216,7 @@ router.get('/', async (req, res) => {
     res.status(500).send('Erreur: ' + error.message);
   }
 });
-router.get('/', async (req, res) => {
+router.get('/e', async (req, res) => {
   try {
     const clients = await Client.find().select('nom prenom').lean();
     let optionsClients = '<option value="">Tous les clients</option>';
