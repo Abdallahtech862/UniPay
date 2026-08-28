@@ -256,7 +256,7 @@ router.get('/pendingg', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
-router.get('/pending', auth, adminOnly, async (req,res)=>{
+router.get('/pending', authUser, adminOnly, async (req,res)=>{
   const filter = { status: 'en_attente', type: 'retrait' };
   // si tu utilises 'pending' comme status, mets:
   // const filter = { status: { $in: ['en_attente','pending'] }, type: 'retrait' };
