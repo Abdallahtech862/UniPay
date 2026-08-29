@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const Produit = mongoose.models.Produit || mongoose.model('Produit');
 const Commande = mongoose.models.Commande || mongoose.model('Commande');
 const Utilisateur = require('../models/Client');
+const Client = require('../models/Client');
 const { verifyToken } = require('../middleware/auth');
 
 const getUserId = (req) => {
