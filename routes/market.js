@@ -186,6 +186,73 @@ router.get('/products', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     const sortType = req.query.sort || 'recent';
+    
+    // 1. Trouver tous les clients bloqués
+    const clientsBloques = await Client.find({ 
+      $or: [
+        { statut: 'bloque' },
+        { bloque: true },
+        { isBlocked: true },
+        { estBloque: true }
+      ]
+    }).select('_id').lean();
+    
+    const idsBloques = clientsBloques.map(c => c._id);
+
+    // 2. Filtre de base + exclure vendeurs bloqués
+    const filter = { 
+      statut: 'actif',
+      // ton produit peut avoir vendeur, vendeurId, client, owner, auteur -> on couvre tout
+      $nor: [
+        { vendeur: { $in: idsBloques } },
+        { vendeurId: { $in: idsBloques } },
+        { client: { $in: idsBloques } },
+        { clientId: { $in: idsBloques } },
+        { owner: { $in: idsBloques } },
+        { auteur: { $in: idsBloques } },
+        { expediteur: { $in: idsBloques } }
+      ]
+    };
+
+    if(req.query.categorie && req.query.categorie !== 'Tous') {
+      filter.categorie = req.query.categorie;
+    }
+
+    let produits = [];
+    if (sortType === 'random') {
+      produits = await mongoose.model('Produit').aggregate([
+        { $match: filter },
+        { $sample: { size: limit * 3 } },
+        { $skip: skip % 60 },
+        { $limit: limit }
+      ]);
+    } else {
+      produits = await mongoose.model('Produit').find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
+
+    // 3. Double sécurité: filtre en JS au cas où le champ vendeur est un objet populé
+    produits = produits.filter(p => {
+      const vendeurId = p.vendeur?._id || p.vendeur || p.vendeurId || p.client || p.clientId || p.owner;
+      return !idsBloques.some(id => String(id) === String(vendeurId));
+    });
+
+    const total = await mongoose.model('Produit').countDocuments(filter);
+    res.json({ produits, hasMore: skip + produits.length < total, total, bloqueCount: idsBloques.length });
+  } catch (e) { 
+    console.error(e);
+    res.status(500).json({ erreur: e.message }); 
+  }
+});
+router.get('/productss', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const sortType = req.query.sort || 'recent';
     const filter = { statut: 'actif' };
     if(req.query.categorie && req.query.categorie!== 'Tous') filter.categorie = req.query.categorie;
     let produits = [];
