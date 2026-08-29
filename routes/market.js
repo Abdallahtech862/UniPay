@@ -187,65 +187,93 @@ router.get('/products', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     const sortType = req.query.sort || 'recent';
-    
-    // 1. Trouver tous les clients bloqués
-    const clientsBloques = await Client.find({ 
-      $or: [
-        { statut: 'bloque' },
-        { bloque: true },
-        { isBlocked: true },
-        { estBloque: true }
-      ]
-    }).select('_id').lean();
-    
-    const idsBloques = clientsBloques.map(c => c._id);
 
-    // 2. Filtre de base + exclure vendeurs bloqués
-    const filter = { 
-      statut: 'actif',
-      // ton produit peut avoir vendeur, vendeurId, client, owner, auteur -> on couvre tout
-      $nor: [
-        { vendeur: { $in: idsBloques } },
-        { vendeurId: { $in: idsBloques } },
-        { client: { $in: idsBloques } },
-        { clientId: { $in: idsBloques } },
-        { owner: { $in: idsBloques } },
-        { auteur: { $in: idsBloques } },
-        { expediteur: { $in: idsBloques } }
-      ]
-    };
-
-    if(req.query.categorie && req.query.categorie !== 'Tous') {
-      filter.categorie = req.query.categorie;
+    const filterBase = { statut: 'actif' };
+    if(req.query.categorie && req.query.categorie!== 'Tous') {
+      filterBase.categorie = req.query.categorie;
     }
+
+    // Pipeline qui joint Client et exclut bloque:true
+    const lookupPipeline = [
+      { $match: filterBase },
+      // On lookup le vendeur - adapte selon ton champ produit
+      // Si ton produit a 'vendeur' qui est un ObjectId vers Client
+      {
+        $lookup: {
+          from: 'clients', // nom de ta collection
+          localField: 'vendeur', // <-- change ici si ton champ s'appelle client, owner, auteur
+          foreignField: '_id',
+          as: 'vendeurInfo'
+        }
+      },
+      // Si lookup vide (produit sans vendeur) ou vendeur non bloqué
+      {
+        $match: {
+          $or: [
+            { vendeurInfo: { $size: 0 } }, // produit système sans vendeur
+            { 'vendeurInfo.bloque': { $ne: true } }
+          ]
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { vendeurInfo: 0 } } // on nettoie
+    ];
+
+    const countPipeline = [
+      { $match: filterBase },
+      {
+        $lookup: {
+          from: 'clients',
+          localField: 'vendeur',
+          foreignField: '_id',
+          as: 'vendeurInfo'
+        }
+      },
+      {
+        $match: {
+          $or: [
+            { vendeurInfo: { $size: 0 } },
+            { 'vendeurInfo.bloque': { $ne: true } }
+          ]
+        }
+      },
+      { $count: 'total' }
+    ];
 
     let produits = [];
+    let total = 0;
+
     if (sortType === 'random') {
-      produits = await mongoose.model('Produit').aggregate([
-        { $match: filter },
+      // Version random mais en excluant bloqués
+      const randomPipe = [
+        { $match: filterBase },
+        { $lookup: { from: 'clients', localField: 'vendeur', foreignField: '_id', as: 'vendeurInfo' } },
+        { $match: { $or: [{ vendeurInfo: { $size: 0 } }, { 'vendeurInfo.bloque': { $ne: true } }] } },
         { $sample: { size: limit * 3 } },
         { $skip: skip % 60 },
-        { $limit: limit }
-      ]);
+        { $limit: limit },
+        { $project: { vendeurInfo: 0 } }
+      ];
+      produits = await mongoose.model('Produit').aggregate(randomPipe);
+      const countRes = await mongoose.model('Produit').aggregate(countPipeline);
+      total = countRes[0]?.total || 0;
     } else {
-      produits = await mongoose.model('Produit').find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      produits = await mongoose.model('Produit').aggregate(lookupPipeline);
+      const countRes = await mongoose.model('Produit').aggregate(countPipeline);
+      total = countRes[0]?.total || 0;
     }
 
-    // 3. Double sécurité: filtre en JS au cas où le champ vendeur est un objet populé
-    produits = produits.filter(p => {
-      const vendeurId = p.vendeur?._id || p.vendeur || p.vendeurId || p.client || p.clientId || p.owner;
-      return !idsBloques.some(id => String(id) === String(vendeurId));
+    res.json({
+      produits,
+      hasMore: skip + produits.length < total,
+      total
     });
 
-    const total = await mongoose.model('Produit').countDocuments(filter);
-    res.json({ produits, hasMore: skip + produits.length < total, total, bloqueCount: idsBloques.length });
-  } catch (e) { 
-    console.error(e);
-    res.status(500).json({ erreur: e.message }); 
+  } catch (e) {
+    console.error('Erreur /products:', e);
+    res.status(500).json({ erreur: e.message });
   }
 });
 router.get('/productss', async (req, res) => {
