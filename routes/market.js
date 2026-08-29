@@ -180,7 +180,6 @@ router.post('/products', verifyToken, async (req, res) => {
     res.status(500).json({erreur: e.message});
   }
 });
-
 router.get('/products', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -188,8 +187,14 @@ router.get('/products', async (req, res) => {
     const skip = (page - 1) * limit;
     const sortType = req.query.sort || 'recent';
     
-    // Récupère les IDs bloqués en ObjectId ET en String
-    const bloqueIdsObj = await Client.find({ bloque: true }).distinct('_id');
+    // Tous les clients rejetés / bloqués
+    const bloqueIdsObj = await Client.find({ 
+      $or: [
+        { verificationStatus: 'rejete' },
+        { bloque: true }
+      ]
+    }).distinct('_id');
+
     const bloqueIds = [
       ...bloqueIdsObj,
       ...bloqueIdsObj.map(id => id.toString())
@@ -197,7 +202,7 @@ router.get('/products', async (req, res) => {
 
     const filter = { 
       statut: 'actif',
-      vendeurId: { $nin: bloqueIds } // exclut ObjectId et String
+      vendeurId: { $nin: bloqueIds }
     };
     
     if(req.query.categorie && req.query.categorie!== 'Tous') {
