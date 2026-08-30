@@ -232,28 +232,18 @@ router.get('/products', async (req, res) => {
     res.status(500).json({ erreur: e.message }); 
   }
 });
-router.get('/productss', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-    const sortType = req.query.sort || 'recent';
-    const filter = { statut: 'actif' };
-    if(req.query.categorie && req.query.categorie!== 'Tous') filter.categorie = req.query.categorie;
-    let produits = [];
-    if (sortType === 'random') {
-      produits = await mongoose.model('Produit').aggregate([
-        { $match: filter },
-        { $sample: { size: limit * 3 } },
-        { $skip: skip % 60 },
-        { $limit: limit }
-      ]);
-    } else {
-      produits = await mongoose.model('Produit').find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
+// Suppression DEFINITIVE
+router.delete('/products/:id/hard', verifyToken, async (req,res)=>{
+  try{
+    const userId = getUserId(req);
+    const prod = await Produit.findById(req.params.id);
+    if(!prod) return res.status(404).json({erreur:'Introuvable'});
+    if(prod.vendeurId.toString() !== userId.toString()){
+      return res.status(403).json({erreur:'Pas autorisé'});
     }
-    const total = await mongoose.model('Produit').countDocuments(filter);
-    res.json({ produits, hasMore: skip + produits.length < total, total });
-  } catch (e) { res.status(500).json({ erreur: e.message }); }
+    await Produit.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Supprimé définitivement' });
+  }catch(e){ res.status(500).json({erreur:e.message}); }
 });
 
 router.get('/products/my/mine', verifyToken, async (req, res) => {
