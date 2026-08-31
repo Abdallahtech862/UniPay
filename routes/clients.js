@@ -26,29 +26,59 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 // POST /api/clients/check-phones - VERSION QUI MARCHE
-router.post('/api/clients/check-phones', async (req, res) => {
+// POST /api/clients/check-phones
+app.post('/api/clients/check-phones', async (req, res) => {
   try {
-    const { phones } = req.body; // ["67242040", "70160988"...]
+    const { phones } = req.body; // ["67242040", "70160988"]
     if (!phones || !Array.isArray(phones)) return res.json([]);
 
-    // nettoie : garde 8 derniers chiffres
-    const cleaned = phones.map(p => (p||'').toString().replace(/\D/g,'').slice(-8)).filter(p=>p.length>=8);
-    const unique = [...new Set(cleaned)];
+    const cleaned = [...new Set(
+      phones.map(p => (p||'').toString().replace(/\D/g,'').slice(-8))
+            .filter(p => p.length >= 8)
+    )];
 
-    // cherche tous les users dont le tel finit par un de ces 8 chiffres
-    // $regex avec $or
-    const regexQueries = unique.map(p => ({ telephone: { $regex: p + '$' } }));
+    if (cleaned.length === 0) return res.json([]);
 
-    const users = await Client.find({ $or: regexQueries }).select('_id nom prenom telephone photoProfil').limit(100);
+    // On charge tous les users (5000 max) et on filtre en JS
+    // C'est rapide, pas de regex Mongo
+    const allUsers = await Client.find({}, 'nom prenom telephone photoProfil').lean();
 
-    console.log('check-phones', unique.length, '-> found', users.length);
-    res.json(users);
+    const found = [];
+    for (const u of allUsers) {
+      const tel8 = (u.telephone || '').toString().replace(/\D/g, '').slice(-8);
+      if (cleaned.includes(tel8)) {
+        found.push(u);
+        if (found.length >= 100) break;
+      }
+    }
+
+    console.log(`check-phones: ${cleaned.length} cherchés -> ${found.length} trouvés`);
+    res.json(found);
   } catch (e) {
-    console.error(e);
-    res.status(500).json([]);
+    console.error('check-phones error:', e);
+    res.json([]);
   }
 });
 
+// GET /api/clients/searche?query=67242040
+router.get('/api/clients/searche', async (req, res) => {
+  try {
+    const raw = (req.query.query || '').toString().replace(/\D/g, '').slice(-8);
+    if (!raw || raw.length < 3) return res.json([]);
+
+    const allUsers = await Client.find({}, 'nom prenom telephone photoProfil').lean();
+    
+    const filtered = allUsers.filter(u => {
+      const tel8 = (u.telephone || '').toString().replace(/\D/g, '').slice(-8);
+      return tel8.includes(raw);
+    }).slice(0, 10);
+
+    res.json(filtered);
+  } catch (e) {
+    console.error('searche error:', e);
+    res.json([]);
+  }
+});
 // Et corrige aussi ton ancienne route searche
 router.get('/api/clients/searche', async (req, res) => {
   try {
