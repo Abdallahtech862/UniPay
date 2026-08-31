@@ -61,25 +61,36 @@ router.post('/api/clients/check-phones', async (req, res) => {
 });
 
 // GET /api/clients/searche?query=67242040
+// GET /api/clients/searche?query=70879425
 router.get('/api/clients/searche', async (req, res) => {
   try {
-    const raw = (req.query.query || '').toString().replace(/\D/g, '').slice(-8);
+    const raw = (req.query.query || '').toString().replace(/\D/g,'').slice(-8);
     if (!raw || raw.length < 3) return res.json([]);
-
-    const allUsers = await Client.find({}, 'nom prenom telephone photoProfil').lean();
     
-    const filtered = allUsers.filter(u => {
-      const tel8 = (u.telephone || '').toString().replace(/\D/g, '').slice(-8);
+    const all = await Client.find({}, 'nom prenom telephone photoProfil').lean();
+    const filtered = all.filter(u => {
+      const tel8 = (u.telephone||'').replace(/\D/g,'').slice(-8);
       return tel8.includes(raw);
-    }).slice(0, 10);
-
+    }).slice(0,10);
     res.json(filtered);
-  } catch (e) {
-    console.error('searche error:', e);
-    res.json([]);
-  }
+  } catch(e){ res.json([]); }
 });
 
+// POST /api/clients/check-phones
+app.post('/api/clients/check-phones', async (req,res)=>{
+  try {
+    const phones = (req.body.phones||[]).map(p=> (p||'').toString().replace(/\D/g,'').slice(-8)).filter(p=>p.length>=8);
+    const unique = [...new Set(phones)];
+    if(!unique.length) return res.json([]);
+    
+    const all = await Client.find({}, 'nom prenom telephone photoProfil').lean();
+    const found = all.filter(u => {
+      const tel8 = (u.telephone||'').replace(/\D/g,'').slice(-8);
+      return unique.includes(tel8);
+    }).slice(0,100);
+    res.json(found);
+  } catch(e){ res.json([]); }
+});
 // routes/clients.js
 router.get('/searche', async (req,res)=>{
   const { query } = req.query;
