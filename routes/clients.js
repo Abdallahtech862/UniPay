@@ -27,7 +27,7 @@ const uploadToCloudinary = (buffer) => {
 };
 
 // routes/clients.js
-route.get('/searche', async (req,res)=>{
+router.get('/searche', async (req,res)=>{
   const { query } = req.query;
   const users = await Client.find({
     $or: [
@@ -40,7 +40,7 @@ route.get('/searche', async (req,res)=>{
 });
 
 // Node.js / Express / Mongoose
-route.get('/api/clients/searche', async (req,res)=>{
+router.get('/api/clients/searche', async (req,res)=>{
   const q = req.query.query?.replace(/\D/g,'').slice(-8);
   if(!q) return res.json([]);
   // cherche fin de numéro
