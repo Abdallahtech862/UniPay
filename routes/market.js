@@ -345,7 +345,80 @@ router.post('/orders/pay', verifyToken, async (req, res) => {
     res.status(500).json({ erreur: e.message });
   }
 });
+
 router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const commande = await Commande.findById(req.params.id).populate('produit');
+    if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
+    if (commande.acheteurId.toString() !== userId.toString()) return res.status(403).json({ erreur: 'Seul acheteur peut confirmer' });
+    if (commande.statut === 'confirme') return res.status(400).json({ erreur: 'Déjà confirmée' });
+
+    const vendeur = await Utilisateur.findById(commande.vendeurId);
+    const acheteur = await Utilisateur.findById(commande.acheteurId);
+    if (!vendeur || !acheteur) return res.status(404).json({ erreur: 'Vendeur ou acheteur introuvable' });
+
+    const totalPaye = commande.total || commande.prix;
+    const frais = Math.round(totalPaye * 0.02);
+    const netVendeur = totalPaye - frais;
+
+    // 1. Débloque argent VENDEUR + on récupère les soldes AVANT
+    const soldeAcheteurAvant = acheteur.solde || 0;
+    vendeur.solde = (vendeur.solde || 0) + netVendeur;
+    await vendeur.save();
+
+    // 2. Commission admin
+    const admin = await Utilisateur.findOne({ telephone: '+22670000000' });
+    if (admin) {
+      admin.solde = (admin.solde || 0) + frais;
+      await admin.save();
+    }
+
+    // 3. Update commande
+    commande.statut = 'confirme';
+    commande.dateConfirmation = new Date();
+    await commande.save();
+
+    // 4. Log transaction UNIQUE avec les 2 soldes
+    try {
+      const Transaction = mongoose.model('Transaction');
+      await Transaction.create({
+        expediteur: acheteur._id,           // acheteur
+        destinataire: vendeur._id,          // vendeur
+        type: 'vente',
+        montant: totalPaye,
+        montantNet: totalPaye,
+        montantNetRecu: netVendeur,
+        frais: frais,
+        fraisDestinataire: frais,
+        status: 'validee',
+        motif: `Vente ${commande.quantite||1}x ${commande.produit?.titre||''}`,
+        commandeId: commande._id,
+        produitId: commande.produitId || commande.produit?._id,
+        // === ICI LES SOLDES ===
+        soldeExpediteurApres: soldeAcheteurAvant, // solde acheteur (n'a pas changé à la confirmation, il a payé avant)
+        soldeDestinataireApres: vendeur.solde,    // solde vendeur APRES crédit
+        expediteurNom: `${acheteur.prenom} ${acheteur.nom}`,
+        destinataireNom: `${vendeur.prenom} ${vendeur.nom}`,
+        adminId: admin?._id
+      });
+    } catch(e){ console.log('Tx log ignore', e.message); }
+
+    if (global.io) global.io.emit('commande_update', commande);
+
+    res.json({ 
+      succes: true, 
+      message: `${netVendeur.toLocaleString()} FCFA débloqués`,
+      commande,
+      detail: { total: totalPaye, frais, netVendeur, soldeVendeurApres: vendeur.solde, soldeAcheteurApres: soldeAcheteurAvant }
+    });
+
+  } catch (e) {
+    console.error('CONFIRM ERROR:', e);
+    res.status(500).json({ erreur: e.message });
+  }
+});
+router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const commande = await Commande.findById(req.params.id);
@@ -404,58 +477,6 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   } catch (e) {
     console.error('CONFIRM ERROR:', e);
     res.status(500).json({ erreur: e.message });
-  }
-});
-router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const userId = getUserId(req);
-    const Transaction = mongoose.model('Transaction');
-    const Message = mongoose.models.Message;
-    const commande = await Commande.findById(req.params.id).session(session);
-    if (!commande) throw new Error('Commande introuvable');
-    if (commande.acheteurId.toString()!== userId) throw new Error('Seul l\'acheteur peut confirmer');
-    if (commande.statut === 'confirme') throw new Error('Déjà confirmée');
-    if (commande.statut!== 'livre' && commande.statut!== 'paye') throw new Error('La commande doit être livrée avant confirmation');
-    const produit = await Produit.findById(commande.produitId).session(session);
-    const vendeur = await Utilisateur.findById(commande.vendeurId).session(session);
-    const acheteur = await Utilisateur.findById(commande.acheteurId).session(session);
-    const admin = await Utilisateur.findOne({ telephone: '+22670000000' }).session(session);
-    if (!vendeur ||!acheteur) throw new Error('Utilisateur introuvable');
-    
-    const totalPaye = commande.total || commande.prix;
-    const prixUnitaire = commande.prix;
-    const frais = Math.round(totalPaye * 0.02);
-    const netVendeur = totalPaye - frais;
-    
-    vendeur.solde = (vendeur.solde || 0) + netVendeur;
-    if (admin) admin.solde = (admin.solde || 0) + frais;
-    commande.statut = 'confirme';
-    commande.dateConfirmation = new Date();
-    await vendeur.save({ session });
-    if (admin) await admin.save({ session });
-    await commande.save({ session });
-    
-    const [txAchat, txVente] = await Transaction.create([{
-        expediteur: acheteur._id, destinataire: vendeur._id, montant: totalPaye, frais: frais,
-        montantNetRecu: netVendeur, montantNet: totalPaye, type: 'achat', status: 'validee',
-        motif: `${produit?.titre} x${commande.quantite||1}`, produitId: produit?._id, commandeId: commande._id,
-        soldeExpediteurApres: acheteur.solde, soldeDestinataireApres: acheteur.solde,
-        contact: { prenom: vendeur.prenom, nom: vendeur.nom, telephone: vendeur.telephone }
-      },{
-        expediteur: acheteur._id, destinataire: vendeur._id, montant: totalPaye, frais: frais,
-        montantNetRecu: netVendeur, montantNet: netVendeur, type: 'vente', status: 'validee',
-        motif: `${produit?.titre} x${commande.quantite||1}`, produitId: produit?._id, commandeId: commande._id,
-        soldeExpediteurApres: vendeur.solde, soldeDestinataireApres: vendeur.solde,
-        contact: { prenom: acheteur.prenom, nom: acheteur.nom, telephone: acheteur.telephone }
-      }], { session });
-      
-    await session.commitTransaction(); session.endSession();
-    res.json({ succes: true, commande, detail: { total: totalPaye, frais, netVendeur, quantite: commande.quantite } });
-  } catch (e) {
-    if (session.inTransaction()) await session.abortTransaction(); session.endSession();
-    console.error('Erreur confirm:', e.message); res.status(400).json({ erreur: e.message });
   }
 });
 
