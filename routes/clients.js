@@ -79,17 +79,7 @@ router.get('/api/clients/searche', async (req, res) => {
     res.json([]);
   }
 });
-// Et corrige aussi ton ancienne route searche
-router.get('/api/clients/searche', async (req, res) => {
-  try {
-    const q = (req.query.query||'').toString().replace(/\D/g,'').slice(-8);
-    if (!q || q.length < 3) return res.json([]);
-    const users = await Client.find({ telephone: { $regex: q + '$' } }).limit(10);
-    res.json(users);
-  } catch (e) {
-    res.json([]);
-  }
-});
+
 // routes/clients.js
 router.get('/searche', async (req,res)=>{
   const { query } = req.query;
