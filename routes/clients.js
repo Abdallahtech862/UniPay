@@ -27,7 +27,7 @@ const uploadToCloudinary = (buffer) => {
 };
 // POST /api/clients/check-phones - VERSION QUI MARCHE
 // POST /api/clients/check-phones
-app.post('/api/clients/check-phones', async (req, res) => {
+router.post('/api/clients/check-phones', async (req, res) => {
   try {
     const { phones } = req.body; // ["67242040", "70160988"]
     if (!phones || !Array.isArray(phones)) return res.json([]);
