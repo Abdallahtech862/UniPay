@@ -25,24 +25,16 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
-// POST /api/clients/check-phones - VERSION QUI MARCHE
-// POST /api/clients/check-phones
-router.post('/api/clients/check-phones', async (req, res) => {
+// ✅ BON - sans /api/clients car router est déjà préfixé
+router.post('/check-phones', async (req, res) => {
   try {
-    const { phones } = req.body; // ["67242040", "70160988"]
+    const { phones } = req.body;
     if (!phones || !Array.isArray(phones)) return res.json([]);
-
     const cleaned = [...new Set(
-      phones.map(p => (p||'').toString().replace(/\D/g,'').slice(-8))
-            .filter(p => p.length >= 8)
+      phones.map(p => (p||'').toString().replace(/\D/g,'').slice(-8)).filter(p => p.length >= 8)
     )];
-
     if (cleaned.length === 0) return res.json([]);
-
-    // On charge tous les users (5000 max) et on filtre en JS
-    // C'est rapide, pas de regex Mongo
     const allUsers = await Client.find({}, 'nom prenom telephone photoProfil').lean();
-
     const found = [];
     for (const u of allUsers) {
       const tel8 = (u.telephone || '').toString().replace(/\D/g, '').slice(-8);
@@ -51,44 +43,19 @@ router.post('/api/clients/check-phones', async (req, res) => {
         if (found.length >= 100) break;
       }
     }
-
-    console.log(`check-phones: ${cleaned.length} cherchés -> ${found.length} trouvés`);
     res.json(found);
   } catch (e) {
-    console.error('check-phones error:', e);
     res.json([]);
   }
 });
 
-// GET /api/clients/searche?query=67242040
-// GET /api/clients/searche?query=70879425
-router.get('/api/clients/searche', async (req, res) => {
+router.get('/searche', async (req, res) => {
   try {
     const raw = (req.query.query || '').toString().replace(/\D/g,'').slice(-8);
     if (!raw || raw.length < 3) return res.json([]);
-    
     const all = await Client.find({}, 'nom prenom telephone photoProfil').lean();
-    const filtered = all.filter(u => {
-      const tel8 = (u.telephone||'').replace(/\D/g,'').slice(-8);
-      return tel8.includes(raw);
-    }).slice(0,10);
+    const filtered = all.filter(u => (u.telephone||'').replace(/\D/g,'').slice(-8).includes(raw)).slice(0,10);
     res.json(filtered);
-  } catch(e){ res.json([]); }
-});
-
-// POST /api/clients/check-phones
-app.post('/api/clients/check-phones', async (req,res)=>{
-  try {
-    const phones = (req.body.phones||[]).map(p=> (p||'').toString().replace(/\D/g,'').slice(-8)).filter(p=>p.length>=8);
-    const unique = [...new Set(phones)];
-    if(!unique.length) return res.json([]);
-    
-    const all = await Client.find({}, 'nom prenom telephone photoProfil').lean();
-    const found = all.filter(u => {
-      const tel8 = (u.telephone||'').replace(/\D/g,'').slice(-8);
-      return unique.includes(tel8);
-    }).slice(0,100);
-    res.json(found);
   } catch(e){ res.json([]); }
 });
 // routes/clients.js
