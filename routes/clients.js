@@ -39,6 +39,16 @@ router.get('/searche', async (req,res)=>{
   res.json(users);
 });
 
+// Node.js / Express / Mongoose
+route.get('/api/clients/searche', async (req,res)=>{
+  const q = req.query.query?.replace(/\D/g,'').slice(-8);
+  if(!q) return res.json([]);
+  // cherche fin de numéro
+  const users = await Client.find({
+    telephone: { $regex: q + '$' }
+  }).limit(10);
+  res.json(users);
+});
 router.post('/api/clients/check-phones', async (req,res)=>{
   const { phones } = req.body; // ["+22670...","..."]
   const normalized = phones.map(p=> p.replace(/\s/g,'').slice(-8)); // compare les 8 derniers chiffres
