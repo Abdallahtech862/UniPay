@@ -25,7 +25,41 @@ const uploadToCloudinary = (buffer) => {
     streamifier.createReadStream(buffer).pipe(stream);
   });
 };
+// POST /api/clients/check-phones - VERSION QUI MARCHE
+router.post('/api/clients/check-phones', async (req, res) => {
+  try {
+    const { phones } = req.body; // ["67242040", "70160988"...]
+    if (!phones || !Array.isArray(phones)) return res.json([]);
 
+    // nettoie : garde 8 derniers chiffres
+    const cleaned = phones.map(p => (p||'').toString().replace(/\D/g,'').slice(-8)).filter(p=>p.length>=8);
+    const unique = [...new Set(cleaned)];
+
+    // cherche tous les users dont le tel finit par un de ces 8 chiffres
+    // $regex avec $or
+    const regexQueries = unique.map(p => ({ telephone: { $regex: p + '$' } }));
+
+    const users = await Client.find({ $or: regexQueries }).select('_id nom prenom telephone photoProfil').limit(100);
+
+    console.log('check-phones', unique.length, '-> found', users.length);
+    res.json(users);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json([]);
+  }
+});
+
+// Et corrige aussi ton ancienne route searche
+router.get('/api/clients/searche', async (req, res) => {
+  try {
+    const q = (req.query.query||'').toString().replace(/\D/g,'').slice(-8);
+    if (!q || q.length < 3) return res.json([]);
+    const users = await Client.find({ telephone: { $regex: q + '$' } }).limit(10);
+    res.json(users);
+  } catch (e) {
+    res.json([]);
+  }
+});
 // routes/clients.js
 router.get('/searche', async (req,res)=>{
   const { query } = req.query;
@@ -39,23 +73,6 @@ router.get('/searche', async (req,res)=>{
   res.json(users);
 });
 
-// Node.js / Express / Mongoose
-router.get('/api/clients/searche', async (req,res)=>{
-  const q = req.query.query?.replace(/\D/g,'').slice(-8);
-  if(!q) return res.json([]);
-  // cherche fin de numéro
-  const users = await Client.find({
-    telephone: { $regex: q + '$' }
-  }).limit(10);
-  res.json(users);
-});
-router.post('/api/clients/check-phones', async (req,res)=>{
-  const { phones } = req.body; // ["+22670...","..."]
-  const normalized = phones.map(p=> p.replace(/\s/g,'').slice(-8)); // compare les 8 derniers chiffres
-  const users = await Client.find({ telephone: { $in: phones } });
-  // ou mieux avec regex sur fin de numéro
-  res.json(users);
-});
 // ==================== CLIENT CONNECTÉ ====================
 
 router.get('/me', authUser, async (req, res) => {
