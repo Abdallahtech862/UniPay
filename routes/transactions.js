@@ -933,49 +933,7 @@ router.get('/me', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/transactions/me - Historique du client connecté
-router.get('/me1', authUser, async (req, res) => {
-  try {
-    const userIdStr = req.user.id.toString();
 
-    const user = await Client.findById(req.user.id).select('solde');
-    const transactions = await Transaction.find({
-      $or: [{ expediteur: req.user.id }, { destinataire: req.user.id }]
-    })
-      .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
-      .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    res.json({
-      solde: user?.solde || 0,
-      transactions: transactions.map(t => {
-        // Extraction sécurisée des IDs (gère le cas où t.expediteur ou t.destinataire est null)
-        const expediteurId = t.expediteur?._id ? t.expediteur._id.toString() : null;
-        const estExpediteur = expediteurId === userIdStr;
-
-        return {
-          id: t._id,
-          type: t.type || (estExpediteur ? 'envoi' : 'reception'),
-          montant: t.montant,
-          frais: t.frais || 0,
-          // Si l'utilisateur est l'expéditeur, le contact est le destinataire (et inversement)
-          contact: estExpediteur ? (t.destinataire || null) : (t.expediteur || null),
-          operateur: t.operateur || null,
-          numeroDestination: t.numeroDestination || null,
-          motif: t.motif || '',
-          status: t.status,
-          soldeExpediteurApres: t.soldeExpediteurApres || 0,
-          soldeDestinataireApres: t.soldeDestinataireApres || 0,
-          date: t.createdAt
-        };
-      })
-    });
-  } catch (err) {
-    console.error('Erreur /api/transactions/me:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 // GET /api/transactions/dashboard - Dashboard avec top clients
 router.get('/dashboard', async (req, res) => {
   res.send(`<!DOCTYPE html>
