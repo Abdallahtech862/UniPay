@@ -39,7 +39,7 @@ router.get('/searche', async (req,res)=>{
   res.json(users);
 });
 
-app.post('/api/clients/check-phones', async (req,res)=>{
+router.post('/api/clients/check-phones', async (req,res)=>{
   const { phones } = req.body; // ["+22670...","..."]
   const normalized = phones.map(p=> p.replace(/\s/g,'').slice(-8)); // compare les 8 derniers chiffres
   const users = await Client.find({ telephone: { $in: phones } });
