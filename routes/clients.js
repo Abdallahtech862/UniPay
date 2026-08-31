@@ -27,7 +27,7 @@ const uploadToCloudinary = (buffer) => {
 };
 
 // routes/clients.js
-router.get('/searche', async (req,res)=>{
+route.get('/searche', async (req,res)=>{
   const { query } = req.query;
   const users = await Client.find({
     $or: [
