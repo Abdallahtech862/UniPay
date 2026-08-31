@@ -880,8 +880,61 @@ router.post('/send', async (req, res) => {
   }
 });
 
-// GET /api/transactions/me - Historique du client connecté
+
 router.get('/me', authUser, async (req, res) => {
+  try {
+    const userIdStr = req.user.id.toString();
+    const user = await Client.findById(req.user.id).select('solde');
+    const transactions = await Transaction.find({
+      $or: [{ expediteur: req.user.id }, { destinataire: req.user.id }]
+    })
+      .populate('expediteur', 'nom prenom telephone photoProfil pseudo')
+      .populate('destinataire', 'nom prenom telephone photoProfil pseudo')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      solde: user?.solde || 0,
+      transactions: transactions.map(t => {
+        const expId = t.expediteur?._id?.toString() || t.expediteur?.toString();
+        const destId = t.destinataire?._id?.toString() || t.destinataire?.toString();
+        const estExpediteur = expId === userIdStr;
+
+        return {
+          id: t._id,
+          _id: t._id,
+          type: t.type, // GARDE LE VRAI TYPE, pas de fallback
+          montant: t.montant,
+          montantNet: t.montantNet,
+          montantNetRecu: t.montantNetRecu,
+          frais: t.frais || 0,
+          // IMPORTANT: renvoie les deux pour le frontend
+          expediteur: t.expediteur,
+          destinataire: t.destinataire,
+          expediteurNom: t.expediteurNom,
+          destinataireNom: t.destinataireNom,
+          contact: estExpediteur ? (t.destinataire || null) : (t.expediteur || null),
+          operateur: t.operateur || null,
+          numeroSource: t.numeroSource || null,
+          numeroDestination: t.numeroDestination || null,
+          motif: t.motif || '',
+          commandeId: t.commandeId || null,
+          produitId: t.produitId || null,
+          status: t.status,
+          soldeExpediteurApres: t.soldeExpediteurApres ?? 0,
+          soldeDestinataireApres: t.soldeDestinataireApres ?? 0,
+          date: t.createdAt,
+          createdAt: t.createdAt
+        };
+      })
+    });
+  } catch (err) {
+    console.error('Erreur /api/transactions/me:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+// GET /api/transactions/me - Historique du client connecté
+router.get('/me1', authUser, async (req, res) => {
   try {
     const userIdStr = req.user.id.toString();
 
