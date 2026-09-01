@@ -190,6 +190,7 @@ io.on('connection', (socket) => {
         image: data.image || '',
         audio: data.audio || '',
         product: data.product || null,
+        location: data.location || null, // <-- NOUVEAU
         productId: data.productId || data.product?._id || '',
         status: 'sent',
         createdAt: new Date(data.timestamp || Date.now()),
@@ -214,6 +215,7 @@ io.on('connection', (socket) => {
           if (data.type === 'audio') body = '🎤 Vocal';
           if (data.type === 'pdf') body = '📄 Reçu UniPay';
           if (data.type === 'product') body = `🛍️ ${data.product?.titre || 'Article partagé'}`;
+          if (data.type === 'location') body = '📍 Position partagée';
 
           const receipts = await expo.sendPushNotificationsAsync([{
             to: recipient.expoPushToken,
