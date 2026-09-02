@@ -393,7 +393,7 @@ async function resetPassword(id){
 
 // ==================== API ADMIN SECURISEES ====================
 
-router.get('/',  async (req, res) => {
+router.get('/',verifyAdmin,  async (req, res) => {
   try {
     const clients = await Client.find().select('-password').sort({ createdAt: -1 });
     res.json(clients);
@@ -451,7 +451,7 @@ router.put('/:id/verify', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id/block',  async (req, res) => {
+router.put('/:id/block', verifyAdmin, async (req, res) => {
   try {
     const client = await Client.findByIdAndUpdate(req.params.id, { bloque: req.body.bloque, raisonBlocage: req.body.bloque ? 'Bloqué par admin' : null }, { new: true });
     res.json({ success: true, client });
