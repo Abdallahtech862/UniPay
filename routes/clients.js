@@ -393,7 +393,7 @@ async function resetPassword(id){
 
 // ==================== API ADMIN SECURISEES ====================
 
-router.get('/', async (req, res) => {
+router.get('/', verifyAdmin, async (req, res) => {
   try {
     const clients = await Client.find().select('-password').sort({ createdAt: -1 });
     res.json(clients);
