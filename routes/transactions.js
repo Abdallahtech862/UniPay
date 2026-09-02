@@ -141,18 +141,28 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
       'Coris Money': 0.00,
       'Wave': 0.00,
       'XpresCash': 0.00,
-      'Carte Visa': 0.025
+      'Carte Visa': 0.025 // valeur par défaut, sera écrasée
     };
 
-    const tauxFrais = FRAIS[operateur];// + 100 || 0.01 + 100;
-    const frais = Math.ceil(montant * tauxFrais) + 00;
+    let frais = 0;
+
+    if (operateur === 'Carte Visa') {
+      if (montant < 71428) {
+        frais = 1150;
+      } else {
+        frais = Math.ceil(montant * 0.0161); // 1.61%
+      }
+    } else {
+      const tauxFrais = FRAIS[operateur]?? 0;
+      frais = Math.ceil(montant * tauxFrais);
+    }
+
     const total = montant + frais;
 
     if (user.solde < total) {
       return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
     }
 
-    // ✅ Ne crée rien, retourne juste les données
     res.json({
       montant,
       frais,
@@ -166,11 +176,10 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // POST /api/transactions/withdraw/confirm - Crée et débite après auth
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
-    const { montant, operateur, numero } = req.body; // ← Reçoit les params, pas transactionId
+    const { montant, operateur, numero } = req.body;
     const userId = req.user.id;
 
     const user = await Client.findById(userId);
@@ -180,27 +189,38 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     }
 
     const FRAIS = {
-      'MTN Money': 0.00,
+      'Telecel Money': 0.00,
       'Orange Money': 0.00,
       'Moov Money': 0.00,
-      'SankMoney': 0.000,
+      'SankMoney': 0.00,
       'Coris Money': 0.00,
       'Wave': 0.00,
       'XpresCash': 0.00,
-      'Carte Visa': 0.00
+      'Carte Visa': 0.025 // écrasé par la règle ci-dessous
     };
 
-    const tauxFrais = FRAIS[operateur] || 0.00;
-    const frais = Math.ceil(montant * tauxFrais) + 00;
+    let frais = 0;
+
+    if (operateur === 'Carte Visa') {
+      if (montant < 71428) {
+        frais = 1150;
+      } else {
+        frais = Math.ceil(montant * 0.0161); // 1.61%
+      }
+    } else {
+      const tauxFrais = FRAIS[operateur]?? 0.00;
+      frais = Math.ceil(montant * tauxFrais);
+    }
+
     const total = montant + frais;
 
     if (user.solde < total) {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
-    const nouveauSolde = user.solde;// - total;
+    // ⚠️ Tu avais mis solde - total en commentaire, je le corrige pour débiter vraiment
+    const nouveauSolde = user.solde - total;
 
-    // ✅ Crée la transaction et débite en même temps
     const transaction = await Transaction.create({
       expediteur: userId,
       type: 'retrait',
@@ -208,7 +228,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       frais,
       operateur,
       numeroDestination: numero,
-      status: 'en_attente', // ✅ Direct validée car auth OK
+      status: 'en_attente',
       soldeExpediteurAvant: user.solde,
       soldeExpediteurApres: nouveauSolde,
       motif: `Retrait ${operateur}`,
@@ -223,7 +243,8 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       transactionId: transaction._id,
       nouveauSolde,
       montantRetire: montant,
-      frais
+      frais,
+      total
     });
 
   } catch (err) {
