@@ -115,67 +115,30 @@ router.get('/search', authUser, async (req, res) => {
 router.post('/withdraw/preview', authUser, async (req, res) => {
   try {
     const { montant, operateur, numero } = req.body;
-    const userId = req.user.id;
-
     if (!montant || montant <= 0 ||!operateur ||!numero) {
       return res.status(400).json({ error: 'Données manquantes' });
     }
 
-    const user = await Client.findById(userId);
-
-    if (user.bloque) {
-      return res.status(403).json({
-        error: 'Compte suspendu. Impossible d’effectuer un retrait.'
-      });
-    }
-
-    if (user.solde < montant) {
-      return res.status(400).json({ error: 'Solde insuffisant' });
-    }
-
-    const FRAIS = {
-      'Telecel Money': 0.00,
-      'Orange Money': 0.00,
-      'Moov Money': 0.00,
-      'SankMoney': 0.00,
-      'Coris Money': 0.00,
-      'Wave': 0.00,
-      'XpresCash': 0.00,
-      'Carte Visa': 0.025 // valeur par défaut, sera écrasée
-    };
+    const user = await Client.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
 
     let frais = 0;
-
     if (operateur === 'Carte Visa') {
-      if (montant < 71428) {
-        frais = 1150;
-      } else {
-        frais = Math.ceil(montant * 0.0161); // 1.61%
-      }
-    } else {
-      const tauxFrais = FRAIS[operateur]?? 0;
-      frais = Math.ceil(montant * tauxFrais);
+      frais = montant <= 71428? 1150 : Math.ceil(montant * 0.0161);
     }
 
     const total = montant + frais;
-
     if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Total avec frais: ${total} FCFA` });
+      return res.status(400).json({ error: `Solde insuffisant. Il te faut ${total} F` });
     }
 
-    res.json({
-      montant,
-      frais,
-      total,
-      operateur,
-      numero,
-      soldeRestant: user.solde - total
-    });
-
+    res.json({ montant, frais, total, operateur, numero, soldeRestant: user.solde - total });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 // POST /api/transactions/withdraw/confirm - Crée et débite après auth
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
@@ -184,69 +147,53 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     const user = await Client.findById(userId);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-
-    if (user.bloque) {
-      return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
-    }
-
-    const FRAIS = {
-      'Telecel Money': 0.00,
-      'Orange Money': 0.00,
-      'Moov Money': 0.00,
-      'SankMoney': 0.00,
-      'Coris Money': 0.00,
-      'Wave': 0.00,
-      'XpresCash': 0.00,
-      'Carte Visa': 0.00
-    };
+    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
 
     let frais = 0;
-
     if (operateur === 'Carte Visa') {
-      if (montant <= 71428) { // <= comme tu veux
-        frais = 1150;
-      } else {
-        frais = Math.ceil(montant * 0.0161); // 1.61%
-      }
-    } else {
-      const tauxFrais = FRAIS[operateur]?? 0.00;
-      frais = Math.ceil(montant * tauxFrais);
+      frais = montant <= 71428? 1150 : Math.ceil(montant * 0.0161);
     }
 
     const total = montant + frais;
-
-    // CORRECTION ICI : < et pas <=
     if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Il te faut ${total} FCFA (frais ${frais} FCFA)` });
+      return res.status(400).json({ error: `Solde insuffisant. Il te faut ${total} F (frais ${frais} F)` });
     }
 
     const nouveauSolde = user.solde - total;
 
-    const transaction = await Transaction.create({
-      expediteur: userId,
-      type: 'retrait',
-      montant,
-      frais,
-      operateur,
-      numeroDestination: numero,
-      status: 'en_attente',
-      soldeExpediteurAvant: user.solde,
-      soldeExpediteurApres: nouveauSolde,
-      motif: `Retrait ${operateur}`,
-      dateValidation: new Date()
-    });
+    // Transaction atomique pour éviter race condition si 2 retraits en même temps
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      await Client.findByIdAndUpdate(userId, { solde: nouveauSolde }, { session });
 
-    await Client.findByIdAndUpdate(userId, { solde: nouveauSolde });
+      const transaction = await Transaction.create([{
+        expediteur: userId,
+        type: 'retrait',
+        montant,
+        frais,
+        operateur,
+        numeroDestination: numero,
+        status: 'en_attente',
+        soldeExpediteurAvant: user.solde,
+        soldeExpediteurApres: nouveauSolde,
+        motif: `Retrait ${operateur}`
+      }], { session });
 
-    res.json({
-      success: true,
-      message: 'Retrait confirmé',
-      transactionId: transaction._id,
-      nouveauSolde,
-      montantRetire: montant,
-      frais,
-      total
-    });
+      await session.commitTransaction();
+
+      res.json({
+        success: true,
+        message: 'Retrait en attente de validation',
+        transactionId: transaction[0]._id,
+        nouveauSolde, montant, frais, total
+      });
+    } catch (e) {
+      await session.abortTransaction();
+      throw e;
+    } finally {
+      session.endSession();
+    }
 
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -283,96 +230,75 @@ router.get('/pending', authUser, async (req, res) => {
 // POST /api/transactions/:id/validate - Valider un retrait vers Mobile Money
 router.post('/:id/validate', authUser, async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user || req.user.role!== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
-    const tx = await Transaction.findById(req.params.id).populate('expediteur');
+    const tx = await Transaction.findById(req.params.id);
     if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
-
-    // On recalcule les frais au cas où (sécurité Visa <=71428)
-    let frais = tx.frais;
-    if (tx.operateur === 'Carte Visa') {
-      frais = tx.montant <= 71428 ? 1150 : Math.ceil(tx.montant * 0.0161);
-    }
-    const total = tx.montant + frais;
-
-    // On vérifie le solde ACTUEL
-    const expediteurActuel = await Client.findById(tx.expediteur._id);
-    if (expediteurActuel.solde < total) {
-      await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Solde insuffisant à la validation' });
-      return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
-    }
-    if (expediteurActuel.bloque) {
-      await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Client suspendu' });
-      return res.status(403).json({ error: 'Client suspendu.' });
-    }
+    if (tx.status!== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
 
     const COMPTE_PRINCIPAL_TEL = '+22670879425';
     const COMPTE_FRAIS_TEL = '+22670000000';
 
     const comptePrincipal = await Client.findOne({ telephone: COMPTE_PRINCIPAL_TEL });
     const compteFrais = await Client.findOne({ telephone: COMPTE_FRAIS_TEL });
-
-    if (!comptePrincipal || !compteFrais) return res.status(404).json({ error: 'Compte destination introuvable' });
-
-    const nouveauSoldeExpediteur = expediteurActuel.solde - total;
+    if (!comptePrincipal ||!compteFrais) {
+      return res.status(404).json({ error: 'Compte principal ou frais introuvable' });
+    }
 
     await Promise.all([
       Transaction.findByIdAndUpdate(req.params.id, {
         status: 'validee',
-        frais: frais,
-        soldeExpediteurApres: nouveauSoldeExpediteur,
         dateValidation: new Date(),
+        compteDestination: COMPTE_PRINCIPAL_TEL,
+        compteFrais: COMPTE_FRAIS_TEL
       }),
-      Client.findByIdAndUpdate(expediteurActuel._id, { solde: nouveauSoldeExpediteur }),
       Client.findByIdAndUpdate(comptePrincipal._id, { $inc: { solde: tx.montant } }),
-      Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: frais } })
+      Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: tx.frais } })
     ]);
 
     res.json({
       success: true,
-      message: `Retrait validé: ${tx.montant}F + ${frais}F frais`,
-      nouveauSolde: nouveauSoldeExpediteur
+      message: `Validé: ${tx.montant}F -> ${COMPTE_PRINCIPAL_TEL} | ${tx.frais}F -> ${COMPTE_FRAIS_TEL}`
     });
 
   } catch (err) {
-    console.error('Erreur /validate:', err);
     res.status(500).json({ error: err.message });
   }
 });
 // POST /api/transactions/:id/reject - Refuser une transaction
-router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici aussi
+router.post('/:id/reject', authUser, async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user || req.user.role!== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
     const { motif } = req.body;
+    const tx = await Transaction.findById(req.params.id);
+    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
+    if (tx.status!== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
 
-    const tx = await Transaction.findByIdAndUpdate(
-      req.params.id,
-      { 
+    const total = tx.montant + tx.frais;
+
+    await Promise.all([
+      Transaction.findByIdAndUpdate(req.params.id, {
         status: 'annulee',
         motifAnnulation: motif || 'Refusé par admin',
         dateAnnulation: new Date()
-      },
-      { new: true }
-    );
+      }),
+      // REMBOURSEMENT
+      Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: total } })
+    ]);
 
-    if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-
-    res.json({ 
-      success: true, 
-      message: 'Transaction refusée',
-      transaction: tx
-    });
+    res.json({ success: true, message: `Transaction annulée, ${total}F remboursés` });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 // le code pour voir les transactions en attent
 router.get('/pending-vieww', async (req, res) => {
   res.send(`
