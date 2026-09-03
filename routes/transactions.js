@@ -183,6 +183,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     const userId = req.user.id;
 
     const user = await Client.findById(userId);
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
 
     if (user.bloque) {
       return res.status(403).json({ error: 'Compte suspendu. Retrait annulé.' });
@@ -196,13 +197,13 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       'Coris Money': 0.00,
       'Wave': 0.00,
       'XpresCash': 0.00,
-      'Carte Visa': 0.025 // écrasé par la règle ci-dessous
+      'Carte Visa': 0.00
     };
 
     let frais = 0;
 
     if (operateur === 'Carte Visa') {
-      if (montant < 71428) {
+      if (montant <= 71428) { // <= comme tu veux
         frais = 1150;
       } else {
         frais = Math.ceil(montant * 0.0161); // 1.61%
@@ -214,11 +215,11 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     const total = montant + frais;
 
-    if (user.solde <= total) {
-      return res.status(400).json({ error: 'Solde insuffisant' });
+    // CORRECTION ICI : < et pas <=
+    if (user.solde < total) {
+      return res.status(400).json({ error: `Solde insuffisant. Il te faut ${total} FCFA (frais ${frais} FCFA)` });
     }
 
-    // ⚠️ Tu avais mis solde - total en commentaire, je le corrige pour débiter vraiment
     const nouveauSolde = user.solde - total;
 
     const transaction = await Transaction.create({
