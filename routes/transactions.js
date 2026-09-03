@@ -187,8 +187,12 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
 
+    const OPERATEURS_FRONT = ['CARTE', 'Carte Visa', 'CARTE VISA', 'VISA', 'visa'];
+
     let frais = 0;
-    if (operateur.trim() === 'Carte Visa') {
+    const opUpper = (operateur || '').trim().toUpperCase();
+    
+    if (opUpper.includes('CARTE') || opUpper.includes('VISA')) {
       frais = montant <= 71428 ? 1150 : Math.ceil(montant * 0.0161);
     }
 
