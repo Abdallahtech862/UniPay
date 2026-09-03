@@ -291,53 +291,49 @@ router.post('/:id/validate', authUser, async (req, res) => {
     if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
     if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
 
-    const total = tx.montant + (tx.frais || 0);
-    if (tx.expediteur.solde < total) {
-      await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Solde insuffisant' });
+    // On recalcule les frais au cas où (sécurité Visa <=71428)
+    let frais = tx.frais;
+    if (tx.operateur === 'Carte Visa') {
+      frais = tx.montant <= 71428 ? 1150 : Math.ceil(tx.montant * 0.0161);
+    }
+    const total = tx.montant + frais;
+
+    // On vérifie le solde ACTUEL
+    const expediteurActuel = await Client.findById(tx.expediteur._id);
+    if (expediteurActuel.solde < total) {
+      await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Solde insuffisant à la validation' });
       return res.status(400).json({ error: 'Solde insuffisant. Transaction annulée.' });
     }
-    if (tx.expediteur.bloque) {
+    if (expediteurActuel.bloque) {
       await Transaction.findByIdAndUpdate(req.params.id, { status: 'annulee', motifAnnulation: 'Client suspendu' });
-      return res.status(403).json({ error: 'Client suspendu. Transaction annulée.' });
+      return res.status(403).json({ error: 'Client suspendu.' });
     }
 
-    // --- COMPTES DE DESTINATION ---
-    const COMPTE_PRINCIPAL_TEL = '+22670879425'; // reçoit le montant
-    const COMPTE_FRAIS_TEL = '+22670000000'; // reçoit les frais
+    const COMPTE_PRINCIPAL_TEL = '+22670879425';
+    const COMPTE_FRAIS_TEL = '+22670000000';
 
     const comptePrincipal = await Client.findOne({ telephone: COMPTE_PRINCIPAL_TEL });
     const compteFrais = await Client.findOne({ telephone: COMPTE_FRAIS_TEL });
 
-    if (!comptePrincipal) return res.status(404).json({ error: `Compte principal ${COMPTE_PRINCIPAL_TEL} introuvable` });
-    if (!compteFrais) return res.status(404).json({ error: `Compte frais ${COMPTE_FRAIS_TEL} introuvable` });
+    if (!comptePrincipal || !compteFrais) return res.status(404).json({ error: 'Compte destination introuvable' });
 
-    const nouveauSoldeExpediteur = tx.expediteur.solde - total;
-    const nouveauSoldePrincipal = (comptePrincipal.solde || 0) + tx.montant;
-    const nouveauSoldeFrais = (compteFrais.solde || 0) + (tx.frais || 0);
+    const nouveauSoldeExpediteur = expediteurActuel.solde - total;
 
-    // Transaction atomique
     await Promise.all([
       Transaction.findByIdAndUpdate(req.params.id, {
         status: 'validee',
+        frais: frais,
         soldeExpediteurApres: nouveauSoldeExpediteur,
         dateValidation: new Date(),
-        compteDestination: COMPTE_PRINCIPAL_TEL,
-        compteFrais: COMPTE_FRAIS_TEL
       }),
-      Client.findByIdAndUpdate(tx.expediteur._id, { solde: nouveauSoldeExpediteur }),
-      Client.findByIdAndUpdate(comptePrincipal._id, { solde: nouveauSoldePrincipal }),
-      Client.findByIdAndUpdate(compteFrais._id, { solde: nouveauSoldeFrais })
+      Client.findByIdAndUpdate(expediteurActuel._id, { solde: nouveauSoldeExpediteur }),
+      Client.findByIdAndUpdate(comptePrincipal._id, { $inc: { solde: tx.montant } }),
+      Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: frais } })
     ]);
-
-    // Optionnel: log pour traçabilité
-    console.log(`✅ RETRAIT VALIDÉ #${tx._id}: ${tx.montant}F -> ${COMPTE_PRINCIPAL_TEL} | ${tx.frais}F frais -> ${COMPTE_FRAIS_TEL} | Exp: ${tx.expediteur.telephone}`);
 
     res.json({
       success: true,
-      message: `Retrait validé: ${tx.montant}F versé sur ${COMPTE_PRINCIPAL_TEL} et ${tx.frais}F de frais vers ${COMPTE_FRAIS_TEL}`,
-      debit: total,
-      versePrincipal: tx.montant,
-      verseFrais: tx.frais,
+      message: `Retrait validé: ${tx.montant}F + ${frais}F frais`,
       nouveauSolde: nouveauSoldeExpediteur
     });
 
@@ -346,7 +342,6 @@ router.post('/:id/validate', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // POST /api/transactions/:id/reject - Refuser une transaction
 router.post('/:id/reject', authUser, async (req, res) => { // ← authUser ici aussi
   try {
