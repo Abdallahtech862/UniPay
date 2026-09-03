@@ -167,73 +167,57 @@ router.get('/pending', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
+const OPERATEURS = [
+  'Telecel Money','Orange Money','Moov Money','SankMoney',
+  'Coris Money','Wave','XpresCash','Carte Visa'
+];
+
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
     let { montant, operateur, numero } = req.body;
-    const userId = req.user.id;
-
-    // FORCER EN NOMBRE
     montant = Number(montant);
-    if (!montant || isNaN(montant) || montant <= 0) {
-      return res.status(400).json({ error: 'Montant invalide' });
+    
+    console.log('FRONT ENVOIE:', { montant, operateur, numero });
+
+    if (!OPERATEURS.includes(operateur?.trim())) {
+      return res.status(400).json({ error: `Opérateur invalide: ${operateur}` });
     }
 
-    const user = await Client.findById(userId);
+    const user = await Client.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
 
     let frais = 0;
-    if (operateur === 'Carte Visa') {
-      frais = montant <= 71428? 1150 : Math.ceil(montant * 0.0161);
+    if (operateur.trim() === 'Carte Visa') {
+      frais = montant <= 71428 ? 1150 : Math.ceil(montant * 0.0161);
     }
 
     const total = montant + frais;
 
-    console.log(`DEBUG: montant=${montant} frais=${frais} total=${total} solde=${user.solde}`);
-
     if (user.solde < total) {
-      return res.status(400).json({ error: `Solde insuffisant. Il te faut ${total} F (frais ${frais} F)` });
+      return res.status(400).json({ error: `Solde insuffisant. Il faut ${total}F dont ${frais}F frais` });
     }
 
     const nouveauSolde = user.solde - total;
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-      await Client.findByIdAndUpdate(userId, { solde: nouveauSolde }, { session });
+    await Client.findByIdAndUpdate(user.id, { solde: nouveauSolde });
 
-      const transaction = await Transaction.create([{
-        expediteur: userId,
-        type: 'retrait',
-        montant,
-        frais,
-        operateur,
-        numeroDestination: numero,
-        status: 'en_attente',
-        soldeExpediteurAvant: user.solde,
-        soldeExpediteurApres: nouveauSolde,
-        motif: `Retrait ${operateur}`
-      }], { session });
+    const tx = await Transaction.create({
+      expediteur: user.id,
+      type: 'retrait',
+      montant,
+      frais,
+      operateur: operateur.trim(),
+      numeroDestination: numero,
+      status: 'en_attente',
+      soldeExpediteurAvant: user.solde,
+      soldeExpediteurApres: nouveauSolde,
+      motif: `Retrait ${operateur}`
+    });
 
-      await session.commitTransaction();
-
-      res.json({
-        success: true,
-        message: 'Retrait en attente',
-        transactionId: transaction[0]._id,
-        nouveauSolde,
-        montant,
-        frais,
-        total
-      });
-    } catch (e) {
-      await session.abortTransaction();
-      throw e;
-    } finally {
-      session.endSession();
-    }
-
+    res.json({ success: true, transactionId: tx._id, montant, frais, total, nouveauSolde });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
