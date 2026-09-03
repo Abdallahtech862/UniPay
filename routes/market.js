@@ -14,130 +14,82 @@ const getUserId = (req) => {
 };
 
 // ===================== 0. ROUTES PUBLIQUES POUR WHATSAPP =====================
-router.get('productt-image/:id/:index', async (req, res) => {
-  try {
-    const p = await mongoose.model('Produit').findById(req.params.id).lean();
-    if (!p ||!p.images?.[req.params.index]) return res.status(404).send('no image');
 
-    let img = p.images[req.params.index];
-    // si tu stockes en data:image/jpeg;base64,....
-    if (img.includes('base64,')) {
-      const base64 = img.split('base64,')[1];
-      const buffer = Buffer.from(base64, 'base64');
-      res.set({
-        'Content-Type': 'image/jpeg',
-        'Content-Length': buffer.length,
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*'
-      });
-      return res.send(buffer);
-    } else {
-      // si c'est une URL http, redirige pas, télécharge et renvoie
-      return res.redirect(img);
-    }
-  } catch(e) {
-    res.status(500).send('error image');
-  }
-});
+
+const sharp = require('sharp');
 
 router.get('/product-image/:id/:index', async (req, res) => {
   try {
-    console.log('IMAGE REQ', req.params.id, req.params.index);
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
-    if (!p) {
-      console.log('Produit not found');
-      return res.status(404).send('Produit not found');
-    }
-    if (!p.images || !p.images[req.params.index]) {
-      console.log('Image index not found, images length:', p.images?.length);
-      return res.status(404).send('Image index not found');
-    }
-    
+    if (!p ||!p.images?.[req.params.index]) return res.status(404).end();
+
     let img = p.images[req.params.index];
-    console.log('Image type:', typeof img, 'start:', img.substring(0,30));
-
-    // Si déjà https
     if (!img.startsWith('data:')) {
-      return res.redirect(img);
+      // Si c'est déjà une URL https, ne REDIRIGE PAS pour Facebook, télécharge
+      return res.redirect(302, img);
     }
 
-    const matches = img.match(/^data:(.+);base64,(.+)$/);
-    if (!matches) {
-      console.log('Bad base64 format');
-      return res.status(400).send('Bad base64');
-    }
-    
-    const mime = matches[1]; // image/jpeg
-    const base64Data = matches[2];
-    console.log('MIME:', mime, 'base64 length:', base64Data.length);
+    const base64Data = img.split('base64,')[1];
+    const inputBuffer = Buffer.from(base64Data, 'base64');
 
-    const buffer = Buffer.from(base64Data, 'base64');
-    console.log('Buffer size:', buffer.length);
+    // Facebook exige 1200x630 minimum, ratio 1.91:1
+    const outputBuffer = await sharp(inputBuffer)
+     .resize(1200, 630, { fit: 'cover' })
+     .jpeg({ quality: 80 })
+     .toBuffer();
 
-    res.set('Content-Type', mime);
-    res.set('Content-Length', buffer.length);
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.set('Access-Control-Allow-Origin', '*');
-    res.send(buffer);
+    res.set({
+      'Content-Type': 'image/jpeg',
+      'Content-Length': outputBuffer.length,
+      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+      'Access-Control-Allow-Origin': '*',
+    });
+    return res.end(outputBuffer);
 
-  } catch (e) { 
-    console.error('IMAGE ERROR FULL:', e);
-    res.status(500).send(`err: ${e.message}`);
+  } catch (e) {
+    console.error(e);
+    res.status(500).end();
   }
 });
 
-// Page de partage avec Open Graph - C'EST CETTE URL QUE TU PARTAGES SUR WHATSAPP
-// Ex: https://kori2-railway-production.up.railway.app/api/marketplace/share/ID
 router.get('/share/:id', async (req, res) => {
   try {
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
-    if (!p) return res.status(404).send('Produit introuvable');
+    if (!p) return res.status(404).send('introuvable');
 
-    const API_DOMAIN = 'https://unipay-production-d2a0.up.railway.app';
-    const ogImageUrl = `${API_DOMAIN}/api/marketplace/product-image/${p._id}/0`;
+    const DOMAIN = 'https://unipay-production-d2a0.up.railway.app';
+    // CRITIQUE : og:url doit être EXACTEMENT l'URL partagée
+    const shareUrl = `${DOMAIN}/api/marketplace/share/${p._id}`;
+    const ogImageUrl = `${DOMAIN}/api/marketplace/product-image/${p._id}/0`;
 
-    const titre = `${p.titre} - ${Number(p.prix).toLocaleString()} FCFA`;
-    const description = `${p.description?.slice(0,147) || 'Disponible sur UniPay Market'}...`;
+    const titre = `${p.titre}`.replace(/"/g,'');
+    const description = `${p.description?.slice(0,200) || 'Sur UniPay Market'}`.replace(/"/g,'').replace(/\n/g,' ');
 
-    // Facebook exige 1200x630 minimum pour large
     const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<meta property="fb:app_id" content="123456789" />
-<meta property="og:type" content="product" />
+<html lang="fr"><head><meta charset="utf-8">
+<meta property="og:type" content="website" />
 <meta property="og:site_name" content="UniPay" />
-<meta property="og:title" content="${titre.replace(/"/g,'')}" />
-<meta property="og:description" content="${description.replace(/"/g,'')}" />
-<meta property="og:url" content="${API_DOMAIN}/share/${p._id}" />
+<meta property="og:title" content="${titre} - ${Number(p.prix).toLocaleString()} FCFA" />
+<meta property="og:description" content="${description}" />
+<meta property="og:url" content="${shareUrl}" />
 <meta property="og:image" content="${ogImageUrl}" />
 <meta property="og:image:secure_url" content="${ogImageUrl}" />
 <meta property="og:image:type" content="image/jpeg" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="${p.titre}" />
-<meta property="product:price:amount" content="${p.prix}" />
-<meta property="product:price:currency" content="XOF" />
-
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:image" content="${ogImageUrl}" />
-
-<title>${titre}</title>
-</head>
-<body>
+</head><body>
+<img src="${ogImageUrl}" />
+<h1>${titre}</h1>
 <script>
-  var ua = navigator.userAgent;
-  if(!/facebookexternalhit|WhatsApp|Twitterbot/i.test(ua)){
-    window.location.href = "unipay://market/${p._id}";
-    setTimeout(()=>{ window.location.href="https://play.google.com/store/apps/details?id=com.abdallahtech.uniPay"; }, 1500);
-  }
+if(!/facebookexternalhit|WhatsApp|Twitterbot|Facebot/i.test(navigator.userAgent)){
+  location.href="unipay://market/${p._id}";
+}
 </script>
-<img src="${ogImageUrl}" style="max-width:100%" />
-<h1>${p.titre} - ${Number(p.prix).toLocaleString()} FCFA</h1>
 </body></html>`;
 
     res.set('Content-Type','text/html; charset=utf-8').send(html);
-  } catch(e){ res.status(500).send('erreur'); }
+  } catch(e){ res.status(500).send('err'); }
 });
-
 // ===================== 1. SERVICES =====================
 router.get('/services', (req,res)=>{
   res.json([
