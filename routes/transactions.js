@@ -167,11 +167,16 @@ router.get('/pending', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
-
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
-    const { montant, operateur, numero } = req.body;
+    let { montant, operateur, numero } = req.body;
     const userId = req.user.id;
+
+    // FORCER EN NOMBRE
+    montant = Number(montant);
+    if (!montant || isNaN(montant) || montant <= 0) {
+      return res.status(400).json({ error: 'Montant invalide' });
+    }
 
     const user = await Client.findById(userId);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
@@ -183,13 +188,15 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     }
 
     const total = montant + frais;
+
+    console.log(`DEBUG: montant=${montant} frais=${frais} total=${total} solde=${user.solde}`);
+
     if (user.solde < total) {
       return res.status(400).json({ error: `Solde insuffisant. Il te faut ${total} F (frais ${frais} F)` });
     }
 
     const nouveauSolde = user.solde - total;
 
-    // Transaction atomique pour éviter race condition si 2 retraits en même temps
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
@@ -212,12 +219,12 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
       res.json({
         success: true,
-        message: 'Retrait en attente de validation',
+        message: 'Retrait en attente',
         transactionId: transaction[0]._id,
-        nouveauSolde, montant, frais, total,
-        montantRetire: montant,
-      frais,
-      total
+        nouveauSolde,
+        montant,
+        frais,
+        total
       });
     } catch (e) {
       await session.abortTransaction();
@@ -282,13 +289,14 @@ router.post('/:id/reject', authUser, async (req, res) => {
     if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
     if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
 
-    const total = tx.montant + tx.frais;
+    const montant = Number(tx.montant);
+    const frais = Number(tx.frais) || 0;
+    const total = montant + frais;
     
-    // Récupère le solde actuel AVANT remboursement
     const user = await Client.findById(tx.expediteur);
     if (!user) return res.status(404).json({ error: 'Client introuvable' });
 
-    const soldeAvantRemboursement = user.solde;
+    const soldeAvantRemboursement = Number(user.solde);
     const soldeApresRemboursement = soldeAvantRemboursement + total;
 
     await Promise.all([
@@ -296,7 +304,6 @@ router.post('/:id/reject', authUser, async (req, res) => {
         status: 'annulee',
         motifAnnulation: motif || 'Refusé par admin',
         dateAnnulation: new Date(),
-        // Mise à jour des soldes pour l'historique
         soldeExpediteurAvant: soldeAvantRemboursement,
         soldeExpediteurApres: soldeApresRemboursement,
       }),
@@ -311,10 +318,10 @@ router.post('/:id/reject', authUser, async (req, res) => {
     });
 
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
-
 // le code pour voir les transactions en attent
 router.get('/pending-vieww', async (req, res) => {
   res.send(`
