@@ -214,7 +214,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     const total = montant + frais;
 
-    if (user.solde < total) {
+    if (user.solde <= total) {
       return res.status(400).json({ error: 'Solde insuffisant' });
     }
 
