@@ -273,34 +273,47 @@ router.post('/:id/validate', authUser, async (req, res) => {
 // POST /api/transactions/:id/reject - Refuser une transaction
 router.post('/:id/reject', authUser, async (req, res) => {
   try {
-    if (!req.user || req.user.role!== 'admin') {
+    if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Accès réservé aux admins' });
     }
 
     const { motif } = req.body;
     const tx = await Transaction.findById(req.params.id);
     if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-    if (tx.status!== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
+    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
 
     const total = tx.montant + tx.frais;
+    
+    // Récupère le solde actuel AVANT remboursement
+    const user = await Client.findById(tx.expediteur);
+    if (!user) return res.status(404).json({ error: 'Client introuvable' });
+
+    const soldeAvantRemboursement = user.solde;
+    const soldeApresRemboursement = soldeAvantRemboursement + total;
 
     await Promise.all([
       Transaction.findByIdAndUpdate(req.params.id, {
         status: 'annulee',
         motifAnnulation: motif || 'Refusé par admin',
-        dateAnnulation: new Date()
+        dateAnnulation: new Date(),
+        // Mise à jour des soldes pour l'historique
+        soldeExpediteurAvant: soldeAvantRemboursement,
+        soldeExpediteurApres: soldeApresRemboursement,
       }),
-      // REMBOURSEMENT
       Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: total } })
     ]);
 
-    res.json({ success: true, message: `Transaction annulée, ${total}F remboursés` });
+    res.json({ 
+      success: true, 
+      message: `Transaction annulée, ${total}F remboursés`,
+      soldeAvant: soldeAvantRemboursement,
+      soldeApres: soldeApresRemboursement
+    });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // le code pour voir les transactions en attent
 router.get('/pending-vieww', async (req, res) => {
