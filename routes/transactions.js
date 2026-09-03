@@ -187,14 +187,12 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
     if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
 
-    const OPERATEURS_FRONT = ['CARTE', 'Carte Visa', 'CARTE VISA', 'VISA', 'visa'];
-
+    //const OPERATEURS_FRONT = ['CARTE', 'Carte Visa', 'CARTE VISA', 'VISA', 'visa'];
     let frais = 0;
-    const opUpper = (operateur || '').trim().toUpperCase();
-    
-    if (opUpper.includes('CARTE') || opUpper.includes('VISA')) {
-      frais = montant <= 71428 ? 1150 : Math.ceil(montant * 0.0161);
+    if (operateur === 'Carte Visa') {
+      frais = montant <= 71428? 1150 : Math.ceil(montant * 0.0161);
     }
+   
 
     const total = montant + frais;
 
@@ -211,7 +209,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       type: 'retrait',
       montant,
       frais,
-      operateur: operateur.trim(),
+      operateur,// operateur.trim(),
       numeroDestination: numero,
       status: 'en_attente',
       soldeExpediteurAvant: user.solde,
