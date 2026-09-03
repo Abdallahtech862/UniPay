@@ -207,7 +207,14 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       motif: `Retrait ${operateur}`
     });
 
-    res.json({ success: true, transactionId: tx._id, montant, frais, total, nouveauSolde });
+   res.json({
+      success: true,
+      message: 'Retrait confirmé',
+      transactionId: transaction._id,
+      nouveauSolde,
+      montantRetire: montant,
+      frais
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
