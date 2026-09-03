@@ -210,7 +210,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
    res.json({
       success: true,
       message: 'Retrait confirmé',
-      transactionId: transaction._id,
+      transactionId: tx._id,
       nouveauSolde,
       montantRetire: montant,
       frais
