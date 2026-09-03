@@ -177,12 +177,12 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
 
     const user = await Client.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });*
+    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
+    
     let frais = 0;
-    if (operateur === 'CARTE'') {
-      frais = montant <= 71428? 1150 : Math.ceil(montant * 0.0161);
+    if (operateur === 'CARTE' || operateur === 'Carte Visa') {
+      frais = montant <= 71428 ? 1150 : Math.ceil(montant * 0.0161);
     }
-   
 
     const total = montant + frais;
 
@@ -199,7 +199,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       type: 'retrait',
       montant,
       frais,
-      operateur,// operateur.trim(),
+      operateur: 'Carte Visa',
       numeroDestination: numero,
       status: 'en_attente',
       soldeExpediteurAvant: user.solde,
