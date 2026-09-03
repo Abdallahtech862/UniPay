@@ -140,6 +140,34 @@ router.post('/withdraw/preview', authUser, async (req, res) => {
 });
 
 // POST /api/transactions/withdraw/confirm - Crée et débite après auth
+
+// GET /api/transactions/pending - Admin voit les retraits/transferts en attente
+router.get('/pending', authUser, async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Accès réservé aux admins' });
+    }
+
+    const transactions = await Transaction.find({ status: 'en_attente' })
+      .populate({
+        path: 'expediteur',
+        select: 'nom prenom telephone solde bloque'
+      })
+      .populate({
+        path: 'destinataire',
+        select: 'nom prenom telephone'
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ total: transactions.length, transactions });
+
+  } catch (err) {
+    console.error('Erreur /pending:', err.message, err.stack);
+    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+  }
+});
+
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
     const { montant, operateur, numero } = req.body;
@@ -186,7 +214,10 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
         success: true,
         message: 'Retrait en attente de validation',
         transactionId: transaction[0]._id,
-        nouveauSolde, montant, frais, total
+        nouveauSolde, montant, frais, total,
+        montantRetire: montant,
+      frais,
+      total
       });
     } catch (e) {
       await session.abortTransaction();
@@ -199,34 +230,6 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /api/transactions/pending - Admin voit les retraits/transferts en attente
-router.get('/pending', authUser, async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Accès réservé aux admins' });
-    }
-
-    const transactions = await Transaction.find({ status: 'en_attente' })
-      .populate({
-        path: 'expediteur',
-        select: 'nom prenom telephone solde bloque'
-      })
-      .populate({
-        path: 'destinataire',
-        select: 'nom prenom telephone'
-      })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    res.json({ total: transactions.length, transactions });
-
-  } catch (err) {
-    console.error('Erreur /pending:', err.message, err.stack);
-    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
-  }
-});
-
-
 // POST /api/transactions/:id/validate - Valider un retrait vers Mobile Money
 router.post('/:id/validate', authUser, async (req, res) => {
   try {
