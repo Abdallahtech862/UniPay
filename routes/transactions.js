@@ -199,7 +199,7 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
       type: 'retrait',
       montant,
       frais,
-      operateur: 'Carte Visa',
+      operateur,
       numeroDestination: numero,
       status: 'en_attente',
       soldeExpediteurAvant: user.solde,
