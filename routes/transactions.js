@@ -167,10 +167,6 @@ router.get('/pending', authUser, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', detail: err.message });
   }
 });
-const OPERATEURS = [
-  'Telecel Money','Orange Money','Moov Money','SankMoney',
-  'Coris Money','Wave','XpresCash','Carte Visa'
-];
 
 router.post('/withdraw/confirm', authUser, async (req, res) => {
   try {
@@ -179,17 +175,11 @@ router.post('/withdraw/confirm', authUser, async (req, res) => {
     
     console.log('FRONT ENVOIE:', { montant, operateur, numero });
 
-    if (!OPERATEURS.includes(operateur?.trim())) {
-      return res.status(400).json({ error: `Opérateur invalide: ${operateur}` });
-    }
-
     const user = await Client.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });
-
-    //const OPERATEURS_FRONT = ['CARTE', 'Carte Visa', 'CARTE VISA', 'VISA', 'visa'];
+    if (user.bloque) return res.status(403).json({ error: 'Compte suspendu.' });*
     let frais = 0;
-    if (operateur === 'Carte Visa') {
+    if (operateur === 'CARTE'') {
       frais = montant <= 71428? 1150 : Math.ceil(montant * 0.0161);
     }
    
