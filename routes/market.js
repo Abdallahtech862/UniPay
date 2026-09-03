@@ -14,7 +14,7 @@ const getUserId = (req) => {
 };
 
 // ===================== 0. ROUTES PUBLIQUES POUR WHATSAPP =====================
-router.get('product-image/:id/:index', async (req, res) => {
+router.get('productt-image/:id/:index', async (req, res) => {
   try {
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
     if (!p ||!p.images?.[req.params.index]) return res.status(404).send('no image');
@@ -40,7 +40,7 @@ router.get('product-image/:id/:index', async (req, res) => {
   }
 });
 
-router.get('/productt-image/:id/:index', async (req, res) => {
+router.get('/product-image/:id/:index', async (req, res) => {
   try {
     console.log('IMAGE REQ', req.params.id, req.params.index);
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
