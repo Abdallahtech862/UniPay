@@ -270,24 +270,20 @@ router.post('/:id/reject', authUser, async (req, res) => {
     const { motif } = req.body;
     const tx = await Transaction.findById(req.params.id);
     if (!tx) return res.status(404).json({ error: 'Transaction introuvable' });
-    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Transaction déjà traitée' });
+    if (tx.status !== 'en_attente') return res.status(400).json({ error: 'Déjà traitée' });
 
-    const montant = Number(tx.montant);
-    const frais = Number(tx.frais) || 0;
-    const total = montant + frais;
-    
-    const user = await Client.findById(tx.expediteur);
-    if (!user) return res.status(404).json({ error: 'Client introuvable' });
+    const total = Number(tx.montant) + Number(tx.frais || 0);
 
-    const soldeAvantRemboursement = Number(user.solde);
-    const soldeApresRemboursement = soldeAvantRemboursement + total;
+    // ✅ Solde APRÈS cette transaction, pas le solde actuel qui a pu bouger
+    const soldeApresTransaction = Number(tx.soldeExpediteurApres);
+    const soldeApresRemboursement = soldeApresTransaction + total;
 
     await Promise.all([
       Transaction.findByIdAndUpdate(req.params.id, {
         status: 'annulee',
         motifAnnulation: motif || 'Refusé par admin',
         dateAnnulation: new Date(),
-        soldeExpediteurAvant: soldeAvantRemboursement,
+        soldeExpediteurAvant: soldeApresTransaction,
         soldeExpediteurApres: soldeApresRemboursement,
       }),
       Client.findByIdAndUpdate(tx.expediteur, { $inc: { solde: total } })
@@ -295,13 +291,12 @@ router.post('/:id/reject', authUser, async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: `Transaction annulée, ${total}F remboursés`,
-      soldeAvant: soldeAvantRemboursement,
+      message: `${total}F remboursés`,
+      soldeAvant: soldeApresTransaction,
       soldeApres: soldeApresRemboursement
     });
 
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
