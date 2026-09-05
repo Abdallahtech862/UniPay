@@ -237,8 +237,10 @@ io.on('connection', (socket) => {
             icon: data.contactMeta?.photoProfil || undefined,
             mutableContent: true,
             data: {
+             // url: `/chat/${data.from?.toString()}`,
               url: `/chat/${data.from?.toString()}`,
               from: data.from?.toString(),
+              //from: data.from?.toString(),
               to: data.to?.toString(),
               type: data.type,
               messageId: data.id,
