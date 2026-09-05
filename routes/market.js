@@ -18,6 +18,45 @@ const getUserId = (req) => {
 
 const sharp = require('sharp');
 
+const Report = require('../models/Report');
+
+router.post('/products/:id/report', auth, async (req, res) => {
+  try {
+    const { reason, description } = req.body;
+    const product = await Product.findById(req.params.id);
+    if(!product) return res.status(404).json({ erreur: 'Produit introuvable' });
+    
+    if(product.vendeurId.toString() === req.user.id.toString()){
+      return res.status(400).json({ erreur: 'Vous ne pouvez pas signaler votre propre article' });
+    }
+
+    const report = await Report.create({
+      produitId: req.params.id,
+      vendeurId: product.vendeurId,
+      reporterId: req.user.id,
+      reason,
+      description
+    });
+
+    // Optionnel: si 3 signalements -> masque le produit auto
+    const count = await Report.countDocuments({ produitId: req.params.id });
+    if(count >= 3){
+      await Product.findByIdAndUpdate(req.params.id, { statut: 'suspended' });
+    }
+
+    res.json({ success: true, report });
+  } catch(e){
+    if(e.code === 11000) return res.status(400).json({ erreur: 'Déjà signalé' });
+    res.status(500).json({ erreur: e.message });
+  }
+});
+
+// Pour admin voir les signalements
+router.get('/reports', authAdmin, async (req, res) => {
+  const reports = await Report.find().populate('produitId').sort({ createdAt: -1 });
+  res.json(reports);
+});
+
 router.get('/product-image/:id/:index', async (req, res) => {
   try {
     const p = await mongoose.model('Produit').findById(req.params.id).lean();
