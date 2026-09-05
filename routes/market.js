@@ -7,7 +7,7 @@ const Commande = mongoose.models.Commande || mongoose.model('Commande');
 const Utilisateur = require('../models/Client');
 const Client = require('../models/Client');
 const { verifyToken } = require('../middleware/auth');
-
+const { verifyAdmin, authUser } = require('../middleware/auth');
 const getUserId = (req) => {
   const id = req.client?._id || req.user?._id || req.client || req.user;
   return id ? id.toString() : null;
@@ -20,7 +20,7 @@ const sharp = require('sharp');
 
 const Report = require('../models/Report');
 
-router.post('/products/:id/report', auth, async (req, res) => {
+router.post('/products/:id/report',  authUser, async (req, res) => {
   try {
     const { reason, description } = req.body;
     const product = await Product.findById(req.params.id);
@@ -52,7 +52,7 @@ router.post('/products/:id/report', auth, async (req, res) => {
 });
 
 // Pour admin voir les signalements
-router.get('/reports', authAdmin, async (req, res) => {
+router.get('/reports', verifyAdmin, async (req, res) => {
   const reports = await Report.find().populate('produitId').sort({ createdAt: -1 });
   res.json(reports);
 });
