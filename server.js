@@ -164,131 +164,115 @@ io.on('connection', (socket) => {
     if (!userId) return;
     const uid = userId.toString();
     if (!global.onlineUsers.has(uid)) global.onlineUsers.set(uid, new Set());
-    const ex = global.onlineUsers.get(uid);
-    if (typeof ex === 'string') global.onlineUsers.set(uid, new Set([ex]));
     global.onlineUsers.get(uid).add(socket.id);
     socket.userId = uid;
     socket.broadcast.emit('user_status', { userId: uid, status: 'online' });
 
     try {
-      const undelivered = await Message.find({ to: uid, status: { $in: ['sent','delivered'] } }).sort({ createdAt: 1 }).limit(200);
+      const undelivered = await Message.find({ to: uid, status: { $in: ['sent'] } }).sort({ createdAt: 1 }).limit(200);
       for (const msg of undelivered) {
         socket.emit('new_message', msg);
-        if (msg.status === 'sent') {
-          msg.status = 'delivered';
-          await msg.save();
-          emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
-        }
+        msg.status = 'delivered';
+        await msg.save();
+        emitToUser(msg.from, 'message_status', { messageId: msg.id, status: 'delivered' });
       }
-    } catch (e) { console.error(e.message); }
+    } catch (e) {}
   });
 
   socket.on('send_message', async (data) => {
     try {
-      if (!data?.to ||!data?.from) return;
-      console.log(`💬 ${data.from} -> ${data.to} [${data.type}]`);
+      if (!data?.to || !data?.from) return;
 
-      // 1. Sauvegarde en base
+      // 1. TROUVE OU CRÉE LE CHAT - C'EST LE CHATID QUI MANQUE
+      let chat = await Chat.findOne({ participants: { $all: [data.from, data.to] } });
+      if (!chat) {
+        chat = await Chat.create({ participants: [data.from, data.to] });
+      }
+      const chatId = chat._id.toString();
+
+      // 2. Sauvegarde message avec chatId
       await Message.create({
         id: data.id,
+        chatId: chatId, // AJOUTE CA DANS TON SCHEMA
+        //chatId: { type: String, required: true, index: true }
         from: data.from.toString(),
         to: data.to.toString(),
         type: data.type || 'text',
-        text: data.text || data.content || '',
-        content: data.content || data.text || '',
+        text: data.text || '',
+        content: data.content || '',
         image: data.image || '',
         audio: data.audio || '',
-        location: data.location || (data.latitude ? { latitude: data.latitude, longitude: data.longitude, address: data.address } : null),
-        latitude: data.location?.latitude || data.latitude || null,
-        longitude: data.location?.longitude || data.longitude || null,
-        address: data.location?.address || data.address || null,
-        product: data.product || null,
-        productId: data.productId || '',
         status: 'sent',
-        createdAt: new Date(data.timestamp || Date.now()),
+        createdAt: new Date(),
         contactMeta: data.contactMeta || null,
-        tx: data.tx || null
       });
 
-      // 2. Envoie temps réel si online
-      emitToUser(data.to.toString(), 'new_message', data);
-      emitToUser(data.from.toString(), 'message_status', { messageId: data.id, status: 'sent' });
+      // 3. Temps réel
+      emitToUser(data.to.toString(), 'new_message', { ...data, chatId });
+      emitToUser(data.from.toString(), 'message_status', { messageId: data.id, status: 'sent', chatId });
 
-      // 3. FORCE L'ENVOI DU PUSH NOTIFICATION DANS LES DEUX CAS (Online ou Offline)
-      console.log(`🔔 Déclenchement Push forcé pour ${data.to}...`);
-      try {
-        const recipient = await User.findById(data.to);
+      // 4. PUSH AVEC CHATID
+      const recipient = await User.findById(data.to);
+      if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
+        const senderName = data.contactMeta ? `${data.contactMeta.prenom || ''} ${data.contactMeta.nom || ''}`.trim() : 'UniPay';
+        let body = data.text || 'Nouveau message';
+        if (data.type === 'image') body = '📷 Photo';
+        if (data.type === 'audio') body = '🎤 Vocal';
 
-        if (recipient?.expoPushToken && Expo.isExpoPushToken(recipient.expoPushToken)) {
-          const senderName = data.contactMeta? `${data.contactMeta.prenom || ''} ${data.contactMeta.nom || ''}`.trim() : 'UniPay';
-
-          let body = data.text || data.content || '';
-          if (data.type === 'image') body = '📷 Photo';
-          if (data.type === 'audio') body = '🎤 Vocal';
-          if (data.type === 'pdf') body = '📄 Reçu UniPay';
-          if (data.type === 'product') body = `🛍️ ${data.product?.titre || 'Article partagé'}`;
-          if (data.type === 'location') body = '📍 Position partagée';
-
-          const receipts = await expo.sendPushNotificationsAsync([{
-            to: recipient.expoPushToken,
-            sound: 'default',
-            title: senderName || 'Nouveau message',
-            body: body.substring(0, 100),
-            icon: data.contactMeta?.photoProfil || undefined,
-            mutableContent: true,
-            data: {
-             // url: `/chat/${data.from?.toString()}`,
-              url: `/chat/${data.from?.toString()}`,
-              from: data.from?.toString(),
-              //from: data.from?.toString(),
-              to: data.to?.toString(),
-              type: data.type,
-              messageId: data.id,
-              senderPhoto: data.contactMeta?.photoProfil || ''
-            },
-            channelId: 'messages',
-          }]);
-
-          console.log(`📲 Push envoyé à ${data.to}`, receipts);
-        } else {
-          console.log('❌ Pas de expoPushToken valide pour', data.to);
-        }
-      } catch (pushError) {
-        console.error('❌ Erreur Push:', pushError.message);
+        await expo.sendPushNotificationsAsync([{
+          to: recipient.expoPushToken,
+          sound: 'default',
+          title: senderName,
+          body: body.substring(0, 100),
+          data: {
+            url: `/chat/${chatId}`, // FIX ICI
+            chatId: chatId, // FIX ICI
+            from: data.from.toString(),
+            to: data.to.toString(),
+            type: data.type,
+            messageId: data.id,
+          },
+          channelId: 'messages',
+        }]);
       }
-
-    } catch (e) {
-      console.error('Erreur send_message fatale:', e.message, e.stack);
-    }
+    } catch (e) { console.error(e); }
   });
 
-  socket.on('message_delivered', async ({ from, messageId }) => {
-    await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
-    emitToUser(from, 'message_status', { messageId, status: 'delivered' });
+  socket.on('message_delivered', async ({ from, messageId, chatId }) => {
+    if (messageId) await Message.findOneAndUpdate({ id: messageId }, { status: 'delivered' });
+    if (chatId) await Message.updateMany({ chatId, to: socket.userId, status: 'sent' }, { status: 'delivered' });
+    if (from) emitToUser(from, 'message_status', { messageId, chatId, status: 'delivered' });
   });
 
-  socket.on('message_read', async ({ from, messageId }) => {
-    await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
-    emitToUser(from, 'message_status', { messageId, status: 'read' });
+  // FIX PRINCIPAL - MARQUER TOUT LE CHAT COMME LU
+  socket.on('message_read', async ({ from, messageId, chatId }) => {
+    try {
+      if (chatId) {
+        // Marque TOUS les messages de ce chat comme lus
+        await Message.updateMany({ chatId, to: socket.userId, status: { $ne: 'read' } }, { status: 'read' });
+        const otherUserId = from || (await Chat.findById(chatId))?.participants.find(p => p.toString() !== socket.userId)?.toString();
+        if (otherUserId) {
+          emitToUser(otherUserId, 'messages-read', { chatId, status: 'read' });
+          emitToUser(otherUserId, 'message_status', { chatId, status: 'read' });
+        }
+      } else if (messageId) {
+        await Message.findOneAndUpdate({ id: messageId }, { status: 'read' });
+        if (from) emitToUser(from, 'message_status', { messageId, status: 'read' });
+      }
+    } catch(e){ console.log(e); }
   });
 
-  socket.on('typing', ({ to, state }) => {
-    if (!to ||!socket.userId) return;
-    if (to.toString() === socket.userId.toString()) return;
-    emitToUser(to.toString(), 'typing', { from: socket.userId, state });
+  // AJOUTE AUSSI POUR TON HOOK
+  socket.on('chat:read', async ({ chatId }) => {
+    if (!chatId) return;
+    await Message.updateMany({ chatId, to: socket.userId, status: { $ne: 'read' } }, { status: 'read' });
+    const chat = await Chat.findById(chatId);
+    const other = chat?.participants.find(p => p.toString() !== socket.userId)?.toString();
+    if (other) emitToUser(other, 'messages-read', { chatId, status: 'read' });
   });
 
   socket.on('disconnect', () => {
-    if (socket.userId && global.onlineUsers.has(socket.userId)) {
-      const userSockets = global.onlineUsers.get(socket.userId);
-      if (userSockets instanceof Set) {
-        userSockets.delete(socket.id);
-        if (userSockets.size === 0) {
-          global.onlineUsers.delete(socket.userId);
-          socket.broadcast.emit('user_status', { userId: socket.userId, status: 'offline' });
-        }
-      }
-    }
+    //... ton code
   });
 });
 
