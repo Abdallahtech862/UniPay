@@ -8,6 +8,7 @@ const Utilisateur = require('../models/Client');
 const Client = require('../models/Client');
 const { verifyToken } = require('../middleware/auth');
 const { verifyAdmin, authUser } = require('../middleware/auth');
+const Product = require('../models/Product'); // ou './models/MarketProduct' selon ton nom
 const getUserId = (req) => {
   const id = req.client?._id || req.user?._id || req.client || req.user;
   return id ? id.toString() : null;
