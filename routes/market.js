@@ -175,54 +175,44 @@ router.post('/products', verifyToken, async (req, res) => {
 router.get('/products', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = 20;
     const skip = (page - 1) * limit;
-    const sortType = req.query.sort || 'recent';
     
-    // Tous les clients rejetés / bloqués
-    const bloqueIdsObj = await Client.find({ 
-      $or: [
-        { verificationStatus: 'rejete' },
-        { bloque: true }
-      ]
-    }).distinct('_id');
-
-    const bloqueIds = [
-      ...bloqueIdsObj,
-      ...bloqueIdsObj.map(id => id.toString())
-    ];
+    const bloqueIds = await Client.distinct('_id', { 
+      $or: [{ verificationStatus: 'rejete' }, { bloque: true }] 
+    });
 
     const filter = { 
       statut: 'actif',
-      vendeurId: { $nin: bloqueIds }
+      vendeurId: { $nin: bloqueIds },
+      ...(req.query.categorie !== 'Tous' && req.query.categorie ? { categorie: req.query.categorie } : {})
     };
-    
-    if(req.query.categorie && req.query.categorie!== 'Tous') {
-      filter.categorie = req.query.categorie;
-    }
 
-    let produits = [];
-    if (sortType === 'random') {
-      produits = await mongoose.model('Produit').aggregate([
+    // Index à créer une fois : db.produits.createIndex({ statut:1, vendeurId:1, categorie:1, createdAt:-1 })
+
+    let produits;
+    if (page === 1 && req.query.sort === 'random') {
+      // Seulement page 1 en random, et sans $skip
+      produits = await Produit.aggregate([
         { $match: filter },
-        { $sample: { size: limit * 3 } },
-        { $skip: skip % 60 },
-        { $limit: limit }
+        { $sample: { size: limit } },
+        { $project: { titre:1, prix:1, ville:1, vendeurNom:1, 'images': { $slice: ['$images', 1] } } } // 1 seule image
       ]);
     } else {
-      produits = await mongoose.model('Produit').find(filter)
+      produits = await Produit.find(filter)
+        .select('titre prix ville vendeurNom images')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean();
     }
+
+    // hasMore sans countDocuments (ultra lent)
+    const hasMore = produits.length === limit;
     
-    const total = await mongoose.model('Produit').countDocuments(filter);
-    res.json({ produits, hasMore: skip + produits.length < total, total });
-  } catch (e) { 
-    console.log(e);
-    res.status(500).json({ erreur: e.message }); 
-  }
+    res.set('Cache-Control', 'public, max-age=30'); // cache CDN
+    res.json({ produits, hasMore });
+  } catch(e){ res.status(500).json({erreur:e.message}) }
 });
 // Suppression DEFINITIVE
 router.delete('/products/:id/hard', verifyToken, async (req,res)=>{
