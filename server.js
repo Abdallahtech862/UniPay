@@ -197,6 +197,7 @@ io.on('connection', (socket) => {
         text: data.text || data.content || '',
         content: data.content || data.text || '',
         image: data.image || '',
+        video: data.video || '',
         audio: data.audio || '',
         location: data.location || (data.latitude ? { latitude: data.latitude, longitude: data.longitude, address: data.address } : null),
         latitude: data.location?.latitude || data.latitude || null,
@@ -224,10 +225,14 @@ io.on('connection', (socket) => {
 
           let body = data.text || data.content || '';
           if (data.type === 'image') body = '📷 Photo';
+          if (data.type === 'video') body = '🎥 Vidéo';
           if (data.type === 'audio') body = '🎤 Vocal';
           if (data.type === 'pdf') body = '📄 Reçu UniPay';
           if (data.type === 'product') body = `🛍️ ${data.product?.titre || 'Article partagé'}`;
           if (data.type === 'location') body = '📍 Position partagée';
+          if (data.type === 'video' && data.text && data.text !== '[🎥 Vidéo]') {
+            body = `🎥 ${data.text}`.substring(0, 100);
+          }
 
           const receipts = await expo.sendPushNotificationsAsync([{
             to: recipient.expoPushToken,
