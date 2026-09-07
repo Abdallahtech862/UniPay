@@ -175,6 +175,59 @@ router.post('/products', verifyToken, async (req, res) => {
 router.get('/products', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const sortType = req.query.sort || 'recent';
+    
+    // Tous les clients rejetés / bloqués
+    const bloqueIdsObj = await Client.find({ 
+      $or: [
+        { verificationStatus: 'rejete' },
+        { bloque: true }
+      ]
+    }).distinct('_id');
+
+    const bloqueIds = [
+      ...bloqueIdsObj,
+      ...bloqueIdsObj.map(id => id.toString())
+    ];
+
+    const filter = { 
+      statut: 'actif',
+      vendeurId: { $nin: bloqueIds }
+    };
+    
+    if(req.query.categorie && req.query.categorie!== 'Tous') {
+      filter.categorie = req.query.categorie;
+    }
+
+    let produits = [];
+    if (sortType === 'random') {
+      produits = await mongoose.model('Produit').aggregate([
+        { $match: filter },
+        { $sample: { size: limit * 3 } },
+        { $skip: skip % 60 },
+        { $limit: limit }
+      ]);
+    } else {
+      produits = await mongoose.model('Produit').find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
+    
+    const total = await mongoose.model('Produit').countDocuments(filter);
+    res.json({ produits, hasMore: skip + produits.length < total, total });
+  } catch (e) { 
+    console.log(e);
+    res.status(500).json({ erreur: e.message }); 
+  }
+});
+
+router.get('/productss', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
     const limit = 20;
     const skip = (page - 1) * limit;
     
