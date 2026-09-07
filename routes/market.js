@@ -328,7 +328,7 @@ router.post('/orders/pay', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
+router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
     const commande = await Commande.findById(req.params.id).populate('produit');
@@ -400,13 +400,24 @@ router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
     res.status(500).json({ erreur: e.message });
   }
 });
-router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
+// CONFIRMER LIVRAISON - par l'acheteur uniquement
+router.post('/orders/:id/confirm', verifyToken, async (req, res) => {
   try {
-    const userId = getUserId(req);
+    const userId = (req.user?._id || req.user?.id || req.client?._id || req.client)?.toString();
+    if(!userId) return res.status(401).json({ erreur: 'Non authentifié' });
+
     const commande = await Commande.findById(req.params.id);
     if (!commande) return res.status(404).json({ erreur: 'Commande introuvable' });
-    if (commande.acheteurId.toString() !== userId.toString()) return res.status(403).json({ erreur: 'Seul acheteur peut confirmer' });
+    
+    console.log('CONFIRM DEBUG:', { userId, acheteurId: commande.acheteurId.toString(), statut: commande.statut });
+
+    if (commande.acheteurId.toString() !== userId) {
+      return res.status(403).json({ erreur: 'Seul l\'acheteur peut confirmer' });
+    }
     if (commande.statut === 'confirme') return res.status(400).json({ erreur: 'Déjà confirmée' });
+    if (commande.statut !== 'paye' && commande.statut !== 'livre') {
+      return res.status(400).json({ erreur: `Statut ${commande.statut} ne peut pas être confirmé` });
+    }
 
     const vendeur = await Utilisateur.findById(commande.vendeurId);
     const acheteur = await Utilisateur.findById(commande.acheteurId);
@@ -416,46 +427,42 @@ router.post('/orders/:id/confirmm', verifyToken, async (req, res) => {
     const frais = Math.round(totalPaye * 0.02);
     const netVendeur = totalPaye - frais;
 
-    // 1. Débloque argent
+    // Crédite vendeur
     vendeur.solde = (vendeur.solde || 0) + netVendeur;
     await vendeur.save();
 
-    // 2. Commission admin (optionnel)
+    // Commission admin
     const admin = await Utilisateur.findOne({ telephone: '+22670000000' });
     if (admin) {
       admin.solde = (admin.solde || 0) + frais;
       await admin.save();
     }
 
-    // 3. Update commande
     commande.statut = 'confirme';
     commande.dateConfirmation = new Date();
     await commande.save();
 
-    // 4. Log transaction - CORRIGÉ SANS SESSION
+    // Log transaction
     try {
       const Transaction = mongoose.model('Transaction');
       await Transaction.create({
-        expediteur: acheteur?._id,
+        expediteur: acheteur._id,
         destinataire: vendeur._id,
-        montant: totalPaye,
-        frais: frais,
         type: 'vente',
+        montant: totalPaye,
+        montantNetRecu: netVendeur,
+        frais,
         status: 'validee',
-        motif: `Vente ${commande.quantite||1}x ${commande.produit?.titre||''}`,
-        commandeId: commande._id
+        motif: `Vente confirmée ${commande.quantite||1}x`,
+        commandeId: commande._id,
+        produitId: commande.produitId,
+        soldeDestinataireApres: vendeur.solde
       });
-    } catch(e){ console.log('Tx log ignore', e.message); }
+    } catch(e){ console.log('Tx log', e.message); }
 
     if (global.io) global.io.emit('commande_update', commande);
 
-    res.json({ 
-      succes: true, 
-      message: `${netVendeur.toLocaleString()} FCFA débloqués`,
-      commande,
-      detail: { total: totalPaye, frais, netVendeur }
-    });
-
+    res.json({ success: true, message: `${netVendeur} FCFA débloqués`, commande });
   } catch (e) {
     console.error('CONFIRM ERROR:', e);
     res.status(500).json({ erreur: e.message });
