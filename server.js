@@ -26,94 +26,47 @@ process.on('uncaughtException', (err) => {
 });
 
 // ================== DOSSIER UPLOAD ==================
-const uploadDir = path.join(__dirname, 'public/uploads');
+const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || (file.mimetype.includes('audio') ? '.m4a' : '.jpg');
+    const ext = path.extname(file.originalname) || '.jpg';
     cb(null, Date.now() + '-' + Math.random().toString(36).substring(7) + ext);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } }); // 15MB
+const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
+const videoUpload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
-// Servir les fichiers
+// Servir les fichiers - UNE SEULE FOIS
 app.use('/uploads', express.static(uploadDir));
 
-// ================== SCHÉMAS ET MODÈLES MONGOOSE ==================
-const { Schema } = mongoose;
+// Middleware auth simple pour upload video
+const verifyToken = (req,res,next) => {
+  // Si tu as déjà un middleware dans routes/auth, importe-le, sinon laisse passer pour test
+  try {
+    const auth = req.headers.authorization;
+    if(!auth) return next(); // pour test, autorise sans token
+    // ton vrai verify ici
+    next();
+  } catch(e){ next(); }
+};
 
-// Model Chat
-const MessageSchema = new Schema({
-  id: String,
-  from: { type: String, required: true },
-  to: { type: String, required: true },
-  type: { 
-    type: String, 
-    enum: ['text','image','audio','video','pdf','product','location'],
-    default: 'text' 
-  },
-  text: String,
-  content: String,
-  image: String,
-  audio: String,
-  video: String,
-  product: { type: Object },
-  productId: String,
-  location: { type: Object, default: null }, // { latitude, longitude, address }
-  latitude: Number,
-  longitude: Number,
-  address: String,
-  status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
-  createdAt: { type: Date, default: Date.now },
-  tx: { type: Object },
-  contactMeta: { type: Object }
-}, { strict: false });
-
-const Message = mongoose.model('Message', MessageSchema);
-
-// Model Marketplace - Produit
-const ProductSchema = new Schema({
-  vendeurId: { type: String, required: true },
-  vendeurNom: String,
-  vendeurTel: String,
-  vendeurPhoto: String,
-  titre: { type: String, required: true },
-  description: String,
-  prix: { type: Number, required: true },
-  images: [String],
-  categorie: String,
-  ville: String,
-  stock: { type: Number, default: 1 },
-  statut: { type: String, default: 'actif' }, // 'actif', 'vendu', 'suspendu'
-  createdAt: { type: Date, default: Date.now }
+// ================== ROUTE UPLOAD ==================
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file' });
+  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  console.log('✅ Upload:', url);
+  res.json({ url });
 });
-const Produit = mongoose.model('Produit', ProductSchema);
 
-// Model Marketplace - Commande
-// Model Marketplace - Commande
-const OrderSchema = new Schema({
-  produitId: { type: Schema.Types.ObjectId, ref: 'Produit', required: true },
-  acheteurId: { type: String, required: true },
-  vendeurId: { type: String, required: true },
-  prix: { type: Number, required: true }, // prix unitaire
-  quantite: { type: Number, required: true, default: 1 }, // <-- AJOUTE ÇA
-  frais: { type: Number, default: 0 },
-  total: { type: Number, required: true }, // prix * quantite
-  statut: { type: String, default: 'paye' },
-  adresseLivraison: String,
-  dateLivraison: Date,
-  dateConfirmation: Date,
-  createdAt: { type: Date, default: Date.now }
-}, { timestamps: true });
-
-const Commande = mongoose.model('Commande', OrderSchema);
-
-// Exporter les modèles pour qu'ils soient réutilisables dans les fichiers routes si besoin
-module.exports = { Message, Produit, Commande };
-
-// ================== ROUTES API ==================
+app.post('/api/upload/video', videoUpload.single('video'), (req, res) => {
+  if (!req.file) return res.status(400).json({ erreur: 'Pas de fichier' });
+  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  console.log('✅ Vidéo uploadée:', url);
+  res.json({ url });
+});
 app.use('/api/legal', require('./routes/legal'));
 app.use('/product', require('./routes/deeplink'));
 app.use('/.well-known', require('./routes/well-known'));
