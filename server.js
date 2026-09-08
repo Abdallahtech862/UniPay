@@ -54,14 +54,16 @@ const MessageSchema = new Schema({
   from: { type: String, required: true },
   to: { type: String, required: true },
   type: { 
-    type: String, 
-    enum: ['text','image','audio','pdf','product','location'], // <-- ajoute location ici
-    default: 'text' 
+    type: String,  
+  enum: ['text','image','audio','pdf','product','location','video'], // ajoute video
+  default: 'text' 
+},
   },
   text: String,
   content: String,
   image: String,
   audio: String,
+  video: String,
   product: { type: Object },
   productId: String,
   location: { type: Object, default: null }, // { latitude, longitude, address }
