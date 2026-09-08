@@ -64,17 +64,6 @@ app.use('/api/pawapay', require('./routes/pawapay'));
 // AJOUT DE LA ROUTE MARKETPLACE :
 app.use('/api/marketplace', require('./routes/market'));
 
-// ================== ROUTE UPLOAD ==================
-// Servir les fichiers
-app.use('/uploads', express.static(uploadDir));
-
-// UPLOAD GENERIQUE IMAGE/AUDIO (ton ancien)
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
-  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  res.json({ url });
-});
-
 
 // ================== SOCKET.IO & SERVEUR HTTP ==================
 const server = http.createServer(app);
