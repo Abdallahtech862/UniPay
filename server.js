@@ -51,13 +51,14 @@ const MessageSchema = new Schema({
   to: { type: String, required: true },
   type: { 
     type: String, 
-    enum: ['text','image','audio','pdf','product','location'], // <-- ajoute location ici
+    enum: ['text','image','audio','video','pdf','product','location'],
     default: 'text' 
   },
   text: String,
   content: String,
   image: String,
   audio: String,
+  video: String,
   product: { type: Object },
   productId: String,
   location: { type: Object, default: null }, // { latitude, longitude, address }
@@ -131,10 +132,27 @@ app.use('/api/pawapay', require('./routes/pawapay'));
 app.use('/api/marketplace', require('./routes/market'));
 
 // ================== ROUTE UPLOAD ==================
+// Servir les fichiers
+app.use('/uploads', express.static(uploadDir));
+
+// UPLOAD GENERIQUE IMAGE/AUDIO (ton ancien)
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  console.log('✅ Upload:', url);
+  res.json({ url });
+});
+
+// NOUVELLE ROUTE VIDEO - 50MB
+const videoStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `video_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`)
+});
+const videoUpload = multer({ storage: videoStorage, limits: { fileSize: 50 * 1024 * 1024 } });
+
+app.post('/api/upload/video', verifyToken, videoUpload.single('video'), (req, res) => {
+  if (!req.file) return res.status(400).json({ erreur: 'Pas de fichier' });
+  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  console.log('✅ Vidéo uploadée:', url);
   res.json({ url });
 });
 
