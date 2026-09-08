@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { verifyAdmin, authUser,verifyToken } = require('../middleware/auth
 //const authentification = require('../middleware/auth');
 require('dotenv').config();
 
@@ -43,7 +44,7 @@ const videoUpload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 app.use('/uploads', express.static(uploadDir));
 
 // Middleware auth simple pour upload video
-const verifyToken = (req,res,next) => {
+const verifyTokenn = (req,res,next) => {
   // Si tu as déjà un middleware dans routes/auth, importe-le, sinon laisse passer pour test
   try {
     const auth = req.headers.authorization;
@@ -102,7 +103,7 @@ const videoStorage = multer.diskStorage({
 });
 const videoUpload = multer({ storage: videoStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
-app.post('/api/upload/video', verifyToken, videoUpload.single('video'), (req, res) => {
+app.post('/api/upload/video',verifyToken, videoUpload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ erreur: 'Pas de fichier' });
   const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
   console.log('✅ Vidéo uploadée:', url);
