@@ -54,19 +54,18 @@ const MessageSchema = new Schema({
   from: { type: String, required: true },
   to: { type: String, required: true },
   type: { 
-    type: String,  
-  enum: ['text','image','audio','pdf','product','location','video'], // ajoute video
-  default: 'text' 
-},
+    type: String, 
+    enum: ['text','image','audio','pdf','product','location','video'],
+    default: 'text' 
   },
   text: String,
   content: String,
   image: String,
-  audio: String,
   video: String,
+  audio: String,
   product: { type: Object },
   productId: String,
-  location: { type: Object, default: null }, // { latitude, longitude, address }
+  location: { type: Object, default: null },
   latitude: Number,
   longitude: Number,
   address: String,
@@ -75,7 +74,6 @@ const MessageSchema = new Schema({
   tx: { type: Object },
   contactMeta: { type: Object }
 }, { strict: false });
-
 const Message = mongoose.model('Message', MessageSchema);
 
 // Model Marketplace - Produit
