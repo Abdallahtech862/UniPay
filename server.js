@@ -6,27 +6,18 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { verifyAdmin, authUser,verifyToken } = require('../middleware/auth
-//const authentification = require('../middleware/auth');
 require('dotenv').config();
 
 const { Expo } = require('expo-server-sdk');
 const expo = new Expo();
-
-const User = require('./models/Client'); // Ton model User
-
-//console.log('DOTENV path:', path.resolve('.env'));
+const User = require('./models/Client');
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-process.on('uncaughtException', (err) => {
-  console.error('FATAL:', err.message);
-});
-
-// ================== DOSSIER UPLOAD ==================
+// DOSSIER UPLOAD - UNE SEULE FOIS
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -40,25 +31,11 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
 const videoUpload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
-// Servir les fichiers - UNE SEULE FOIS
 app.use('/uploads', express.static(uploadDir));
 
-// Middleware auth simple pour upload video
-const verifyTokenn = (req,res,next) => {
-  // Si tu as déjà un middleware dans routes/auth, importe-le, sinon laisse passer pour test
-  try {
-    const auth = req.headers.authorization;
-    if(!auth) return next(); // pour test, autorise sans token
-    // ton vrai verify ici
-    next();
-  } catch(e){ next(); }
-};
-
-// ================== ROUTE UPLOAD ==================
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  console.log('✅ Upload:', url);
   res.json({ url });
 });
 
@@ -68,6 +45,8 @@ app.post('/api/upload/video', videoUpload.single('video'), (req, res) => {
   console.log('✅ Vidéo uploadée:', url);
   res.json({ url });
 });
+
+// ... garde le reste de ton fichier à partir de SCHÉMAS ET MODÈLES MONGOOSE
 app.use('/api/legal', require('./routes/legal'));
 app.use('/product', require('./routes/deeplink'));
 app.use('/.well-known', require('./routes/well-known'));
@@ -96,19 +75,6 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   res.json({ url });
 });
 
-// NOUVELLE ROUTE VIDEO - 50MB
-const videoStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, `video_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`)
-});
-const videoUpload = multer({ storage: videoStorage, limits: { fileSize: 50 * 1024 * 1024 } });
-
-app.post('/api/upload/video',verifyToken, videoUpload.single('video'), (req, res) => {
-  if (!req.file) return res.status(400).json({ erreur: 'Pas de fichier' });
-  const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  console.log('✅ Vidéo uploadée:', url);
-  res.json({ url });
-});
 
 // ================== SOCKET.IO & SERVEUR HTTP ==================
 const server = http.createServer(app);
