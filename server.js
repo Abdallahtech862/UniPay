@@ -45,6 +45,77 @@ app.post('/api/upload/video', videoUpload.single('video'), (req, res) => {
   console.log('✅ Vidéo uploadée:', url);
   res.json({ url });
 });
+// ================== SCHÉMAS ET MODÈLES MONGOOSE ==================
+const { Schema } = mongoose;
+
+// Model Chat
+const MessageSchema = new Schema({
+  id: String,
+  from: { type: String, required: true },
+  to: { type: String, required: true },
+  type: { 
+    type: String, 
+    enum: ['text','image','audio','pdf','product','location'], // <-- ajoute location ici
+    default: 'text' 
+  },
+  text: String,
+  content: String,
+  image: String,
+  audio: String,
+  product: { type: Object },
+  productId: String,
+  location: { type: Object, default: null }, // { latitude, longitude, address }
+  latitude: Number,
+  longitude: Number,
+  address: String,
+  status: { type: String, enum: ['sent','delivered','read'], default: 'sent' },
+  createdAt: { type: Date, default: Date.now },
+  tx: { type: Object },
+  contactMeta: { type: Object }
+}, { strict: false });
+
+const Message = mongoose.model('Message', MessageSchema);
+
+// Model Marketplace - Produit
+const ProductSchema = new Schema({
+  vendeurId: { type: String, required: true },
+  vendeurNom: String,
+  vendeurTel: String,
+  vendeurPhoto: String,
+  titre: { type: String, required: true },
+  description: String,
+  prix: { type: Number, required: true },
+  images: [String],
+  categorie: String,
+  ville: String,
+  stock: { type: Number, default: 1 },
+  statut: { type: String, default: 'actif' }, // 'actif', 'vendu', 'suspendu'
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Produit = mongoose.model('Produit', ProductSchema);
+
+// Model Marketplace - Commande
+// Model Marketplace - Commande
+const OrderSchema = new Schema({
+  produitId: { type: Schema.Types.ObjectId, ref: 'Produit', required: true },
+  acheteurId: { type: String, required: true },
+  vendeurId: { type: String, required: true },
+  prix: { type: Number, required: true }, // prix unitaire
+  quantite: { type: Number, required: true, default: 1 }, // <-- AJOUTE ÇA
+  frais: { type: Number, default: 0 },
+  total: { type: Number, required: true }, // prix * quantite
+  statut: { type: String, default: 'paye' },
+  adresseLivraison: String,
+  dateLivraison: Date,
+  dateConfirmation: Date,
+  createdAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+const Commande = mongoose.model('Commande', OrderSchema);
+
+// Exporter les modèles pour qu'ils soient réutilisables dans les fichiers routes si besoin
+module.exports = { Message, Produit, Commande };
 
 // ... garde le reste de ton fichier à partir de SCHÉMAS ET MODÈLES MONGOOSE
 app.use('/api/legal', require('./routes/legal'));
