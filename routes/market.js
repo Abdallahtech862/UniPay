@@ -151,6 +151,8 @@ router.post('/products', verifyToken, async (req, res) => {
     const produit = await mongoose.model('Produit').create({
       titre: req.body.titre,
       description: req.body.description,
+      vues: 0,
+      vendeurVerifie: false, // sera calculé à la lecture
       prix: Number(req.body.prix),
       images: req.body.images || [],
       categorie: req.body.categorie || 'Autres',
@@ -177,33 +179,20 @@ router.get('/products', async (req, res) => {
     const skip = (page - 1) * limit;
     const sortType = req.query.sort || 'recent';
     
-    // Tous les clients rejetés / bloqués
     const bloqueIdsObj = await Client.find({ 
       $or: [{ verificationStatus: 'rejete' }, { bloque: true }]
     }).distinct('_id');
 
-    const bloqueIds = [
-      ...bloqueIdsObj,
-      ...bloqueIdsObj.map(id => id.toString())
-    ];
+    const bloqueIds = [...bloqueIdsObj, ...bloqueIdsObj.map(id => id.toString())];
 
-    let filter = { 
-      statut: 'actif',
-      vendeurId: { $nin: bloqueIds }
-    };
+    let filter = { statut: 'actif', vendeurId: { $nin: bloqueIds } };
     
-    if (req.query.categorie && req.query.categorie !== 'Tous') {
-      filter.categorie = req.query.categorie;
-    }
-
-    // --- CORRECTION BOUTIQUE VENDEUR ---
+    if (req.query.categorie && req.query.categorie !== 'Tous') filter.categorie = req.query.categorie;
     if (req.query.vendeurId) {
-      const vId = req.query.vendeurId;
-      // Si vendeur bloqué → renvoie vide direct
-      if (bloqueIds.map(String).includes(String(vId))) {
+      if (bloqueIds.map(String).includes(String(req.query.vendeurId))) {
         return res.json({ produits: [], hasMore: false, total: 0 });
       }
-      filter.vendeurId = vId;
+      filter.vendeurId = req.query.vendeurId;
     }
 
     let produits = [];
@@ -215,16 +204,23 @@ router.get('/products', async (req, res) => {
         { $limit: limit }
       ]);
     } else {
-      produits = await mongoose.model('Produit').find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      produits = await mongoose.model('Produit').find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
     }
+
+    // --- AJOUT VUES + VERIFIE ---
+    const vendeurIds = [...new Set(produits.map(p => p.vendeurId).filter(Boolean).map(String))];
+    const clients = await Client.find({ _id: { $in: vendeurIds } }).select('_id verificationStatus').lean();
+    const verifieMap = {};
+    clients.forEach(c => { verifieMap[c._id.toString()] = c.verificationStatus === 'verifie'; });
+
+    produits = produits.map(p => ({
+      ...p,
+      vues: p.vues || 0,
+      vendeurVerifie: !!verifieMap[p.vendeurId?.toString()]
+    }));
     
     const total = await mongoose.model('Produit').countDocuments(filter);
     res.json({ produits, hasMore: skip + produits.length < total, total });
-    
   } catch (e) { 
     console.log(e);
     res.status(500).json({ erreur: e.message }); 
@@ -254,12 +250,23 @@ router.get('/products/my/mine', verifyToken, async (req, res) => {
 
 router.get('/products/:id', async (req, res) => {
   try {
-    const p = await mongoose.model('Produit').findById(req.params.id);
+    // Incrémente les vues
+    const p = await mongoose.model('Produit').findByIdAndUpdate(
+      req.params.id,
+      { $inc: { vues: 1 } },
+      { new: true }
+    ).lean();
+
     if (!p) return res.status(404).json({ erreur: 'Non trouvé' });
+
+    // Vérifié
+    const vendeur = await Client.findById(p.vendeurId).select('verificationStatus').lean();
+    p.vendeurVerifie = vendeur?.verificationStatus === 'verifie';
+    p.vues = p.vues || 0;
+
     res.json(p);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
-
 router.put('/products/:id', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
