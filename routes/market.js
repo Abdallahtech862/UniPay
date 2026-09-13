@@ -198,7 +198,9 @@ router.get('/products', async (req, res) => {
     if(req.query.categorie && req.query.categorie!== 'Tous') {
       filter.categorie = req.query.categorie;
     }
-
+    if (req.query.vendeurId) {
+    query.vendeurId = req.query.vendeurId; // ou vendeur = ObjectId(req.query.vendeurId)
+  }
     let produits = [];
     if (sortType === 'random') {
       produits = await mongoose.model('Produit').aggregate([
@@ -223,48 +225,6 @@ router.get('/products', async (req, res) => {
   }
 });
 
-router.get('/productss', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 20;
-    const skip = (page - 1) * limit;
-    
-    const bloqueIds = await Client.distinct('_id', { 
-      $or: [{ verificationStatus: 'rejete' }, { bloque: true }] 
-    });
-
-    const filter = { 
-      statut: 'actif',
-      vendeurId: { $nin: bloqueIds },
-      ...(req.query.categorie !== 'Tous' && req.query.categorie ? { categorie: req.query.categorie } : {})
-    };
-
-    // Index à créer une fois : db.produits.createIndex({ statut:1, vendeurId:1, categorie:1, createdAt:-1 })
-
-    let produits;
-    if (page === 1 && req.query.sort === 'random') {
-      // Seulement page 1 en random, et sans $skip
-      produits = await Produit.aggregate([
-        { $match: filter },
-        { $sample: { size: limit } },
-        { $project: { titre:1, prix:1, ville:1, vendeurNom:1, 'images': { $slice: ['$images', 1] } } } // 1 seule image
-      ]);
-    } else {
-      produits = await Produit.find(filter)
-        .select('titre prix ville vendeurNom images')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-    }
-
-    // hasMore sans countDocuments (ultra lent)
-    const hasMore = produits.length === limit;
-    
-    res.set('Cache-Control', 'public, max-age=30'); // cache CDN
-    res.json({ produits, hasMore });
-  } catch(e){ res.status(500).json({erreur:e.message}) }
-});
 // Suppression DEFINITIVE
 router.delete('/products/:id/hard', verifyToken, async (req,res)=>{
   try{
