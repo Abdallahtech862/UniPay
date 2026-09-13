@@ -207,11 +207,16 @@ router.get('/products', async (req, res) => {
       produits = await mongoose.model('Produit').find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
     }
 
-    // --- AJOUT VUES + VERIFIE ---
+        // --- VUES + BADGE VERIFIE - VERSION FINALE ---
     const vendeurIds = [...new Set(produits.map(p => p.vendeurId).filter(Boolean).map(String))];
-    const clients = await Client.find({ _id: { $in: vendeurIds } }).select('_id verificationStatus').lean();
+    const clients = await Client.find({ _id: { $in: vendeurIds } })
+      .select('_id isVerified verificationStatus')
+      .lean();
+    
     const verifieMap = {};
-    clients.forEach(c => { verifieMap[c._id.toString()] = c.verificationStatus === 'verifie'; });
+    clients.forEach(c => {
+      verifieMap[c._id.toString()] = c.isVerified === true && c.verificationStatus === 'verifie';
+    });
 
     produits = produits.map(p => ({
       ...p,
@@ -250,23 +255,22 @@ router.get('/products/my/mine', verifyToken, async (req, res) => {
 
 router.get('/products/:id', async (req, res) => {
   try {
-    // Incrémente les vues
     const p = await mongoose.model('Produit').findByIdAndUpdate(
       req.params.id,
       { $inc: { vues: 1 } },
-      { new: true }
+      { new: true, upsert: false }
     ).lean();
 
     if (!p) return res.status(404).json({ erreur: 'Non trouvé' });
 
-    // Vérifié
-    const vendeur = await Client.findById(p.vendeurId).select('verificationStatus').lean();
-    p.vendeurVerifie = vendeur?.verificationStatus === 'verifie';
-    p.vues = p.vues || 0;
+    const vendeur = await Client.findById(p.vendeurId).select('isVerified verificationStatus').lean();
+    p.vendeurVerifie = vendeur?.isVerified === true && vendeur?.verificationStatus === 'verifie';
+    p.vues = p.vues || 1;
 
     res.json(p);
   } catch (e) { res.status(500).json({ erreur: e.message }); }
 });
+
 router.put('/products/:id', verifyToken, async (req, res) => {
   try {
     const userId = getUserId(req);
