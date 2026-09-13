@@ -83,6 +83,8 @@ const ProductSchema = new Schema({
   vendeurTel: String,
   vendeurPhoto: String,
   titre: { type: String, required: true },
+  vues: { type: Number, default: 0 },
+  vendeurVerifie: { type: Boolean, default: false },
   description: String,
   prix: { type: Number, required: true },
   images: [String],
