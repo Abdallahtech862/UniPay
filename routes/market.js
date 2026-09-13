@@ -179,10 +179,7 @@ router.get('/products', async (req, res) => {
     
     // Tous les clients rejetés / bloqués
     const bloqueIdsObj = await Client.find({ 
-      $or: [
-        { verificationStatus: 'rejete' },
-        { bloque: true }
-      ]
+      $or: [{ verificationStatus: 'rejete' }, { bloque: true }]
     }).distinct('_id');
 
     const bloqueIds = [
@@ -190,17 +187,25 @@ router.get('/products', async (req, res) => {
       ...bloqueIdsObj.map(id => id.toString())
     ];
 
-    const filter = { 
+    let filter = { 
       statut: 'actif',
       vendeurId: { $nin: bloqueIds }
     };
     
-    if(req.query.categorie && req.query.categorie!== 'Tous') {
+    if (req.query.categorie && req.query.categorie !== 'Tous') {
       filter.categorie = req.query.categorie;
     }
+
+    // --- CORRECTION BOUTIQUE VENDEUR ---
     if (req.query.vendeurId) {
-    query.vendeurId = req.query.vendeurId; // ou vendeur = ObjectId(req.query.vendeurId)
-  }
+      const vId = req.query.vendeurId;
+      // Si vendeur bloqué → renvoie vide direct
+      if (bloqueIds.map(String).includes(String(vId))) {
+        return res.json({ produits: [], hasMore: false, total: 0 });
+      }
+      filter.vendeurId = vId;
+    }
+
     let produits = [];
     if (sortType === 'random') {
       produits = await mongoose.model('Produit').aggregate([
@@ -219,12 +224,12 @@ router.get('/products', async (req, res) => {
     
     const total = await mongoose.model('Produit').countDocuments(filter);
     res.json({ produits, hasMore: skip + produits.length < total, total });
+    
   } catch (e) { 
     console.log(e);
     res.status(500).json({ erreur: e.message }); 
   }
 });
-
 // Suppression DEFINITIVE
 router.delete('/products/:id/hard', verifyToken, async (req,res)=>{
   try{
