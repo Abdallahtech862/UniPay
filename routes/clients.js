@@ -5,6 +5,7 @@ const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
 const streamifier = require('streamifier');
 const Client = require('../models/Client');
+const { sendSMSOrange } = require('../utils/sendSMS');
 const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser, verifyToken } = require('../middleware/auth');
 
@@ -467,6 +468,14 @@ router.put('/:id/reset-password', verifyAdmin, async (req, res) => {
     client.password = '1234'; // pre('save') va hasher
     await client.save();
     res.json({ success: true, message: 'Mot de passe réinitialisé à 1234' });
+
+    const message = `Votre nouveau mot de passe UniPay est de 1234 veillez le changer dans l'onglet profile apres votre connexion.`;
+    const smsSent = await sendSMSOrange(client.telephone, message);
+    console.log(user.telephone, message);
+    
+    if (!smsSent) {
+      return res.status(500).json({ error: "Échec envoi SMS" });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
