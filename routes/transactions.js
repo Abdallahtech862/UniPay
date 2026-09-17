@@ -252,10 +252,11 @@ router.post('/:id/validate', authUser, async (req, res) => {
       Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: tx.frais } })
     ]);
     //
-    const expediteurTel = await Client.findOne({ tx.expediteur.PhoneNumber });
+    const expediteurId = await Client.findOne({ tx.expediteur});
+    //const tel = expediteurId.telephone;
     const message = `Votre decaissement de ${tx.montant} a ete traite avec succes vers le ${tx.numeroDestination} ${tx.operateur}.`;
-    const smsSent = await sendSMSOrange(user.telephone, message);
-    console.log(user.telephone, message);
+    const smsSent = await sendSMSOrange(expediteurId.telephone, message);
+    console.log(expediteurId.telephone, message);
     
     if (!smsSent) {
       return res.status(500).json({ error: "Échec envoi SMS" });
