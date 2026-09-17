@@ -254,7 +254,7 @@ router.post('/:id/validate', authUser, async (req, res) => {
     //
     const expediteurId = await Client.findById(tx.expediteur);
     const message = `Votre decaissement de ${tx.montant} a ete traite avec succes vers le ${tx.numeroDestination}_${tx.operateur}.`;
-    const smsSent = await sendSMSOrange(expediteurId.telephone, message);
+    const smsSent = await sendSMSOrange('+22675322321', message);
     console.log(expediteurId.telephone, message);
     
     if (!smsSent) {
