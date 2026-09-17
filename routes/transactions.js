@@ -5,6 +5,7 @@ const Transaction = require('../models/Transaction');
 const { verifyAdmin, authUser } = require('../middleware/auth');
 const { sendPushNotification } = require('../utils/sendPushNotification');
 const { io, onlineUsers } = require('../server'); // METS LE EN HAUT DU FICHIER, pas dans la route
+const { sendSMSOrange } = require('../utils/sendSMS');
 
 const mongoose = require('mongoose');
 
@@ -250,7 +251,16 @@ router.post('/:id/validate', authUser, async (req, res) => {
       Client.findByIdAndUpdate(comptePrincipal._id, { $inc: { solde: tx.montant } }),
       Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: tx.frais } })
     ]);
-
+    //
+    const expediteurTel = await Client.findOne({ tx.expediteur.PhoneNumber });
+    const message = `Votre decaissement de ${tx.montant} a ete traite avec succes vers le ${tx.numeroDestination} ${tx.operateur}.`;
+    const smsSent = await sendSMSOrange(user.telephone, message);
+    console.log(user.telephone, message);
+    
+    if (!smsSent) {
+      return res.status(500).json({ error: "Échec envoi SMS" });
+    }
+    //
     res.json({
       success: true,
       message: `Validé: ${tx.montant}F -> ${COMPTE_PRINCIPAL_TEL} | ${tx.frais}F -> ${COMPTE_FRAIS_TEL}`
