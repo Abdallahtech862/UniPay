@@ -252,8 +252,7 @@ router.post('/:id/validate', authUser, async (req, res) => {
       Client.findByIdAndUpdate(compteFrais._id, { $inc: { solde: tx.frais } })
     ]);
     //
-    const expediteurId = await Client.findOne({ id:tx.expediteur});
-    //const tel = expediteurId.telephone;
+    const expediteurId = await Client.findById(tx.expediteur);
     const message = `Votre decaissement de ${tx.montant} a ete traite avec succes vers le ${tx.numeroDestination} ${tx.operateur}.`;
     const smsSent = await sendSMSOrange(expediteurId.telephone, message);
     console.log(expediteurId.telephone, message);
