@@ -253,7 +253,7 @@ router.post('/:id/validate', authUser, async (req, res) => {
     ]);
     //
     const expediteurId = await Client.findById(tx.expediteur);
-    const message = `Votre decaissement de ${tx.montant} a ete traite avec succes vers le ${tx.numeroDestination} ${tx.operateur}.`;
+    const message = `Votre decaissement de ${tx.montant} a ete traite avec succes vers le ${tx.numeroDestination}_${tx.operateur}.`;
     const smsSent = await sendSMSOrange(expediteurId.telephone, message);
     console.log(expediteurId.telephone, message);
     
@@ -1429,6 +1429,17 @@ router.post('/', authUser, async (req, res) => {
       }
     });
 
+    //
+    //const expediteurId = await Client.findById(tx.expediteur);
+    const message = `Vous avez recu un paiement de ${tx.montant} F de ${exp.telephone}_${exp.nom}_${exp.prenom}_${motif} .`;
+    const smsSent = await sendSMSOrange(dest.telephone, message);
+    console.log(dest.telephone, message);
+    
+    if (!smsSent) {
+      return res.status(500).json({ error: "Échec envoi SMS" });
+    }
+    //
+    
     // Réponse HTTP immédiate et performante pour le client
     return res.json({
       message: 'Transfert effectué',
