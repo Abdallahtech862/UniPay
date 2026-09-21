@@ -204,13 +204,14 @@ io.on('connection', (socket) => {
         longitude: data.location?.longitude || data.longitude || null,
         address: data.location?.address || data.address || null,
         product: data.product || null,
-        productId: data.productId || '',
+        productId: data.productId || data.product?._id || '',
         status: 'sent',
         createdAt: new Date(data.timestamp || Date.now()),
         contactMeta: data.contactMeta || null,
         tx: data.tx || null
       });
 
+      
       // 2. Envoie temps réel si online
       emitToUser(data.to.toString(), 'new_message', data);
       emitToUser(data.from.toString(), 'message_status', { messageId: data.id, status: 'sent' });
