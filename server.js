@@ -297,7 +297,7 @@ io.on('connection', (socket) => {
 });
 
 // ================== TA PAGE HTML + HEALTH ==================
-const htmlll = `<!DOCTYPE html>
+const htmll = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -1060,7 +1060,7 @@ const htmlll = `<!DOCTYPE html>
 </html>`;
 app.get('/p', (req, res) => { res.set('Content-Type', 'text/html'); res.send(htmll); });
 
-const html = `<!DOCTYPE html>
+const htmlll = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -1228,7 +1228,7 @@ const html = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const htmll = `<!DOCTYPE html>
+const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1274,8 +1274,8 @@ Error generating stack: `+o.message+`
   <script>(function(){function m(a){var h=a.getAttribute("href");if(!h)return;try{var u=new URL(h,document.baseURI);if((u.protocol==="http:"||u.protocol==="https:")&&u.host!==location.host){a.target="_blank";a.rel="noopener noreferrer";}}catch(e){}}function s(){document.querySelectorAll("a[href]").forEach(m);}if(document.readyState!=="loading"){s();}else{document.addEventListener("DOMContentLoaded",s);}document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(a){m(a);}},true);})();</script>
   
 </body>
-</html> `;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+</html>`;
+
 app.get('/', (req, res) => { res.set('Content-Type', 'text/html'); res.send(html); });
 //app.get('/health', (req,res)=> res.json({status:'ok'}));
 
