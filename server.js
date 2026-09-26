@@ -1228,7 +1228,7 @@ const htmlll = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const html = `<!DOCTYPE html>
+const html = String.raw `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
