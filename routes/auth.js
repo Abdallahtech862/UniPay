@@ -461,19 +461,110 @@ router.post('/login-password', async (req, res) => {
   }
 });
 
-// N'OUBLIE PAS AUSSI DE PATCHER TA ROUTE /verify-otp :
+// 3. Vérifier OTP et connecter - VERSION SÉCURISÉE + TEST 【entity-APPLE¦canonical_name=Apple】
+const Transaction = require('../models/Transaction');
+
 router.post('/verify-otp', async (req, res) => {
-  const { identifier, otp } = req.body;
+  try {
+    const { identifier, otp } = req.body;
 
-  // Si c'est un compte test, accepte toujours 123456
-  if (APPLE_TEST_ACCOUNTS[identifier] && otp === APPLE_TEST_ACCOUNTS[identifier]) {
-    const user = await Client.findOne({ $or: [{ telephone: identifier }, { email: identifier }] });
-    const token = generateToken(user); // ta fonction JWT
-    return res.json({ token, user, message: 'Connexion test Apple OK' });
+    if (!identifier || !otp) {
+      return res.status(400).json({ error: 'Identifiant et code requis' });
+    }
+
+    const isAppleTest = APPLE_TEST_ACCOUNTS.hasOwnProperty(identifier);
+
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    // === BYPASS APPLE TEST ===
+    let isOtpValid = false;
+    
+    if (isAppleTest && otp === APPLE_TEST_ACCOUNTS[identifier]) {
+      console.log(`[APPLE TEST] OTP bypass OK pour ${identifier}`);
+      isOtpValid = true;
+    } else {
+      // Vérif normale
+      if (!user.otpCode || user.otpCode !== otp) {
+        return res.status(401).json({ error: 'Code invalide' });
+      }
+      if (!user.otpExpires || Date.now() > new Date(user.otpExpires).getTime()) {
+        return res.status(401).json({ error: 'Code expiré' });
+      }
+      isOtpValid = true;
+    }
+
+    if (!isOtpValid) {
+      return res.status(401).json({ error: 'Code invalide' });
+    }
+
+    // Récup historique seulement si pas test Apple (pour aller plus vite)
+    let transactions = [];
+    if (!isAppleTest) {
+      transactions = await Transaction.find({
+        $or: [{ senderId: user._id }, { receiverId: user._id }]
+      })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .populate('senderId', 'nom prenom telephone')
+        .populate('receiverId', 'nom prenom telephone');
+    }
+
+    // Nettoie OTP sauf si tu veux garder le test actif
+    if (!isAppleTest) {
+      user.otpCode = null;
+      user.otpExpires = null;
+      await user.save();
+    } else {
+      // Pour Apple, on prolonge pour qu'ils puissent re-tester
+      user.otpExpires = Date.now() + 60 * 60 * 1000;
+      await user.save();
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    // RÉPONSE SÉCURISÉE - PLUS DE passwordHash !!!
+    res.json({
+      message: 'Connexion réussie',
+      token,
+      user: {
+        id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        pseudo: user.pseudo || `${user.prenom}${user.nom.charAt(0)}`,
+        telephone: user.telephone,
+        email: user.email,
+        photoProfil: user.photoProfil || null,
+        solde: isAppleTest ? 50000 : user.solde, // Solde fake 50k pour Apple
+        carteRecto: user.carteRecto,
+        carteVerso: user.carteVerso,
+        isVerified: user.isVerified,
+        limiteJournaliere: user.limiteJournaliere,
+        limiteMensuelle: user.limiteMensuelle,
+        step: 'done',
+        isTestAccount: isAppleTest || false
+      },
+      historique: transactions.map(t => ({
+        id: t._id,
+        type: t.senderId._id.equals(user._id) ? 'envoi' : 'reception',
+        montant: t.montant,
+        frais: t.frais || 0,
+        contact: t.senderId._id.equals(user._id) ? t.receiverId : t.senderId,
+        motif: t.motif || '',
+        status: t.status,
+        date: t.createdAt
+      }))
+    });
+
+  } catch (err) {
+    console.error('Erreur verify-otp:', err);
+    res.status(500).json({ error: err.message });
   }
-
-  //... ton code normal de vérif OTP...
 });
+
 
 // 2. Login avec password + envoi OTP
 router.post('/login-passwordd', async (req, res) => {
@@ -637,7 +728,7 @@ router.post('/verify-otp-signup', async (req, res) => {
 });
 // 3. Vérifier OTP et connecter
 const Transaction = require('../models/Transaction'); // Assure-toi que le chemin est bon
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otpp', async (req, res) => {
   try {
     const { identifier, otp } = req.body;
 
