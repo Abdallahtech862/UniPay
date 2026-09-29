@@ -354,7 +354,7 @@ const DUREE_BLOCAGE_MIN = 30; // 30 minutes
 
 // 0. COMPTES DE TEST APPLE - à mettre en haut de ton fichier
 const APPLE_TEST_ACCOUNTS = {
-  '+22670000000': '123456',
+  '+22670700000': '123456',
   'apple.test@unipayburkina.com': '123456',
   '+15555550100': '123456', // Numéro US pour reviewer Apple US
 };
