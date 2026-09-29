@@ -352,8 +352,131 @@ const otpRateLimit = new Map();
 const MAX_TENTATIVES = 4;
 const DUREE_BLOCAGE_MIN = 30; // 30 minutes
 
-// 2. Login avec password + envoi OTP
+// 0. COMPTES DE TEST APPLE - à mettre en haut de ton fichier
+const APPLE_TEST_ACCOUNTS = {
+  '+22670000000': '123456',
+  'apple.test@unipayburkina.com': '123456',
+  '+15555550100': '123456', // Numéro US pour reviewer Apple US
+};
+
+// 2. Login avec password + envoi OTP (VERSION AVEC TEST APPLE)
 router.post('/login-password', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+
+    // Vérifie si c'est un compte test Apple
+    const isAppleTest = APPLE_TEST_ACCOUNTS.hasOwnProperty(identifier);
+
+    const user = await Client.findOne({
+      $or: [{ telephone: identifier }, { email: identifier }]
+    });
+
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    // Vérifier si déjà bloqué - SAUF pour compte test Apple (jamais bloqué)
+    if (user.bloque &&!isAppleTest) {
+      if (user.bloqueJusqua && user.bloqueJusqua < Date.now()) {
+        user.bloque = false;
+        user.tentativesEchouees = 0;
+        user.bloqueJusqua = null;
+        await user.save();
+      } else {
+        return res.status(403).json({
+          error: `Compte bloqué après ${MAX_TENTATIVES} tentatives. Réessayez dans ${DUREE_BLOCAGE_MIN} minutes ou contactez le support UniPay.`
+        });
+      }
+    }
+
+    const isMatch = await user.comparePassword(password);
+
+    if (!isMatch) {
+      // Ne bloque jamais le compte test Apple
+      if (!isAppleTest) {
+        user.tentativesEchouees = (user.tentativesEchouees || 0) + 1;
+        otpRateLimit.set(user.telephone, (otpRateLimit.get(user.telephone) || 0) + 1);
+
+        if (user.tentativesEchouees >= MAX_TENTATIVES) {
+          user.bloque = true;
+          user.bloqueJusqua = new Date(Date.now() + DUREE_BLOCAGE_MIN * 60 * 1000);
+          await user.save();
+          return res.status(403).json({
+            error: `Compte bloqué pour ${DUREE_BLOCAGE_MIN} minutes après ${MAX_TENTATIVES} tentatives échouées.`
+          });
+        }
+        await user.save();
+      }
+
+      return res.status(401).json({
+        error: `Mot de passe incorrect. ${MAX_TENTATIVES - user.tentativesEchouees} tentative(s) restante(s).`,
+        tentativesRestantes: MAX_TENTATIVES - user.tentativesEchouees
+      });
+    }
+
+    // Mot de passe OK
+    user.tentativesEchouees = 0;
+    otpRateLimit.delete(user.telephone);
+
+    if (user.bloque &&!isAppleTest) {
+      return res.status(403).json({
+        error: 'Votre compte a été suspendu. Contactez le support UniPay.'
+      });
+    }
+
+    // === LOGIQUE TEST APPLE ===
+    let otp;
+    if (isAppleTest) {
+      otp = APPLE_TEST_ACCOUNTS[identifier]; // 123456 fixe
+      console.log(`[APPLE TEST] Login test ${identifier} -> OTP fixe ${otp}`);
+    } else {
+      otp = Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 min pour test
+    await user.save();
+
+    // Si test Apple, on n'envoie PAS de SMS
+    if (isAppleTest) {
+      return res.json({
+        message: 'OTP envoyé par SMS',
+        _testMode: true, // Pour que ton app sache que c'est un test
+        _testOtp: otp // Tu peux retirer ça en prod, utile pour debug
+      });
+    }
+
+    // Normal - envoi SMS Orange
+    const message = `Votre code UniPay: ${otp}. Valide 5 min. Ne le partagez jamais.`;
+    const smsSent = await sendSMSOrange(user.telephone, message);
+    console.log(user.telephone, message);
+
+    if (!smsSent) {
+      return res.status(500).json({ error: "Échec envoi SMS" });
+    }
+
+    res.json({ message: 'OTP envoyé par SMS' });
+
+  } catch (err) {
+    console.error('Erreur login-password:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// N'OUBLIE PAS AUSSI DE PATCHER TA ROUTE /verify-otp :
+router.post('/verify-otp', async (req, res) => {
+  const { identifier, otp } = req.body;
+
+  // Si c'est un compte test, accepte toujours 123456
+  if (APPLE_TEST_ACCOUNTS[identifier] && otp === APPLE_TEST_ACCOUNTS[identifier]) {
+    const user = await Client.findOne({ $or: [{ telephone: identifier }, { email: identifier }] });
+    const token = generateToken(user); // ta fonction JWT
+    return res.json({ token, user, message: 'Connexion test Apple OK' });
+  }
+
+  //... ton code normal de vérif OTP...
+});
+
+// 2. Login avec password + envoi OTP
+router.post('/login-passwordd', async (req, res) => {
   try {
     const { identifier, password } = req.body;
     const user = await Client.findOne({
