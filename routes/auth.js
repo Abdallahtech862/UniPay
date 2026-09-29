@@ -462,7 +462,7 @@ router.post('/login-password', async (req, res) => {
 });
 
 // 3. Vérifier OTP et connecter - VERSION SÉCURISÉE + TEST 【entity-APPLE¦canonical_name=Apple】
-const Transaction = require('../models/Transaction');
+//const Transaction = require('../models/Transaction');
 
 router.post('/verify-otp', async (req, res) => {
   try {
