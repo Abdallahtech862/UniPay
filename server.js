@@ -298,12 +298,13 @@ io.on('connection', (socket) => {
 
 // ================== TA PAGE HTML + HEALTH ==================
 
-const htmlll =String.raw `<!DOCTYPE html>
+
+const htmlll = String.raw`<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UniPay - Marketplace, Wallet, Messagerie & Cartes Visa Burkina</title>
+<title>UniPay - Marketplace, Wallet & Messagerie Burkina</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -334,8 +335,6 @@ const htmlll =String.raw `<!DOCTYPE html>
   .unipay-action-btn { background:#E8D19A; padding:10px 4px; border-radius:10px; text-align:center; font-size:11px; font-weight:600; }
   .unipay-action-btn.secondary { background:#DDE5D9; } .unipay-action-btn.outline { background:transparent; border:1.5px solid #6B4423; }
   .unipay-section-title { font-size:13px; font-weight:600; padding:0 15px; margin:10px 0 8px; }
-  .unipay-carte { background:#E8D19A; margin:0 15px 8px; padding:12px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; }
-  .unipay-carte-type { font-size:10px; opacity:0.7; } .unipay-carte-numero { font-size:13px; font-weight:600; letter-spacing:1px; }
   .unipay-section { padding:80px 0; }
   .unipay-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:24px; margin-top:40px; }
   .unipay-feature { background:#fff; padding:30px 24px; border-radius:20px; border:1px solid #F0E6C8; }
@@ -362,7 +361,7 @@ const htmlll =String.raw `<!DOCTYPE html>
       <div class="unipay-nav-links">
         <a onclick="showPage('home')">Accueil</a>
         <a href="#marketplace">Marketplace</a>
-        <a href="#cartes">Cartes Visa</a>
+        <a href="#wallet">Wallet</a>
         <a onclick="showPage('cgu')">CGU</a>
         <a onclick="showPage('confidentialite')">Confidentialité</a>
       </div>
@@ -373,9 +372,9 @@ const htmlll =String.raw `<!DOCTYPE html>
 <div id="home" class="page active">
 <section class="unipay-hero">
   <div class="unipay-container">
-    <div class="unipay-badge">🛍️ NOUVEAU: Marketplace + Messagerie intégrée</div>
+    <div class="unipay-badge">🛍 NOUVEAU: Marketplace + Messagerie intégrée</div>
     <h1>Le super-app pour vendre, acheter, payer et discuter au Burkina</h1>
-    <p>UniPay c'est le tout-en-un : un marketplace pour vendre tes produits, une messagerie pour parler aux clients, un wallet Mobile Money et des cartes Visa virtuelles & physiques pour payer partout.</p>
+    <p>UniPay c'est le tout-en-un : un marketplace pour vendre tes produits, une messagerie pour parler aux clients et un wallet Mobile Money multi-opérateurs pour payer partout.</p>
     <div>
       <a href="https://play.google.com/store/apps/details?id=com.abdallahtech.uniPay" class="unipay-btn">Télécharger sur Play Store</a>
       <a href="#marketplace" class="unipay-btn unipay-btn-outline" style="margin-left:10px;">Voir le Marketplace</a>
@@ -386,11 +385,13 @@ const htmlll =String.raw `<!DOCTYPE html>
         <div class="unipay-solde-box"><div class="unipay-solde-label">Solde Wallet</div><div class="unipay-solde">47 500 F</div></div>
         <div class="unipay-qr-section"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=unipay://pay" alt="QR"></div>
         <div class="unipay-actions"><div class="unipay-action-btn">Payer</div><div class="unipay-action-btn outline">Recevoir</div><div class="unipay-action-btn secondary">Market</div><div class="unipay-action-btn">Chat</div></div>
-        <div class="unipay-section-title">Mes cartes Visa</div>
-        <div class="unipay-carte"><div><div class="unipay-carte-type">VIRTUELLE</div><div class="unipay-carte-numero">**** 4582</div></div><div style="font-size:10px;background:#fff;padding:4px 8px;border-radius:8px;">ACTIVE</div></div>
-        <div class="unipay-carte" style="background:#6B4423;color:#FDF8EF;"><div><div style="font-size:10px;opacity:0.7;">PHYSIQUE</div><div style="font-size:13px;font-weight:600;letter-spacing:1px;color:#FDF8EF;">**** 9021</div></div><div>💳</div></div>
-        <div class="unipay-section-title">Messages récents</div>
-        <div style="padding:0 15px;display:flex;flex-direction:column;gap:8px;"><div style="background:#fff;padding:10px;border-radius:12px;font-size:12px;">🛍️ Abdoul - "Le téléphone est dispo ?" <span style="float:right;color:#2E7D32;">●</span></div><div style="background:#fff;padding:10px;border-radius:12px;font-size:12px;">💬 Boutique Faso Mode - "Commande expédiée"</div></div>
+        <div class="unipay-section-title">Transactions récentes</div>
+        <div style="padding:0 15px;display:flex;flex-direction:column;gap:8px;">
+          <div style="background:#fff;padding:10px;border-radius:12px;font-size:12px;display:flex;justify-content:space-between;"><span>🛍 Vente 【entity-Nike¦canonical_name=Nike】 Air</span><span style="color:#2E7D32;font-weight:700">+25 000 F</span></div>
+          <div style="background:#fff;padding:10px;border-radius:12px;font-size:12px;display:flex;justify-content:space-between;"><span>💸 Envoi à Mamadou</span><span style="font-weight:700">-5 000 F</span></div>
+        </div>
+        <div class="unipay-section-title" style="margin-top:15px">Messages récents</div>
+        <div style="padding:0 15px;display:flex;flex-direction:column;gap:8px;"><div style="background:#fff;padding:10px;border-radius:12px;font-size:12px;">🛍 Abdoul - "Le téléphone est dispo ?" <span style="float:right;color:#2E7D32;">●</span></div><div style="background:#fff;padding:10px;border-radius:12px;font-size:12px;">💬 Boutique Faso Mode - "Commande expédiée"</div></div>
       </div>
     </div>
   </div>
@@ -419,17 +420,17 @@ const htmlll =String.raw `<!DOCTYPE html>
   </div>
 </section>
 
-<section class="unipay-section" id="cartes">
+<section class="unipay-section" id="wallet" style="background:#FDF8EF;">
   <div class="unipay-container">
-    <h2 style="text-align:center;font-size:36px;">Cartes Visa Virtuelle & Physique</h2>
-    <p style="text-align:center;color:#9C7E5C;max-width:700px;margin:10px auto 40px;">Une seule app pour créer ta carte virtuelle instantanée et commander ta carte physique livrée à Ouaga, Bobo, et partout au Burkina.</p>
+    <h2 style="text-align:center;font-size:36px;">Wallet Multi-Opérateurs & Paiement QR</h2>
+    <p style="text-align:center;color:#9C7E5C;max-width:700px;margin:10px auto 40px;">Envoie, reçois, paye en boutique avec QR. Recharge 24/7 via 6 opérateurs burkinabè.</p>
     <div class="unipay-grid">
-      <div class="unipay-feature"><div class="unipay-icon">💳</div><h3>Visa Virtuelle Instantanée</h3><p>Crée en 2 min. Paye Netflix, Spotify, Facebook Ads, Amazon, Play Store, Apple Store. Recharge par Mobile Money.</p><p style="margin-top:10px;font-size:12px;background:#DDE5D9;padding:6px 10px;border-radius:8px;display:inline-block;">À partir de 1 000 F</p></div>
-      <div class="unipay-feature"><div class="unipay-icon">🏧</div><h3>Visa Physique</h3><p>Commande dans l'app. Retrait GAB, paiement TPE dans tous les magasins. Plafond élevé, suivi en temps réel dans l'app + messagerie support.</p><p style="margin-top:10px;font-size:12px;background:#E8D19A;padding:6px 10px;border-radius:8px;display:inline-block;">Livraison 3-7 jours</p></div>
-      <div class="unipay-feature"><div class="unipay-icon">🔒</div><h3>Sécurité totale</h3><p>Bloque/débloque en 1 clic, change PIN, limite par transaction. Notification instantanée via Socket + empreinte/biométrie.</p></div>
-      <div class="unipay-feature"><div class="unipay-icon">📱</div><h3>Wallet 6 opérateurs</h3><p>Orange, Moov, Telecel, Wave, Coris, Sank Money. Recharge 24/7, paiement QR en boutique sans carte.</p></div>
+      <div class="unipay-feature"><div class="unipay-icon">📱</div><h3>Wallet 6 opérateurs</h3><p>Orange, Moov, Telecel, Wave, Coris, Sank Money. Recharge instantanée, transfert gratuit entre utilisateurs UniPay.</p></div>
+      <div class="unipay-feature"><div class="unipay-icon">📍</div><h3>Paiement QR Magasin</h3><p>Scan & paye sans cash chez nos marchands partenaires à Ouaga, Bobo et partout. Reçu PDF automatique.</p></div>
+      <div class="unipay-feature"><div class="unipay-icon">🔒</div><h3>Sécurité totale</h3><p>Code PIN, empreinte, biométrie, notification instantanée via Socket. Bloque/débloque en 1 clic.</p></div>
       <div class="unipay-feature"><div class="unipay-icon">💬</div><h3>Support dans le Chat</h3><p>Support UniPay intégré dans la messagerie. Envoie photo de ton problème, reçois réponse vocale, reçu PDF.</p></div>
-      <div class="unipay-feature"><div class="unipay-icon">🛍️</div><h3>Gagne en vendant</h3><p>Deviens vendeur marketplace, reçois paiement directement dans ton wallet UniPay, retire vers Mobile Money.</p></div>
+      <div class="unipay-feature"><div class="unipay-icon">🛍</div><h3>Gagne en vendant</h3><p>Deviens vendeur marketplace, reçois paiement directement dans ton wallet UniPay, retire vers Mobile Money.</p></div>
+      <div class="unipay-feature"><div class="unipay-icon">📄</div><h3>Historique & Reçus</h3><p>Toutes tes transactions avec PDF, filtre par date, export pour compta. Conforme régulation Burkina.</p></div>
     </div>
   </div>
 </section>
@@ -443,17 +444,17 @@ const htmlll =String.raw `<!DOCTYPE html>
 </section>
 </div>
 
-<div id="cgu" class="page"><div class="unipay-container"><div class="legal-page"><h1>CGU - UniPay Marketplace & Paiement</h1><p><b>Dernière mise à jour: 21 juin 2026</b></p><h2>1. Services</h2><p>UniPay est une plateforme burkinabè qui combine: (a) Marketplace C2C/B2C pour produits neufs et occasion, (b) Messagerie instantanée acheteur-vendeur avec fichiers, (c) Wallet Mobile Money multi-opérateurs, (d) Émission de cartes Visa virtuelles et physiques via partenaires agréés.</p><h2>2. Marketplace</h2><p>Le vendeur est responsable de la description, stock, livraison. UniPay n'est pas propriétaire des produits mais fournit l'interface, la messagerie et le paiement sécurisé. Litige = médiation via chat support.</p><h2>3. Cartes Visa</h2><p>Cartes émises par nos partenaires bancaires agréés BCEAO. UniPay fournit l'interface. Frais visibles dans l'app avant achat.</p><h2>4. Messagerie</h2><p>Messages stockés chiffrés localement. Interdiction de spam, arnaque. Signalement direct dans l'app.</p><p>Contact: abdallah.unipay@gmail.com</p></div></div></div>
-<div id="confidentialite" class="page"><div class="unipay-container"><div class="legal-page"><h1>Confidentialité</h1><p>Nous collectons: identité KYC pour cartes, numéro tel, messages (chiffrés), transactions marketplace, position GPS si partagée pour livraison, contacts (uniquement pour trouver qui est sur UniPay). Jamais vendu. Stockage BF. Droits: accès/suppression via abdallah.unipay@gmail.com</p></div></div></div>
-<div id="mentions" class="page"><div class="unipay-container"><div class="legal-page"><h1>Mentions Légales</h1><p><b>Etablissement Sabdou Transfert et Business</b><br>RCCM: BF-OUAGA-01-2023-A10-17269<br>Ouaga, Burkina<br>abdallah.unipay@gmail.com - +226 75 32 23 21<br><br>UniPay est une plateforme technique. Cartes Visa émises par partenaires agréés. Fonds détenus par partenaires EMI agréés BCEAO. UniPay n'est pas banque.</p></div></div></div>
+<div id="cgu" class="page"><div class="unipay-container"><div class="legal-page"><h1>CGU - UniPay Marketplace & Paiement</h1><p><b>Dernière mise à jour: 21 juin 2026</b></p><h2>1. Services</h2><p>UniPay est une plateforme burkinabè qui combine: (a) Marketplace C2C/B2C pour produits neufs et occasion, (b) Messagerie instantanée acheteur-vendeur avec fichiers, (c) Wallet Mobile Money multi-opérateurs pour paiement et transfert.</p><h2>2. Marketplace</h2><p>Le vendeur est responsable de la description, stock, livraison. UniPay n'est pas propriétaire des produits mais fournit l'interface, la messagerie et le paiement sécurisé. Litige = médiation via chat support.</p><h2>3. Wallet & Paiement</h2><p>Paiements traités via partenaires agréés BCEAO. Frais visibles dans l'app avant chaque transaction. Fonds détenus par partenaires EMI agréés.</p><h2>4. Messagerie</h2><p>Messages stockés chiffrés localement. Interdiction de spam, arnaque. Signalement direct dans l'app.</p><p>Contact: abdallah.unipay@gmail.com</p></div></div></div>
+<div id="confidentialite" class="page"><div class="unipay-container"><div class="legal-page"><h1>Confidentialité</h1><p>Nous collectons: identité KYC, numéro tel, messages (chiffrés), transactions marketplace, position GPS si partagée pour livraison, contacts (uniquement pour trouver qui est sur UniPay). Jamais vendu. Stockage BF. Droits: accès/suppression via abdallah.unipay@gmail.com</p></div></div></div>
+<div id="mentions" class="page"><div class="unipay-container"><div class="legal-page"><h1>Mentions Légales</h1><p><b>Etablissement Sabdou Transfert et Business</b><br>RCCM: BF-OUAGA-01-2023-A10-17269<br>Ouaga, Burkina<br>abdallah.unipay@gmail.com - +226 75 32 23 21<br><br>UniPay est une plateforme technique de marketplace et paiement. Fonds détenus par partenaires EMI agréés BCEAO. UniPay n'est pas banque.</p></div></div></div>
 
 <footer class="unipay-footer">
   <div class="unipay-container">
     <div class="unipay-footer-grid">
-      <div><h4>UniPay Super-App</h4><p>Marketplace + Messagerie + Wallet + Carte Visa virtuelle & physique. Vente en ligne et en magasin.</p></div>
-      <div><h4>Services</h4><a>Marketplace Burkina</a><a>Messagerie acheteur-vendeur</a><a>Carte Visa virtuelle</a><a>Carte Visa physique</a><a>Paiement QR magasin</a></div>
+      <div><h4>UniPay Super-App</h4><p>Marketplace + Messagerie + Wallet Mobile Money. Vente en ligne et en magasin au Burkina.</p></div>
+      <div><h4>Services</h4><a>Marketplace Burkina</a><a>Messagerie acheteur-vendeur</a><a>Wallet multi-opérateurs</a><a>Paiement QR magasin</a><a>Reçus PDF</a></div>
       <div><h4>Contact</h4><p>abdallah.unipay@gmail.com</p><p>+226 75 32 23 21</p></div>
-      <div><h4>Légal</h4><a onclick="showPage('cgu')">CGU Marketplace & Cartes</a><a onclick="showPage('confidentialite')">Confidentialité</a><a onclick="showPage('mentions')">Mentions</a></div>
+      <div><h4>Légal</h4><a onclick="showPage('cgu')">CGU Marketplace</a><a onclick="showPage('confidentialite')">Confidentialité</a><a onclick="showPage('mentions')">Mentions</a></div>
     </div>
     <div class="unipay-copyright"><p>© 2026 Sabdou Transfert et Business - UniPay Marketplace & Paiement - Tous droits réservés</p></div>
   </div>
@@ -465,7 +466,6 @@ const htmlll =String.raw `<!DOCTYPE html>
 </script>
 </body>
 </html>`;
-
 
 app.get('/', (req, res) => { res.set('Content-Type', 'text/html'); res.send(html); });
 //app.get('/health', (req,res)=> res.json({status:'ok'}));
