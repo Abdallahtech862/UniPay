@@ -299,7 +299,7 @@ io.on('connection', (socket) => {
 // ================== TA PAGE HTML + HEALTH ==================
 
 
-const htmlll = String.raw`<!DOCTYPE html>
+const html = String.raw`<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
